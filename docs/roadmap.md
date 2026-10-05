@@ -4,7 +4,7 @@
 |---|---|---|
 | 01 Platform Foundation | Legacy analysis; staging environment aligned with production site settings | Done |
 | 02 Employee Master | Reference lists and employee master migrated and reconciled in staging | Done |
-| 03 Identity & Authorization | Entra sign-in; role groups; write/read proxy; permission model; permission test suite | In progress (write proxy PASS; read proxy in validation) |
+| 03 Identity & Authorization | Entra sign-in; role groups; write/read proxy; permission model; permission test suite | In progress (write proxy PASS; read proxy PASS; sign-in next) |
 | 04 Remaining Master Data | Projects, phases, work/hour types, holidays, settings | Planned |
 | 05 Application UI Foundation | Power Platform environment and ALM; app shell; guard-flow framework; audit | Planned |
 | 06 Timesheet Core | Entry, pay-period engine, summary, timesheet guard flows | Planned |

@@ -14,7 +14,7 @@ Power Apps (canvas, Teams/browser) ──calls──► Power Automate guard flo
 |---|---|---|
 | AD-1 | Two SharePoint containers: operational, and confidential (rates, finance, KPI, archives) | Operational-site owners must not see salary or finance data |
 | AD-2 | **Guarded write proxy.** Users have no write permission on protected lists. All writes go through Power Automate guard flows running on a service-account connection. | Enforces own-only edit, on-behalf entry, approval lock and audit server-side, with no per-item permissions |
-| AD-3 | **Guarded read proxy** (being validated). Employees read their own rows through a guard flow that filters on the business-owner key. Direct list read is not required by the app. | SharePoint `Author` cannot be set by a least-privilege service account, so Author-based "read own items" cannot express ownership |
+| AD-3 | **Guarded read proxy** (validated, see `security-read-proxy-spike.md`). Employees read their own rows through a guard flow that filters on the business-owner key. Employees and reviewers hold no direct permission on protected lists. | SharePoint `Author` cannot be set by a least-privilege service account, so Author-based "read own items" cannot express ownership |
 | AD-4 | **`OwnerUpn` / `EmployeeItemId` is the business ownership key.** SharePoint `Author` is **not** an authorisation key. `ActorUpn` records who acted; `IsOnBehalf` marks delegated entries. | Separates ownership from the technical writer identity |
 | AD-5 | Historical references use lookup / item-ID keys to the employee master, never Person columns | Former employees have no directory account |
 | AD-6 | Large-list queries always start with an indexed column (`OwnerUpn`/`EmployeeItemId`, `WorkDate`/`PeriodKey`) and are paged by keyset (`Id gt <last>`) | 5,000-item list view threshold; growth past 100k rows |
@@ -32,12 +32,14 @@ Power Apps (canvas, Teams/browser) ──calls──► Power Automate guard flo
 5. **Write.** Performed only by the service connection. Service rights: View, Add, Edit. **No** Delete, Manage Lists, Manage Permissions or Full Control.
 6. **Audit.** One audit row per allow/deny decision. The same correlation ID is stored on the item, the audit row and the flow run.
 
-## Read-proxy contract (in validation)
+## Read-proxy contract (validated)
 
 - **Normal employee:** rows where `OwnerUpn` = trusted caller only. A requested foreign owner is refused.
 - **Reviewer** (verified by live group membership): the broader scope; may target a specific owner.
 - **Query:** server-side, with an indexed first filter, optional bounded date range, keyset paging and a capped page size. The list is never loaded and then filtered in memory.
+- Defence in depth: every returned row is re-checked against the authorised owner.
 - Every read is audited.
+- Revocation through group removal takes effect on the next run, because there is no direct SharePoint permission to cache.
 
 ## Platform lessons from the spikes
 

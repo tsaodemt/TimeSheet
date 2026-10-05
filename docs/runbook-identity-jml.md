@@ -31,3 +31,5 @@
 **Validation tip:** check a user's current SharePoint authorisation from **their own session** (`_api/web/lists/…/EffectiveBasePermissions`) repeatedly. The admin-side `getusereffectivepermissions` may not reflect front-end caches.
 
 **Requirement note:** if a security requirement demands *instantaneous* revocation of SharePoint read access, group-based permissions alone do not meet it. Session revocation or account disable is required.
+
+**Proxy-only lists:** some lists give employees and reviewers no direct permission, and every read and write goes through a guard flow that checks live group membership (see `security-read-proxy-spike.md`). On these lists, removal from a group takes effect on the next flow run, and the SharePoint cache latency above does not apply. Prefer this pattern for timesheet and confidential data.
