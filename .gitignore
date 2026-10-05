@@ -1,0 +1,49 @@
+# =====================================================================
+# PUBLIC repository. Never commit customer data, tenant identifiers,
+# credentials, tokens or security-posture findings.
+# =====================================================================
+
+# --- Confidential working area (investigation, evidence, decisions) ---
+_investigation/
+
+# --- Legacy application, encrypted legacy data, tool output ---
+/Time Sheet/
+
+# --- Personal / migration data (defensive, any location) ---
+employee/
+epic08/
+scratchpad/
+**/scratchpad/
+decrypted/
+plain/
+staging/
+
+# --- Build / cache ---
+__pycache__/
+*.pyc
+
+# --- Databases and archives ---
+*.sqlite
+*.sqlite3
+*.db
+*.zip
+
+# --- Secrets, auth and session material ---
+.env
+.env.*
+*.key
+*.pfx
+*.p12
+*.pem
+*.har
+cookies.*
+cookies*.json
+session.*
+token.*
+tokens.*
+auth.*
+storageState*.json
+
+# --- Generated build artefacts ---
+build_flow.js
+definition.json
