@@ -41,6 +41,23 @@ Power Apps (canvas, Teams/browser) ──calls──► Power Automate guard flo
 - Every read is audited.
 - Revocation through group removal takes effect on the next run, because there is no direct SharePoint permission to cache.
 
+## List classes (permission model derived from the proxies)
+
+| Class | Rule | Examples |
+|---|---|---|
+| P: proxy-only | No human permission; every read and write goes through guard flows | timesheet entries |
+| W: flow-write | Authorised groups read directly; writes only through flows | audit log, project finance |
+| M: master data | All staff read; the owning group writes | departments, holidays, projects |
+| I: identity-bearing | All staff read; writes only through an audited flow, because the account link is the identity key (**proposed**, pending review) | employee master, role catalogue |
+
+Custom permission levels:
+- **Service:** View, Add and Edit items, plus Override List Behaviors. **No** Delete, Manage Lists or Manage Permissions.
+- **Contribute without Delete.**
+
+A reviewer level is not needed under the read proxy. **Proposed** (pending review): deleting a draft is a soft delete (hidden, audited, purged by a controlled job), so the service identity never needs Delete.
+
+Identity resolution: see `identity-resolution.md`.
+
 ## Platform lessons from the spikes
 
 - **Author stamping:** `ValidateUpdateListItem(Author, bNewDocumentUpdate=true)` is silently ignored for a service account with Contribute-level rights, **even with Manage Lists**. Only site-collection administrators were observed to succeed. This is why ownership is modelled explicitly (AD-3, AD-4).

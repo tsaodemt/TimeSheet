@@ -22,3 +22,4 @@ Rules:
 - Approved entries are immutable for every role. Self-approval is blocked by default.
 - **Unresolved production identities receive Employee rights only.** No elevated role is granted until HR/IT confirm the assignment.
 - Business-role membership is owned by HR; administrative groups by IT. Access is reviewed quarterly.
+- **Proposed** (pending IT approval): staging and production share a tenant, so they use separate groups (`SG-TS-STG-*` vs `SG-TS-*`). Staging test memberships never reach production groups. Group IDs come from per-environment configuration.

@@ -18,6 +18,7 @@ Only **standard** (non-premium) connectors are used.
 | Staging environment, reference data and employee migration rehearsal | Done |
 | Identity & authorisation: **guarded write proxy** security spike | **PASS** (see `docs/security-write-proxy-spike.md`) |
 | Identity & authorisation: **guarded read proxy** spike (own-row reads keyed on business owner, > 5,000 rows) | **PASS** (see `docs/security-read-proxy-spike.md`) |
+| Identity & authorisation: application identity resolution and data scoping | Contract and reference implementation with tests (see `docs/identity-resolution.md`); wiring into app and flows pending |
 
 ## Repository layout
 
@@ -26,6 +27,7 @@ docs/
   architecture.md                     Target architecture and key decisions
   security-write-proxy-spike.md       Write-proxy test plan (T1–T11) and results
   security-read-proxy-spike.md        Read-proxy test plan (R1–R10) and results
+  identity-resolution.md              Identity-resolution contract (fail-closed), session behaviour, portability
   role-model.md                       Target roles and capabilities
   runbook-identity-jml.md             Joiner / mover / leaver guidance (group propagation)
   roadmap.md                          Epic structure
@@ -35,6 +37,10 @@ tools/powerautomate/
   build_read_flow.py                  Generates the guarded read-flow definition
   make_read_designer_build.py         Builds the read flow in the classic designer
   make_read_guard_repaste.py          Re-pastes the read flow's guard scope after a definition change
+tools/identity/
+  identity_resolver.py                Reference identity resolver (trusted identity → employee → roles)
+  scope_resolver.py                   Reference data scoping (self / discipline / company, project assignment)
+  test_*.py                           Contract tests I1–I10 and S1–S8 (synthetic data; python -m unittest)
 ```
 
 ## Confidentiality
