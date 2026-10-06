@@ -66,4 +66,6 @@ Identity resolution: see `identity-resolution.md`.
   - SharePoint front-ends intermittently honoured the old permission for about 20–25 minutes.
   - See `runbook-identity-jml.md`.
 - **Permission testing:** a MERGE with a stale ETag returns 412 even for a user who has only View permission. SharePoint checks the precondition before permission, so 412 does not prove write access. Use effective permissions plus a write attempt with the current ETag; denial returns 403.
+- **Effective-permission checks:** the admin-side `getusereffectivepermissions` for a user returned no rights while that user had working Read through an Entra security-group grant. Verify group-based access from the user's own session. Newly added group membership took between about 5 and more than 26 minutes to reach SharePoint, so retry before treating a 404 as a failure.
+- **Reference lists:** master-data lists (class M) carry dedicated permissions: staff Read, owners Full Control, no direct write by application roles and no service grant until a guarded master-data flow exists.
 - **Platform identity headers:** `x-ms-user-*` headers injected by a client were overwritten by the connector gateway with the authenticated caller.
