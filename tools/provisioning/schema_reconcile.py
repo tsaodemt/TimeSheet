@@ -100,27 +100,63 @@ def _field_checks(t: dict, a: dict) -> tuple:
     return block, ops, notes
 
 
+def _title_ops(tf: dict) -> list:
+    """The built-in Title column of a new list: required, plus index/unique where the target asks (e.g. a key list)."""
+    ops = [("set_required", bool(tf.get("required")))]
+    if tf.get("unique"):
+        ops.append(("set_unique", True))
+    elif tf.get("indexed"):
+        ops.append(("set_indexed", True))
+    if tf.get("displayName") and tf["displayName"] != "Title":
+        ops.append(("set_display_name", tf["displayName"]))
+    return ops
+
+
+def _missing_list_status(tl: dict) -> tuple:
+    """(status, detail) of a target list that does not exist on the site."""
+    decision = tl.get("decision")
+    if not decision:
+        # An open decision on a field that cannot be fixed later (e.g. the internal name of the business key)
+        # blocks the whole list: never create a list without its key column.
+        key_decisions = [f["internalName"] + ": " + f["decision"] for f in tl["fields"]
+                         if f.get("decision") and f.get("decisionBlocksList")]
+        decision = "; ".join(key_decisions) or None
+    if decision:
+        return DECISION, decision
+    if tl.get("gate"):
+        return GATED, tl["gate"]
+    return CREATE, "list missing"
+
+
 def reconcile(target: dict, actual: dict) -> list:
     """Compare a target schema with an inventory. Never mutates anything."""
     out = []
     alists = {l["title"]: l for l in actual.get("lists", [])}
+    missing = {tl["title"]: _missing_list_status(tl) for tl in target["lists"] if tl["title"] not in alists}
+    available = set(alists) | {n for n, (s, _) in missing.items() if s == CREATE}
+
+    def unavailable_lookup(tf):
+        """A lookup column can only be created once its target list exists or is created in the same run."""
+        t = tf.get("lookupList") if tf["type"] == "Lookup" else None
+        if t and t not in available:
+            return "lookup target %s not available (%s)" % (t, missing[t][0] if t in missing else "not in target")
+        return None
+
     for tl in target["lists"]:
         name = tl["title"]
-        gate, decision = tl.get("gate"), tl.get("decision")
         al = alists.get(name)
         if al is None:
-            status = DECISION if decision else GATED if gate else CREATE
-            out.append(Finding(status, name, detail=decision or gate or "list missing",
-                               ops=[] if status != CREATE else [("create_list", tl)]))
+            status, detail = missing[name]
+            out.append(Finding(status, name, detail=detail, ops=[] if status != CREATE else [("create_list", tl)]))
             if status != CREATE:
                 continue
             for tf in tl["fields"]:
                 if tf["internalName"] in SYSTEM_FIELDS and tf["internalName"] != "Title":
                     continue
-                fs = DECISION if tf.get("decision") else GATED if tf.get("gate") else CREATE
-                op = [] if fs != CREATE else ([("create_field", tf)] if tf["internalName"] != "Title" else
-                                              [("set_required", bool(tf.get("required")))])
-                out.append(Finding(fs, name, tf["internalName"], tf.get("decision") or tf.get("gate") or "new list", op))
+                dep = unavailable_lookup(tf)
+                fs = DECISION if tf.get("decision") else GATED if tf.get("gate") or dep else CREATE
+                op = [] if fs != CREATE else ([("create_field", tf)] if tf["internalName"] != "Title" else _title_ops(tf))
+                out.append(Finding(fs, name, tf["internalName"], tf.get("decision") or tf.get("gate") or dep or "new list", op))
             continue
         afields = _fmap(al)
         out.append(Finding(OK, name, detail="list exists (%d items)" % al.get("itemCount", 0)))
@@ -131,8 +167,9 @@ def reconcile(target: dict, actual: dict) -> list:
                 out.append(Finding(DECISION, name, fn, tf["decision"]))
                 continue
             if af is None:
-                if tf.get("gate"):
-                    out.append(Finding(GATED, name, fn, tf["gate"]))
+                dep = unavailable_lookup(tf)
+                if tf.get("gate") or dep:
+                    out.append(Finding(GATED, name, fn, tf.get("gate") or dep))
                 else:
                     out.append(Finding(CREATE, name, fn, "column missing", [("create_field", tf)]))
                 continue
@@ -158,12 +195,13 @@ def reconcile(target: dict, actual: dict) -> list:
 
 
 def plan(findings: Iterable[Finding]) -> list:
-    """Executable operations only. A list whose own creation is gated/undecided contributes nothing."""
+    """Executable operations only. A list whose own creation is gated/undecided contributes nothing.
+    Every list is created before any column, so a lookup column always finds its target list."""
     ops = []
     for f in findings:
         if f.status in (CREATE, UPDATE_SAFE):
             ops.extend((f.list, f.field, op) for op in f.ops)
-    return ops
+    return [o for o in ops if o[2][0] == "create_list"] + [o for o in ops if o[2][0] != "create_list"]
 
 
 def summary(findings: Iterable[Finding]) -> dict:

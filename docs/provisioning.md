@@ -10,8 +10,8 @@
 | `CREATE` | List or column missing | yes |
 | `UPDATE-SAFE` | Index, unique (with a no-duplicates precondition), required, display name, or additional choice values | yes |
 | `BLOCKED-INCOMPATIBLE` | Wrong type, date-only vs date-time, or wrong lookup target | **no**. The whole run stops before any call. |
-| `DECISION-REQUIRED` | The target object carries an open decision | no |
-| `GATED` | The object belongs to a later story or gate | no |
+| `DECISION-REQUIRED` | The target object carries an open decision. A missing list whose key column has an open decision marked `decisionBlocksList` is not created at all (internal names are permanent, so a list is never created without its key column). | no |
+| `GATED` | The object belongs to a later story or gate, or it is a lookup column whose target list neither exists nor is created in the same run | no |
 | `EXTRA` | Present on the site but not in the target | no (never removed automatically) |
 
 ## Safety rules
@@ -25,7 +25,8 @@
 - **No IDs in code or schema.**
   - Lookup list IDs are resolved at run time.
   - Internal names are fixed at creation: the column is created with the internal name as its display name, then renamed.
-- **Idempotent:** after a successful run the reconciliation reports `OK` everywhere, and a second run does nothing.
+- **Ordering:** every list is created before any column, so a lookup column always finds its target list. A new list's built-in `Title` gets its required flag, index/unique (key lists such as `AppSettings`) and display name in the same run.
+- **Idempotent:** after a successful run the reconciliation reports `OK` everywhere, and a second run does nothing. An interrupted run is completed by running again from a fresh inventory.
 - **Transport is injected** (`transport(method, path, body, headers)`), so the tool holds no credentials and no tenant URLs.
 
 ## Rollback classes
@@ -43,9 +44,21 @@ SharePoint has no transactional schema rollback.
 
 Date-only business columns hold a business calendar date in the configured business time zone (`businessTimeZone` in the target schema). To derive a business date from an instant: convert the UTC instant to the business time zone, then take the local date (`business_date()`). Never truncate UTC.
 
+## Reference data (seed rows)
+
+`tools/provisioning/reference_data.py` loads small master lists from a seed (rows keyed by a business key) with the same safety model:
+- seed validation first (count, required, unique case-insensitive, `> 0`, exactly-one flags, "first by SortOrder is the default", "flag true exactly for the codes in a setting"); an unresolved setting fails the validation;
+- item findings `OK` / `CREATE` / `DRIFT` / `EXTRA` / `BLOCKED` (business-key clash);
+- only `CREATE` is executed; drift is reported and never overwritten, extra items are never deleted;
+- refuses unless the list schema reconciles `OK`; exact site guard; dry run by default.
+
 ## Tests
 
-`tools/provisioning/test_schema_reconcile.py` covers P01–P14:
+- `test_reference_data.py` D01–D14: seed rules, idempotent load, drift, clash, fail-closed settings, REST request.
+- `test_ac1_rebuild.py` R01–R06: empty-site rebuild simulation (child-before-parent ordering, interrupted run recovers on re-run, unavailable lookup targets, dry-run plan = executed plan; with a target definition: every list rebuilt and converged in one run, rebuilt lists match the as-built ones). This is offline evidence, **not** a live empty-site proof.
+- `test_s043_schema.py` W01–W10: work-classification list definitions (needs the target definition).
+
+`tools/provisioning/test_schema_reconcile.py` covers P01–P15:
 - empty site;
 - no-op;
 - missing list, missing column, missing index;
@@ -57,4 +70,5 @@ Date-only business columns hold a business calendar date in the configured busin
 - business-date semantics;
 - no hard-coded IDs;
 - no destructive operations;
-- REST request building.
+- REST request building;
+- an open key-column decision blocks the whole list (P15).

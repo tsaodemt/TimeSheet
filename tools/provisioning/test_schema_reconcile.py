@@ -53,6 +53,8 @@ class FakeSite(sr.SchemaClient):
 
     def create_field(self, lst, spec):
         self.calls.append(("create_field", lst, spec["internalName"]))
+        if spec["type"] == "Lookup" and not any(l["title"] == spec["lookupList"] for l in self.actual["lists"]):
+            raise RuntimeError("lookup target %s does not exist" % spec["lookupList"])  # as SharePoint would refuse
         self._list(lst)["fields"].append(dict(copy.deepcopy(spec), builtIn=False))
 
     def update_field(self, lst, name, op, value):
@@ -144,6 +146,11 @@ class Provisioning(unittest.TestCase):
         n = len(site.calls)
         r2 = sr.apply(TARGET, site.actual, site, ALLOWED, allowed_url=ALLOWED, dry_run=False)
         self.assertEqual((r2.executed, len(site.calls)), ([], n))
+        keyed = {"lists": [{"title": "Settings", "template": 100, "fields": [F("Title", "Text", True, True, True), F("Value", "Text")]}]}
+        site = FakeSite({"site": ALLOWED, "lists": []})
+        sr.apply(keyed, site.actual, site, ALLOWED, allowed_url=ALLOWED, dry_run=False)
+        self.assertIn(("set_unique", "Settings", "Title"), site.calls, "a key Title on a new list gets its unique index")
+        self.assertEqual(sr.plan(sr.reconcile(keyed, site.actual)), [])
 
     def test_P09_unresolved_decision_or_gate_blocks_mutation(self):
         t = copy.deepcopy(TARGET)
@@ -233,6 +240,25 @@ class Provisioning(unittest.TestCase):
         a2["lists"][1]["fields"].append(dict(F("Extra", "Text", idx=True), builtIn=False))
         self.assertTrue(all(o[2][0] in sr.ROLLBACK for o in sr.plan(sr.reconcile(TARGET, a2))))
 
+    def test_P15_open_key_decision_blocks_whole_list(self):
+        t = copy.deepcopy(TARGET)
+        code = next(x for x in t["lists"][0]["fields"] if x["internalName"] == "UnitCode")
+        code.update(decision="N-1 key column name open", decisionBlocksList=True)
+        site = FakeSite({"site": ALLOWED, "lists": []})
+        f = sr.reconcile(t, site.actual)
+        units = next(x for x in f if x.list == "Units" and not x.field)
+        self.assertEqual(units.status, sr.DECISION)
+        self.assertIn("UnitCode", units.detail)
+        self.assertFalse([x for x in f if x.list == "Units" and x.field], "no field findings for a list that is not created")
+        sr.apply(t, site.actual, site, ALLOWED, allowed_url=ALLOWED, dry_run=False)
+        self.assertFalse([c for c in site.calls if "Units" in c], "list never created without its key column")
+        code.pop("decision")  # decision taken: the same target now creates the list with the key column
+        r = sr.apply(t, site.actual, site, ALLOWED, allowed_url=ALLOWED, dry_run=False)
+        self.assertIn(("Units", "UnitCode", "create_field"), r.executed)
+        self.assertEqual(sr.plan(sr.reconcile(t, site.actual)), [])
+        code.update(decision="N-1 reopened", decisionBlocksList=True)  # an existing list is never escalated
+        self.assertEqual(statuses(sr.reconcile(t, site.actual))[("Units", "")], sr.OK)
+
     def test_dry_run_executes_nothing(self):
         site = FakeSite({"site": ALLOWED, "lists": []})
         r = sr.apply(TARGET, site.actual, site, ALLOWED, allowed_url=ALLOWED)
@@ -316,10 +342,18 @@ class TargetPolicy(unittest.TestCase):
         self.assertTrue(all(op[0] == "create_field" for _, _, op in self.plan))
         extra = [f for f in self.findings if f.status == sr.EXTRA]
         self.assertTrue(extra and all(not f.ops for f in extra))
-        self.assertEqual(sorted((l, n) for l, n, _ in self.plan), sorted(
+        approved = sorted(
             [(l, n) for l in ("Departments", "Disciplines", "Positions") for n in ("LegacyModifiedOn", "MigrationBatch", "IsLegacyPlaceholder")]
-            + [("Employees", "LegacyModifiedOn"), ("Employees", "IsLegacyPlaceholder"), ("Employees", "SortOrder")]))
-        self.assertEqual(len(self.plan), 12)
+            + [("Employees", "LegacyModifiedOn"), ("Employees", "IsLegacyPlaceholder"), ("Employees", "SortOrder")])
+        # Works on the inventory before the approved live run (12 planned) and after it (12 OK, nothing planned):
+        # the plan may only ever contain the 12 approved columns, and each of them is either planned or already OK.
+        planned = sorted((l, n) for l, n, _ in self.plan)
+        st = statuses(self.findings)
+        self.assertTrue(set(planned) <= set(approved), planned)
+        for key in approved:
+            self.assertIn(st[key], (sr.CREATE, sr.OK), key)
+            self.assertEqual(st[key] == sr.CREATE, key in planned, key)
+        self.assertIn(len(planned), (0, 12), "the approved change set is applied as a whole")
         self.assertEqual([f for f in self.findings if f.status == sr.BLOCKED], [])
 
 
