@@ -39,7 +39,7 @@ def allowed(resolution, action: str, target: Target, scope_table, *,
         return False
     scope = effective_scope(resolution.roles, action, scope_table)
     me = resolution.employee
-    if scope == NONE:
+    if scope not in (SELF, DISCIPLINE, COMPANY):
         return False
     if scope == SELF and target.employee_legacy_id != me.legacy_id:
         return False

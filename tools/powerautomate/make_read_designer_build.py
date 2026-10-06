@@ -2,19 +2,20 @@
 (trigger inputs + variable inits + 'Guard' scope via clipboard paste) and saves it.
 
 Configuration (environment variables): TS_PP_ENVIRONMENT, TS_CONN_SHAREPOINT, TS_CONN_O365USERS,
-TS_CONN_O365GROUPS, TS_BUILD_SCRIPT_OUT, plus those of build_read_flow.py. Output is generated; do not commit.
+TS_CONN_O365GROUPS, TS_BUILD_SCRIPT_OUT, TS_FLOW_MODULE (default build_read_flow), TS_FLOW_NAME,
+plus those of the flow module. Output is generated; do not commit.
 """
-import copy, json, os, sys, uuid
+import copy, importlib, json, os, sys, uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import build_read_flow as r  # noqa: E402
+r = importlib.import_module(os.environ.get("TS_FLOW_MODULE", "build_read_flow"))  # e.g. build_identity_flow
 
 CONNS = {"shared_sharepointonline": os.environ.get("TS_CONN_SHAREPOINT", "<sharepoint-connection-id>"),
          "shared_office365users": os.environ.get("TS_CONN_O365USERS", "<office365users-connection-id>"),
          "shared_office365groups": os.environ.get("TS_CONN_O365GROUPS", "<office365groups-connection-id>")}
 ENV = os.environ.get("TS_PP_ENVIRONMENT", "<power-platform-environment-id>")
 OUT = os.environ.get("TS_BUILD_SCRIPT_OUT", "build_read_flow.js")
-NAME = "SPIKE-TS-ReadEntries"
+NAME = os.environ.get("TS_FLOW_NAME", "SPIKE-TS-ReadEntries")
 
 items, labels = [], []
 for k, v in r.inits.items():

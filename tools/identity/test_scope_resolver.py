@@ -68,6 +68,13 @@ class Scoping(unittest.TestCase):
         a = who("appr", ("g-emp", "g-apr"))
         self.assertTrue(allowed(a, "ts.edit", t, SCOPES, project_assignment_scoping=True, exempt_roles=["APR"]))
 
+    def test_S9_unknown_or_restricted_scope_values_deny(self):
+        table = {"EMP": {"ts.read": "restricted:pending decision", "ts.edit": "Company", "ts.approve": ""}}
+        r = who("emp", ("g-emp",))
+        for action in ("ts.read", "ts.edit", "ts.approve", "not.configured"):
+            self.assertEqual(effective_scope(["EMP"], action, table), "none")
+            self.assertFalse(allowed(r, action, T_OWN_D1, table))
+
     def test_S8_role_removed_scope_shrinks_next_call(self):
         self.assertTrue(allowed(who("lead", ("g-emp", "g-tl")), "ts.read", T_OWN_D1, SCOPES))  # E1, same discipline
         self.assertFalse(allowed(who("lead", ("g-emp",)), "ts.read", T_OWN_D1, SCOPES))
