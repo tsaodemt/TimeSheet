@@ -8,6 +8,7 @@
 | `make_read_designer_build.py` | Generates a Playwright script that builds the read flow in the classic designer |
 | `make_read_guard_repaste.py` | Generates a Playwright script that replaces the read flow's guard scope in an existing flow |
 | `build_identity_flow.py` | Defines the identity-resolution guard flow (trusted caller → normalised UPN → indexed, unique `AccountUpn` lookup → OK / NOT_REGISTERED / INACTIVE / DUPLICATE_MAPPING / INVALID_IDENTITY; live role-group check; audit). Build it with `make_read_designer_build.py` and `TS_FLOW_MODULE=build_identity_flow`. |
+| `build_role_probe_flow.py` | Defines a role/scope probe flow: live membership of every configured role group → roles → scope table → allow/deny per probe (action × target), with audit. Used to test the role model one temporary membership at a time. |
 
 Configuration comes from environment variables. Nothing tenant-specific is stored in the source.
 
@@ -19,6 +20,7 @@ Configuration comes from environment variables. Nothing tenant-specific is store
 | `TS_CONN_SHAREPOINT`, `TS_CONN_O365USERS`, `TS_CONN_O365GROUPS` | Connection IDs owned by `<service-account>` |
 | `TS_LIST`, `TS_AUDIT_LIST` | Protected list and audit list titles |
 | `TS_FLOW_MODULE`, `TS_FLOW_NAME` | Flow definition module and display name for the designer build |
+| `TS_ROLE_GROUPS`, `TS_SCOPE_CONFIG`, `TS_PROBE_ACTIONS` | Role probe: JSON list of [roleKey, groupId], scope-table file, probed actions |
 | `TS_ALLOWED_DOMAIN`, `TS_ROLE_GROUP_ID`, `TS_ROLE_KEY`, `TS_EMP_LIST` | Identity flow: accepted tenant domain, role group, role key, employee list |
 | `TS_READ_FLOW_ID` | Existing read-flow ID (re-paste only) |
 | `TS_BUILD_SCRIPT_OUT` | Output path of the generated designer script (do not commit) |

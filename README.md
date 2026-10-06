@@ -38,6 +38,7 @@ tools/powerautomate/
   make_read_designer_build.py         Builds the read flow in the classic designer
   make_read_guard_repaste.py          Re-pastes the read flow's guard scope after a definition change
   build_identity_flow.py              Generates the identity-resolution guard flow
+  build_role_probe_flow.py            Generates the role/scope probe flow used for role tests
 tools/identity/
   identity_resolver.py                Reference identity resolver (trusted identity → employee → roles)
   scope_resolver.py                   Reference data scoping (self / discipline / company, project assignment)
