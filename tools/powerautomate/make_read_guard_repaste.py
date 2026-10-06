@@ -1,13 +1,14 @@
-"""Generate a Playwright script that replaces the 'Guard' scope of an existing read flow (classic designer) and saves.
-Configuration: TS_PP_ENVIRONMENT, TS_READ_FLOW_ID, TS_CONN_*, TS_BUILD_SCRIPT_OUT (+ build_read_flow.py vars)."""
-import copy, json, os, sys, uuid
+"""Generate a Playwright script that replaces the 'Guard' scope of an existing flow (classic designer) and saves.
+Configuration: TS_PP_ENVIRONMENT, TS_FLOW_ID (or TS_READ_FLOW_ID), TS_FLOW_MODULE (default build_read_flow), TS_CONN_*,
+TS_BUILD_SCRIPT_OUT (+ the flow module's variables)."""
+import copy, importlib, json, os, sys, uuid
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import build_read_flow as r  # noqa: E402
+r = importlib.import_module(os.environ.get("TS_FLOW_MODULE", "build_read_flow"))
 CONNS = {"shared_sharepointonline": os.environ.get("TS_CONN_SHAREPOINT", "<sharepoint-connection-id>"),
          "shared_office365users": os.environ.get("TS_CONN_O365USERS", "<office365users-connection-id>"),
          "shared_office365groups": os.environ.get("TS_CONN_O365GROUPS", "<office365groups-connection-id>")}
 ENV = os.environ.get("TS_PP_ENVIRONMENT", "<power-platform-environment-id>")
-FLOW = os.environ.get("TS_READ_FLOW_ID", "<read-flow-id>")
+FLOW = os.environ.get("TS_FLOW_ID") or os.environ.get("TS_READ_FLOW_ID", "<flow-id>")
 OUT = os.environ.get("TS_BUILD_SCRIPT_OUT", "repaste_read_guard.js")
 item = {"id": str(uuid.uuid4()), "brandColor": "#8C3900",
         "connectionReferences": {k: {"connection": {"id": "/providers/Microsoft.PowerApps/apis/%s/connections/%s" % (k, v)}} for k, v in CONNS.items()},

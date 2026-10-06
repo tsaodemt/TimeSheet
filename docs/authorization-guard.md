@@ -78,4 +78,4 @@ Each evaluation writes one row: `Title`, `Decision` (ALLOWED/DENIED), `ResultCod
 
 ## Limits of the offline verification
 
-`wdl_sim.py` implements only the expression functions and action types the guard uses. String comparisons in the simulator are case-sensitive, and SharePoint `eq` filters are case-insensitive. Business keys are expected in canonical case. The live harness run in Power Automate remains the acceptance evidence for the deployed flow.
+`wdl_sim.py` implements only the expression functions and action types the guard uses. It is deliberately as strict as Power Automate where they differ in practice. For example, `empty()` accepts only strings, arrays and objects; a number raises an error. The template therefore tests nullable numbers with `equals(x, null)`. String comparisons in the simulator are case-sensitive, and SharePoint `eq` filters are case-insensitive. Business keys are expected in canonical case. The live harness run in Power Automate remains the acceptance evidence for the deployed flow.

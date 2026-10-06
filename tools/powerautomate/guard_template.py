@@ -31,7 +31,8 @@ def esc(x):
 
 
 def nz(x):
-    return "if(empty(%s), %s, string(%s))" % (x, EMPTY, x)
+    """string(x), or empty string for null. empty() rejects numbers in Power Automate, so test for null."""
+    return "if(equals(%s, null), %s, string(%s))" % (x, EMPTY, x)
 
 
 def class_table(scope_config: dict, temporary_roles=("MIGO",)) -> dict:

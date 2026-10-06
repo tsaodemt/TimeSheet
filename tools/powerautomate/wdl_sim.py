@@ -161,7 +161,10 @@ class Run:
 
     def f_toLower(self, s): return _str(s).lower()
     def f_trim(self, s): return _str(s).strip()
-    def f_empty(self, x): return _empty(x)
+    def f_empty(self, x):
+        if x is not None and not isinstance(x, (str, list, dict)):
+            raise WdlError("empty() expects an object, an array or a string, got %s" % type(x).__name__)
+        return _empty(x)
     def f_not(self, x): return not x
     def f_equals(self, a, b):
         if isinstance(a, bool) != isinstance(b, bool):

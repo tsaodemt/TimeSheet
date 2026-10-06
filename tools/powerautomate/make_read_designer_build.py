@@ -1,7 +1,7 @@
 """Generate a Playwright script that builds SPIKE-TS-ReadEntries in the Power Automate classic designer
 (trigger inputs + variable inits + 'Guard' scope via clipboard paste) and saves it.
 
-Configuration (environment variables): TS_PP_ENVIRONMENT, TS_CONN_SHAREPOINT, TS_CONN_O365USERS,
+Configuration (environment variables): TS_PP_ENVIRONMENT, TS_CONN_SHAREPOINT, TS_CONN_O365USERS, TS_REQUIRED_INPUTS,
 TS_CONN_O365GROUPS, TS_BUILD_SCRIPT_OUT, TS_FLOW_MODULE (default build_read_flow), TS_FLOW_NAME,
 plus those of the flow module. Output is generated; do not commit.
 """
@@ -16,6 +16,7 @@ CONNS = {"shared_sharepointonline": os.environ.get("TS_CONN_SHAREPOINT", "<share
 ENV = os.environ.get("TS_PP_ENVIRONMENT", "<power-platform-environment-id>")
 OUT = os.environ.get("TS_BUILD_SCRIPT_OUT", "build_read_flow.js")
 NAME = os.environ.get("TS_FLOW_NAME", "SPIKE-TS-ReadEntries")
+REQUIRED = int(os.environ.get("TS_REQUIRED_INPUTS", "3"))  # leading trigger inputs left required
 
 items, labels = [], []
 for k, v in r.inits.items():
@@ -55,7 +56,7 @@ JS = """async (page) => {
     await pA.mouse.click(635, y); await pA.keyboard.press('Control+A'); await pA.keyboard.type(INPUTS[i][1]); await pA.waitForTimeout(250);
     await pA.mouse.click(870, y); await pA.keyboard.press('Control+A'); await pA.keyboard.type(INPUTS[i][2]); await pA.waitForTimeout(250);
   }
-  for (let i = 3; i < n; i++) {
+  for (let i = %(required)d; i < n; i++) {
     await pA.mouse.click(1080, y0 + i*75); await pA.waitForTimeout(1000);
     const opt = pA.getByText('Make the field optional'); if (await opt.count()) { await opt.first().click(); log.push('optional ' + INPUTS[i][1]); }
     await pA.waitForTimeout(600);
@@ -75,7 +76,7 @@ JS = """async (page) => {
   log.push(JSON.stringify(m.slice(0, 20)));
   return log.join(' | ');
 }""" % {"items": json.dumps([json.dumps(i) for i in items]), "labels": json.dumps(labels),
-        "inputs": json.dumps(r.INPUTS), "env": ENV, "name": NAME}
+        "inputs": json.dumps(r.INPUTS), "env": ENV, "name": NAME, "required": REQUIRED}
 
 open(OUT, "w", encoding="utf-8").write(JS)
 print(OUT, len(JS))
