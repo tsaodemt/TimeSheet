@@ -156,8 +156,8 @@ class GuardEventTests(unittest.TestCase):
         r = self.auth_both(tg.Case(tg.u("emp"), ["TL"], "TS.Approve", "employee", "E2"))
         self.assertEqual((r["EventType"], r["Decision"], r["ResultCode"]), ("AuthorizationAllow", "ALLOW", "ALLOW"))
         case = tg.Case(tg.u("emp"), ["TL"], "TS.Approve", "employee", "E2")
-        e = self.op_both(case, "Approval", "Approve", "TimesheetEntries", {"ApprovalStatus": "Approved"})
-        self.assertEqual((e.Decision, e.ActionText, e.ChangeJson), ("ALLOW", "Phê duyệt: 2026-10-01", '{"ApprovalStatus":"Approved"}'))
+        e = self.op_both(case, "Approval", "Approve", "TimesheetEntries", {"EntryStatus": "Approved"})
+        self.assertEqual((e.Decision, e.ActionText, e.ChangeJson), ("ALLOW", "Phê duyệt: 2026-10-01", '{"EntryStatus":"Approved"}'))
         e = self.op_both(case, "WriteProxy", "Update", "TimesheetEntries", outcome="'LOCKED'", outcome_py="LOCKED")
         self.assertEqual((e.Decision, e.ResultCode, e.ActionText), ("DENY", "LOCKED", "Thay đổi"))
         e = self.op_both(tg.Case(tg.u("emp"), ["EMP"], "TS.EditOwnDraft", "self"), "SoftDelete", "Delete", "TimesheetEntries",

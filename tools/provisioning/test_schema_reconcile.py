@@ -239,6 +239,90 @@ class Provisioning(unittest.TestCase):
         self.assertTrue(r.dry_run and r.skipped and not r.executed and not site.calls)
 
 
+@unittest.skipUnless(os.environ.get("TS_TARGET_SCHEMA") and os.environ.get("TS_ASBUILT"),
+                     "set TS_TARGET_SCHEMA and TS_ASBUILT to check the real target against the as-built inventory")
+class TargetPolicy(unittest.TestCase):
+    """Project-owner decisions of 2026-10-06 (R1-Q2, R04-N2, R04-N4, LegacyModifiedBy classification)."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(os.environ["TS_TARGET_SCHEMA"], encoding="utf-8") as fh:
+            cls.target = json.load(fh)
+        with open(os.environ["TS_ASBUILT"], encoding="utf-8") as fh:
+            cls.actual = json.load(fh)
+        cls.findings = sr.reconcile(cls.target, cls.actual)
+        cls.plan = sr.plan(cls.findings)
+
+    def _list(self, title, target=None):
+        return next(l for l in (target or self.target)["lists"] if l["title"] == title)
+
+    def _opened(self):
+        """Target with every story gate opened (decisions kept): what would run once all dependencies close."""
+        t = copy.deepcopy(self.target)
+        for l in t["lists"]:
+            l.pop("gate", None)
+            for f in l["fields"]:
+                f.pop("gate", None)
+        return t
+
+    def test_approvalstatus_not_canonical(self):
+        names = {f["internalName"] for l in self.target["lists"] for f in l["fields"]}
+        self.assertNotIn("ApprovalStatus", names)
+        es = next(f for f in self._list("TimesheetEntries")["fields"] if f["internalName"] == "EntryStatus")
+        self.assertEqual((es["type"], es["choices"], es["required"], es["indexed"]), ("Choice", ["Draft", "Approved", "Deleted"], True, True))
+        self.assertNotIn("decision", es)
+        self.assertNotIn("Rejected", es["choices"])
+
+    def test_entrystatus_provisioned_when_dependency_opens(self):
+        f = sr.reconcile(self._opened(), {"site": ALLOWED, "lists": []})
+        planned = {(l, n) for l, n, op in sr.plan(f) if op[0] == "create_field"}
+        self.assertIn(("TimesheetEntries", "EntryStatus"), planned)
+        self.assertNotIn(("TimesheetEntries", "ApprovalStatus"), planned)
+        xml = sr.field_schema_xml(next(x for x in self._list("TimesheetEntries")["fields"] if x["internalName"] == "EntryStatus"))
+        self.assertIn("<CHOICE>Deleted</CHOICE>", xml)
+        self.assertNotIn("Rejected", xml)
+
+    def test_no_isdeleted_column(self):
+        names = {f["internalName"].lower() for l in self.target["lists"] for f in l["fields"]}
+        self.assertFalse(names & {"isdeleted", "deleted", "deletedflag"})
+        planned = {n.lower() for _, n, _ in sr.plan(sr.reconcile(self._opened(), {"site": ALLOWED, "lists": []}))}
+        self.assertNotIn("isdeleted", planned)
+
+    def test_legacymodifiedby_gated_by_env_d2_on_operational_masters(self):
+        st = statuses(self.findings)
+        for lst in ("Departments", "Disciplines", "Positions", "Employees"):
+            self.assertEqual(st[(lst, "LegacyModifiedBy")], sr.GATED)
+            f = next(x for x in self.findings if x.list == lst and x.field == "LegacyModifiedBy")
+            self.assertIn("ENV-D2", f.detail)
+        self.assertFalse(any(n == "LegacyModifiedBy" for _, n, _ in self.plan))
+
+    def test_locale_not_altered(self):
+        self.assertFalse(self.target["siteSettings"]["managedByTool"])
+        with open(os.path.join(HERE, "schema_reconcile.py"), encoding="utf-8") as fh:
+            src = fh.read()
+        for word in ("RegionalSettings", "LocaleId", "regionalsetng", "TimeZone"):
+            self.assertNotIn(word, src)
+        self.assertTrue(all(op[0] in sr.ROLLBACK for _, _, op in self.plan))
+
+    def test_retained_as_built_columns_kept(self):
+        retained = [(l["title"], f["internalName"]) for l in self.target["lists"] for f in l["fields"] if "retained" in f.get("note", "")]
+        self.assertTrue(retained, "the target marks retained as-built columns")
+        st = statuses(self.findings)
+        for key in retained:
+            self.assertEqual(st[key], sr.OK, key)
+            self.assertFalse(any((l, n) == key for l, n, _ in self.plan))
+
+    def test_no_destructive_cleanup_and_exact_live_plan(self):
+        self.assertTrue(all(op[0] == "create_field" for _, _, op in self.plan))
+        extra = [f for f in self.findings if f.status == sr.EXTRA]
+        self.assertTrue(extra and all(not f.ops for f in extra))
+        self.assertEqual(sorted((l, n) for l, n, _ in self.plan), sorted(
+            [(l, n) for l in ("Departments", "Disciplines", "Positions") for n in ("LegacyModifiedOn", "MigrationBatch", "IsLegacyPlaceholder")]
+            + [("Employees", "LegacyModifiedOn"), ("Employees", "IsLegacyPlaceholder"), ("Employees", "SortOrder")]))
+        self.assertEqual(len(self.plan), 12)
+        self.assertEqual([f for f in self.findings if f.status == sr.BLOCKED], [])
+
+
 class RestRequests(unittest.TestCase):
     def test_rest_client_builds_expected_requests(self):
         calls = []

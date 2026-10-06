@@ -21,7 +21,7 @@ Status: design. The lists and flows are built later, following the backlog depen
 
 | Class | Fields |
 |---|---|
-| Trusted / derived (flow only) | `OwnerUpn`, `ActorUpn`, `IsOnBehalf`, employee reference, discipline, `PeriodKey`, business key, status, `CorrelationId` |
+| Trusted / derived (flow only) | `OwnerUpn`, `ActorUpn`, `IsOnBehalf`, employee reference, discipline, `PeriodKey`, business key, `EntryStatus` (`Draft` / `Approved` / `Deleted`; soft delete = `Deleted`, no separate flag), `CorrelationId` |
 | User-editable | `WorkDate`, `Hours`, `Remark` |
 | Lookups (validated server-side) | project (active only), phase of that project (active), work type, shift, hour type |
 | Metadata | `Created`, `Modified`, `Author`, `Editor` |
@@ -39,7 +39,7 @@ Identity-, role- or scope-claiming fields are ignored and recorded by name only.
 ```
 $filter  = OwnerUpn eq '<trusted caller>'
            [and WorkDate ge '<from>' and WorkDate le '<to>']
-           and <status> ne 'Deleted'
+           and EntryStatus ne 'Deleted'
            and Id gt <AfterId>
 $orderby = Id asc
 $top     = <PageSize>
