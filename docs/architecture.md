@@ -48,13 +48,13 @@ Power Apps (canvas, Teams/browser) ──calls──► Power Automate guard flo
 | P: proxy-only | No human permission; every read and write goes through guard flows | timesheet entries |
 | W: flow-write | Authorised groups read directly; writes only through flows | audit log, project finance |
 | M: master data | All staff read; the owning group writes | departments, holidays, projects |
-| I: identity-bearing | All staff read; writes only through an audited flow, because the account link is the identity key (**proposed**, pending review) | employee master, role catalogue |
+| I: identity-bearing | All staff read; writes only through an audited flow, because the account link is the identity key (approved for staging) | employee master, role catalogue |
 
 Custom permission levels:
 - **Service:** View, Add and Edit items, plus Override List Behaviors. **No** Delete, Manage Lists or Manage Permissions.
 - **Contribute without Delete.**
 
-A reviewer level is not needed under the read proxy. **Proposed** (pending review): deleting a draft is a soft delete (hidden, audited, purged by a controlled job), so the service identity never needs Delete.
+A reviewer level is not needed under the read proxy. **Approved (staging):** business deletion is a soft delete (hidden, audited, purged by a controlled job), so the service identity never needs Delete.
 
 Identity resolution: see `identity-resolution.md`.
 
@@ -65,4 +65,5 @@ Identity resolution: see `identity-resolution.md`.
   - guard flows (which check live membership) see the change immediately;
   - SharePoint front-ends intermittently honoured the old permission for about 20–25 minutes.
   - See `runbook-identity-jml.md`.
+- **Permission testing:** a MERGE with a stale ETag returns 412 even for a user who has only View permission. SharePoint checks the precondition before permission, so 412 does not prove write access. Use effective permissions plus a write attempt with the current ETag; denial returns 403.
 - **Platform identity headers:** `x-ms-user-*` headers injected by a client were overwritten by the connector gateway with the authenticated caller.
