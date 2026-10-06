@@ -1,4 +1,4 @@
-"""R1 timesheet reference tests E01-E22 (offline; synthetic data; run: python -m unittest test_entries).
+"""R1 timesheet reference tests E01-E24 (offline; synthetic data; run: python -m unittest test_entries).
 
 These are OFFLINE tests of the reference logic. They are not the R1 live tests R1-01..R1-15, which stay NOT RUN.
 """
@@ -96,7 +96,8 @@ class Save(unittest.TestCase):
         self.assertEqual((r.ok, r.code, r.itemId), (True, E.OK, 1))
         f = st.items[1][0]
         self.assertEqual((f["OwnerUpn"], f["ActorUpn"], f["IsOnBehalf"], f["EntryStatus"], f["LegacyOrigin"]), (ME, ME, False, "Draft", "New"))
-        self.assertEqual((f["EmployeeItemId"], f["DisciplineCode"], f["PeriodKey"], f["CorrelationId"]), (7, "D1", "2026-10", "run-1"))
+        self.assertEqual((f["EmployeeId"], f["EmployeeItemId"], f["DisciplineCode"], f["PeriodKey"], f["CorrelationId"]),
+                         (7, 7, "D1", "2026-10", "run-1"))
         self.assertEqual(r.ignoredInputs, ["ActorUpn", "CallerUpn", "OwnerUpn"])
         self.assertEqual(r.audit[0]["Action"], "Create")
 
@@ -121,7 +122,21 @@ class Save(unittest.TestCase):
         self.assertNotEqual(r.etag, c.etag)
         f = st.items[1][0]
         self.assertEqual((f["Hours"], f["OwnerUpn"], f["LegacyOrigin"]), (3.0, ME, "New"))
-        self.assertFalse({"OwnerUpn", "LegacyId", "LegacyOrigin", "EntryStatus"} & set(st.last_update), "an edit never rewrites them")
+        self.assertFalse({"OwnerUpn", "EmployeeId", "EmployeeItemId", "LegacyId", "LegacyOrigin", "EntryStatus"} & set(st.last_update),
+                         "an edit never rewrites them")
+
+    def test_E05b_concurrent_change_between_check_and_write_is_a_conflict(self):
+        st = FakeStore()
+        c = save(st, req())
+
+        class Racy(FakeStore):
+            def update(self, i, f, if_match):
+                raise E.ConflictError()  # someone else saved after the ETag pre-check (412 from If-Match)
+        racy = Racy()
+        racy.items = st.items
+        r = save(racy, req(ItemId=c.itemId, ETag=c.etag, Hours=2))
+        self.assertEqual((r.ok, r.code, r.itemId), (False, E.CONFLICT, c.itemId))
+        self.assertEqual(st.items[1][0]["Hours"], 4.0)
 
     def test_E05_stale_etag_conflict_no_lost_update(self):
         st = FakeStore()
@@ -231,7 +246,7 @@ class Read(unittest.TestCase):
                                  "EntryStatus": "Deleted" if i == 5 else "Draft", "Hours": 1}, "e%d-1" % i)
 
     def read(self, **r):
-        return E.read_own(guard(), CALLER, r, self.st, correlation_id="run-2")
+        return E.read_own(guard(), CALLER, r, self.st, correlation_id="run-2", business_utc_offset_minutes=420)
 
     def test_E18_own_rows_only_paged_without_deleted(self):
         p1 = self.read(PageSize=2, CallerUpn=OTHER)
@@ -261,8 +276,22 @@ class Read(unittest.TestCase):
     def test_E22_page_size_clamped_and_filter_text(self):
         self.assertEqual(self.read(PageSize=10000)["pageSize"], 500)
         self.assertEqual(self.read(PageSize=0)["pageSize"], 1)
-        f = E.ReadFilter("o'neil@tenant-a.invalid", "2026-10-01", None, 5, 50).odata()
-        self.assertEqual(f, "OwnerUpn eq 'o''neil@tenant-a.invalid' and WorkDate ge '2026-10-01' and EntryStatus ne 'Deleted' and Id gt 5")
+        f = E.ReadFilter("o'neil@tenant-a.invalid", "2026-10-01", "2026-10-31", 5, 50, 420).odata()
+        self.assertEqual(f, "OwnerUpn eq 'o''neil@tenant-a.invalid' and WorkDate ge datetime'2026-09-30T17:00:00Z' "
+                            "and WorkDate le datetime'2026-10-30T17:00:00Z' and EntryStatus ne 'Deleted' and Id gt 5")
+
+    def test_E23_date_range_needs_the_business_offset(self):
+        r = E.read_own(guard(), CALLER, {"FromDate": "2026-10-01"}, self.st, correlation_id="c")
+        self.assertEqual((r["ok"], r["code"], r["rows"]), (False, E.CONFIG_UNRESOLVED, []))
+        self.assertTrue(E.read_own(guard(), CALLER, {}, self.st, correlation_id="c")["ok"], "no range: offset not needed")
+        with self.assertRaises(ValueError):
+            E.ReadFilter("a", "2026-10-01", None, 0, 1).odata()
+
+    def test_E24_every_read_writes_one_audit_row(self):
+        ok, bad = self.read(PageSize=2, CallerUpn=OTHER), self.read(RequestedOwner=OTHER)
+        self.assertEqual([(len(x["audit"]), x["audit"][0]["Decision"], x["audit"][0]["ResultCode"]) for x in (ok, bad)],
+                         [(1, "ALLOW", "OK"), (1, "DENY", "FORBIDDEN")])
+        self.assertEqual((ok["audit"][0]["RowCount"], ok["audit"][0]["IgnoredInputs"]), (2, ["CallerUpn"]))
 
 
 if __name__ == "__main__":

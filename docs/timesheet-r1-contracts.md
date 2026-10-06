@@ -45,6 +45,7 @@ $orderby = Id asc
 $top     = <PageSize>
 ```
 
+- Date bounds are business dates. A date-only value is stored as local midnight of the business time zone, so the bound sent to SharePoint is that instant in UTC: at UTC+07:00, `FromDate` 2026-10-01 becomes `datetime'2026-09-30T17:00:00Z'` (a bound of `…-10-01T00:00:00Z` would miss the first day). The offset comes from configuration; a date-range read without it refuses with `CONFIG_UNRESOLVED`. To be confirmed in the timesheet POC (date round-trip).
 - `OwnerUpn` and `WorkDate` are indexed before any data is loaded.
 - The list is never loaded and then filtered in memory.
 - Every returned row is re-checked against the owner. Any mismatch returns `ERROR_LEAK` and no rows.
@@ -135,4 +136,4 @@ Edits are protected by the ETag. Create idempotency is an open decision. The ref
 
 ## Reference implementation
 
-`tools/timesheet/entries.py` implements the save and read rules above after the guard decision (`tools/identity/guard.py`); `tools/timesheet/test_entries.py` E01–E22 covers them offline. These offline tests are not the release live tests.
+`tools/timesheet/entries.py` implements the save and read rules above after the guard decision (`tools/identity/guard.py`); `tools/timesheet/test_entries.py` E01–E24 covers them offline. These offline tests are not the release live tests.

@@ -261,7 +261,8 @@ def save_entry(guard_result, caller: Optional[Caller], request: Mapping, masters
     if any(all(f.get(k) == payload[k] for k in dup_keys) for _, f in same_day):
         warnings.append(WARN_DUPLICATE)
 
-    trusted = {"OwnerUpn": caller.upn, "ActorUpn": caller.upn, "IsOnBehalf": False, "EmployeeItemId": caller.employee_item_id,
+    trusted = {"OwnerUpn": caller.upn, "ActorUpn": caller.upn, "IsOnBehalf": False, "EmployeeId": caller.employee_item_id,
+               "EmployeeItemId": caller.employee_item_id,
                "DisciplineCode": caller.discipline_code,
                "PeriodKey": period_key(wd, int(_setting(settings, "PayPeriodStartDay"))), "CorrelationId": correlation_id}
     if existing is None:
@@ -271,7 +272,8 @@ def save_entry(guard_result, caller: Optional[Caller], request: Mapping, masters
         fields = idem.stamp(dict(payload, **trusted, LegacyId=str(uuid.uuid4()), LegacyOrigin="New", EntryStatus=DRAFT), request)
         new_id, new_etag = store.create(fields)
         return done(True, OK, itemId=new_id, etag=new_etag, warnings=warnings, _action="Create")
-    fields = dict(payload, **{k: v for k, v in trusted.items() if k != "OwnerUpn"})  # OwnerUpn is never rewritten
+    fields = dict(payload, **{k: v for k, v in trusted.items() if k not in ("OwnerUpn", "EmployeeId", "EmployeeItemId")})
+    # the owner (OwnerUpn, Employee lookup, EmployeeItemId) is never rewritten by an edit
     try:
         new_etag = store.update(item_id, fields, etag)
     except ConflictError:
@@ -288,21 +290,40 @@ class ReadFilter:
     to_date: Optional[str]
     after_id: int
     top: int
+    utc_offset_minutes: Optional[int] = None
+
+    def _bound(self, d: str) -> str:
+        """A date-only business date is stored as local midnight, i.e. the UTC instant (date 00:00 - offset).
+        At UTC+07, 2026-10-06 is 2026-10-05T17:00:00Z, so `datetime'2026-10-06T00:00:00Z'` would miss that day."""
+        if self.utc_offset_minutes is None:
+            raise ValueError("business UTC offset not configured")
+        t = _dt.datetime.combine(_dt.date.fromisoformat(d), _dt.time()) - _dt.timedelta(minutes=self.utc_offset_minutes)
+        return "datetime'%s'" % t.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def odata(self) -> str:
-        """The $filter the read flow sends (indexed OwnerUpn first; values are trusted or validated, quotes doubled)."""
+        """The $filter the read flow sends (indexed OwnerUpn first; values are trusted or validated, quotes doubled).
+        Date bounds: REQUIRES POC VERIFICATION of the stored instant (S06.11 P4)."""
         q = lambda s: s.replace("'", "''")  # noqa: E731
         parts = ["OwnerUpn eq '%s'" % q(self.owner_upn)]
         if self.from_date:
-            parts.append("WorkDate ge '%s'" % self.from_date)
+            parts.append("WorkDate ge %s" % self._bound(self.from_date))
         if self.to_date:
-            parts.append("WorkDate le '%s'" % self.to_date)
+            parts.append("WorkDate le %s" % self._bound(self.to_date))
         parts += ["EntryStatus ne '%s'" % DELETED, "Id gt %d" % self.after_id]
         return " and ".join(parts)
 
 
-def read_own(guard_result, caller: Optional[Caller], request: Mapping, store: Store, *, correlation_id: str) -> dict:
-    """TS-ReadOwn. Returns the contract response dict."""
+def read_own(guard_result, caller: Optional[Caller], request: Mapping, store: Store, *, correlation_id: str,
+             business_utc_offset_minutes: Optional[int] = None) -> dict:
+    """TS-ReadOwn. Returns the contract response dict, with the one `ReadProxy` audit row of the call in `audit`."""
+    r = _read_own(guard_result, caller, request, store, correlation_id, business_utc_offset_minutes)
+    r["audit"] = [{"EventType": "ReadProxy", "Action": "ReadOwn", "Decision": "ALLOW" if r["ok"] else "DENY",
+                   "ResultCode": r["code"], "CorrelationId": correlation_id, "ActorUpn": caller.upn if caller else "",
+                   "RowCount": len(r["rows"]), "IgnoredInputs": r["ignoredInputs"]}]
+    return r
+
+
+def _read_own(guard_result, caller, request, store, correlation_id, offset):
     ignored = sorted(k for k in request if k not in READ_INPUTS)
     base = {"correlationId": correlation_id, "rows": [], "nextAfterId": 0, "pageSize": 0, "ignoredInputs": ignored}
     if guard_result is None or not guard_result.allowed or caller is None or caller.upn != guard_result.AuthenticatedUpn:
@@ -314,6 +335,8 @@ def read_own(guard_result, caller: Optional[Caller], request: Mapping, store: St
     fdd, tdd = (_date(fd) if fd else None), (_date(td) if td else None)
     if (fd and fdd is None) or (td and tdd is None) or (fdd and tdd and fdd > tdd):
         return dict(base, ok=False, code=VALIDATION_DATE)
+    if (fdd or tdd) and offset is None:
+        return dict(base, ok=False, code=CONFIG_UNRESOLVED)  # BusinessUtcOffsetMinutes not configured
     try:
         after = max(0, int(request.get("AfterId") or 0))
         ps = request.get("PageSize")
@@ -321,7 +344,7 @@ def read_own(guard_result, caller: Optional[Caller], request: Mapping, store: St
     except (TypeError, ValueError):
         return dict(base, ok=False, code=VALIDATION_LOOKUP)
     size = min(max(size, 1), MAX_PAGE)
-    flt = ReadFilter(caller.upn, fdd.isoformat() if fdd else None, tdd.isoformat() if tdd else None, after, size)
+    flt = ReadFilter(caller.upn, fdd.isoformat() if fdd else None, tdd.isoformat() if tdd else None, after, size, offset)
     rows = store.query(flt)
     if any(f.get("OwnerUpn") != caller.upn or f.get("EntryStatus") == DELETED for _, f, _ in rows):
         return dict(base, ok=False, code=ERROR_LEAK)  # never return a page that contains anything foreign
