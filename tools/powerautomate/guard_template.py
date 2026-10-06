@@ -61,17 +61,13 @@ def action_map(scope_config: dict) -> dict:
     return {a.lower(): a for a in sorted(names)}
 
 
-def guard_actions(scope_config: dict, role_groups, *, site: str, domain: str, emp_list: str, audit_list: str,
-                  action_expr: str, kind_expr: str, ref_expr: str, untrusted_inputs=(),
-                  fields=("Id", "LegacyId", "IsActive", "DisciplineCode", "AccountUpn"),
-                  temporary_roles=("MIGO",)) -> dict:
-    """Actions for the `Guard` scope. *_expr are expressions (without '@') yielding the request's raw
-    action name, scope kind and scope reference. role_groups = [(roleKey, groupObjectId), ...] (configuration)."""
-    f_id, f_code, f_active, f_disc, f_upn = fields
-    sel = ",".join(fields)
-    T = o("Trusted")
-    rows = "body('Caller_rows')"
-    g = {
+FIELDS = ("Id", "LegacyId", "IsActive", "DisciplineCode", "AccountUpn")
+
+
+def caller_actions(*, site: str, emp_list: str, fields=FIELDS) -> dict:
+    """Trusted caller (invoker's own Users connection) -> employee rows by AccountUpn ($top=2)."""
+    sel, f_upn, T = ",".join(fields), fields[4], o("Trusted")
+    return {
         "SiteUrl": c(site, {}),
         "Get_caller_profile": op(USERS, "MyProfile_V2", {"$select": "userPrincipalName,id"}, S("SiteUrl")),
         "Trusted": c("@toLower(trim(%s))" % nz("body('Get_caller_profile')?['userPrincipalName']"), S("Get_caller_profile")),
@@ -81,6 +77,34 @@ def guard_actions(scope_config: dict, role_groups, *, site: str, domain: str, em
                         "inputs": {"from": "@if(equals(actions('Caller_lookup')?['status'], 'Succeeded'), body('Caller_lookup')?['value'], createArray())",
                                    "where": "@equals(toLower(trim(%s)), %s)" % (nz("item()?['%s']" % f_upn), T)}},
     }
+
+
+def identity_code_actions(*, domain: str, after: str, fields=FIELDS) -> dict:
+    """IdCode (OK or the identity deny code), Emp, CallerCode, CallerDisc."""
+    f_id, f_code, f_active, f_disc, f_upn = fields
+    T, rows = o("Trusted"), "body('Caller_rows')"
+    g = {"IdCode": c("@if(or(empty(%(T)s), not(endsWith(%(T)s, '@%(D)s'))), 'INVALID_IDENTITY', "
+                     "if(not(equals(actions('Caller_lookup')?['status'], 'Succeeded')), 'DIRECTORY_ERROR', "
+                     "if(equals(length(%(R)s), 0), 'UNMAPPED_IDENTITY', "
+                     "if(greater(length(%(R)s), 1), 'DUPLICATE_IDENTITY', "
+                     "if(not(equals(first(%(R)s)?['%(A)s'], true)), 'INACTIVE_EMPLOYEE', 'OK')))))"
+                     % dict(T=T, D=domain.lower(), R=rows, A=f_active), S(after))}
+    ok = "equals(%s, 'OK')" % o("IdCode")
+    g["Emp"] = c("@if(%s, first(%s), json('{}'))" % (ok, rows), S("IdCode"))
+    g["CallerCode"] = c("@%s" % nz("outputs('Emp')?['%s']" % f_code), S("Emp"))
+    g["CallerDisc"] = c("@%s" % nz("outputs('Emp')?['%s']" % f_disc), S("CallerCode"))
+    return g
+
+
+def guard_actions(scope_config: dict, role_groups, *, site: str, domain: str, emp_list: str, audit_list: str,
+                  action_expr: str, kind_expr: str, ref_expr: str, untrusted_inputs=(),
+                  fields=FIELDS, temporary_roles=("MIGO",)) -> dict:
+    """Actions for the `Guard` scope. *_expr are expressions (without '@') yielding the request's raw
+    action name, scope kind and scope reference. role_groups = [(roleKey, groupObjectId), ...] (configuration)."""
+    f_id, f_code, f_active, f_disc, f_upn = fields
+    sel = ",".join(fields)
+    T = o("Trusted")
+    g = caller_actions(site=site, emp_list=emp_list, fields=fields)
     prev = "Caller_rows"
     for key, gid in role_groups:
         g["List_" + key] = op(GROUPS, "ListGroupMembers", {"groupId": gid, "$top": 999}, S(prev))
@@ -89,16 +113,8 @@ def guard_actions(scope_config: dict, role_groups, *, site: str, domain: str, em
             "where": "@equals(toLower(%s), %s)" % (nz("item()?['userPrincipalName']"), T)}}
         g["M_" + key] = c("@greater(length(body('Filter_%s')), 0)" % key, S("Filter_" + key))
         prev = "M_" + key
-    g["IdCode"] = c("@if(or(empty(%(T)s), not(endsWith(%(T)s, '@%(D)s'))), 'INVALID_IDENTITY', "
-                    "if(not(equals(actions('Caller_lookup')?['status'], 'Succeeded')), 'DIRECTORY_ERROR', "
-                    "if(equals(length(%(R)s), 0), 'UNMAPPED_IDENTITY', "
-                    "if(greater(length(%(R)s), 1), 'DUPLICATE_IDENTITY', "
-                    "if(not(equals(first(%(R)s)?['%(A)s'], true)), 'INACTIVE_EMPLOYEE', 'OK')))))"
-                    % dict(T=T, D=domain.lower(), R=rows, A=f_active), S(prev))
+    g.update(identity_code_actions(domain=domain, after=prev, fields=fields))
     ok = "equals(%s, 'OK')" % o("IdCode")
-    g["Emp"] = c("@if(%s, first(%s), json('{}'))" % (ok, rows), S("IdCode"))
-    g["CallerCode"] = c("@%s" % nz("outputs('Emp')?['%s']" % f_code), S("Emp"))
-    g["CallerDisc"] = c("@%s" % nz("outputs('Emp')?['%s']" % f_disc), S("CallerCode"))
     g["ActionMap"] = c(action_map(scope_config), S("CallerDisc"))
     g["ClassTable"] = c(class_table(scope_config, temporary_roles), S("ActionMap"))
     g["ActionIn"] = c("@trim(%s)" % nz(action_expr), S("ClassTable"))

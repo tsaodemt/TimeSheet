@@ -41,7 +41,7 @@ TEMP_ROLE_INACTIVE = "TEMP_ROLE_INACTIVE"    # only a temporary role holds the a
 ROLE_NOT_ALLOWED = "ROLE_NOT_ALLOWED"        # none of the caller's roles grants the action
 SCOPE_NOT_ALLOWED = "SCOPE_NOT_ALLOWED"      # action granted, requested target outside the effective scope (or target not found)
 
-_ID_CODES = {idr.INVALID_IDENTITY: INVALID_IDENTITY, idr.ACCOUNT_NOT_ALLOWED: ACCOUNT_NOT_ALLOWED,
+ID_CODES = {idr.INVALID_IDENTITY: INVALID_IDENTITY, idr.ACCOUNT_NOT_ALLOWED: ACCOUNT_NOT_ALLOWED,
              idr.NOT_REGISTERED: UNMAPPED_IDENTITY, idr.DUPLICATE_MAPPING: DUPLICATE_IDENTITY,
              idr.INACTIVE: INACTIVE_EMPLOYEE, idr.DIRECTORY_ERROR: DIRECTORY_ERROR}
 
@@ -139,7 +139,7 @@ def authorize(identity: Optional[idr.TrustedIdentity],
     if not res.ok:
         if res.code == idr.INACTIVE:  # identity_resolver withholds the row; report what is known
             out.IsActive = False
-        out.ResultCode = _ID_CODES.get(res.code, DIRECTORY_ERROR)
+        out.ResultCode = ID_CODES.get(res.code, DIRECTORY_ERROR)
         return out
     act = policy.actions.get(act_in.lower())
     if act is None:
