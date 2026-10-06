@@ -123,6 +123,7 @@ Customer-facing wording is not decided yet. The app maps each code to a message;
 | `VALIDATION_LOOKUP`, `VALIDATION_HOURS`, `VALIDATION_DATE` | validation | yes |
 | `WARN_HOURS_ENTRY`, `WARN_HOURS_DAY`, `WARN_DUPLICATE` | warnings (in `warnings[]`) | no |
 | `ERROR_LEAK` | read leak check | read returns no rows |
+| `ERROR` | unexpected technical failure in the flow (shown with the correlation ID only) | yes |
 
 ## Configuration the operations need
 

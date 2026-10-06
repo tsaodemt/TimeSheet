@@ -43,6 +43,7 @@ A consuming flow acts **only** when `AuthorizationDecision = ALLOW`.
 | ResultCode | When (first match wins) |
 |---|---|
 | `INVALID_IDENTITY` | No platform identity, or a foreign domain |
+| `ACCOUNT_NOT_ALLOWED` | The account is disabled or a guest account |
 | `DIRECTORY_ERROR` | Employee lookup failed. This is never treated as "not found". |
 | `UNMAPPED_IDENTITY` | No employee row for the UPN |
 | `DUPLICATE_IDENTITY` | More than one row claims the UPN (configuration error) |
