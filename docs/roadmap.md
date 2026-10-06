@@ -4,7 +4,7 @@
 |---|---|---|
 | 01 Platform Foundation | Legacy analysis; staging environment aligned with production site settings | Done |
 | 02 Employee Master | Reference lists and employee master migrated and reconciled in staging | Done |
-| 03 Identity & Authorization | Entra sign-in; role groups; write/read proxy; permission model; permission test suite | In progress (write and read proxy PASS; guard and role tests PASS; operational permission model waiting for sign-off; confidential container and production service identities waiting for decisions) |
+| 03 Identity & Authorization | Entra sign-in; role groups; write/read proxy; permission model; permission test suite | In progress (write and read proxy PASS; guard and role tests PASS; operational permission model approved; confidential container and production service identities waiting for decisions) |
 | 04 Remaining Master Data | Projects, phases, work/hour types, holidays, settings | Planned |
 | 05 Application UI Foundation | Power Platform environment and ALM; app shell; guard-flow framework; audit | Planned |
 | 06 Timesheet Core | Entry, pay-period engine, summary, timesheet guard flows | Planned |
@@ -29,14 +29,14 @@ The storage security / permission-model story is split into three parts so that 
 
 | Part | Scope | Status | Blocks |
 |---|---|---|---|
-| a — Operational permission model (staging) | Non-confidential lists: proxy-only writes, guarded read/write, role/scope authorisation, service least privilege, soft delete, protected master data | Technically complete; waiting for security-owner sign-off | Operational schema provisioning, release 1 build |
+| a — Operational permission model (staging) | Non-confidential lists: proxy-only writes, guarded read/write, role/scope authorisation, service least privilege, soft delete, protected master data | Approved (done) | – |
 | b — Confidential container and data | Salary, rates, finance, confidential KPI data, confidential audit log | Waiting for the confidential-container decision | Confidential features only |
 | c — Production service identities | Permanent service accounts and connection ownership | Waiting for IT approval | Power Platform solution set-up, production flows, deployment, cutover |
 
 ## Release 1 (Employee Timesheet Pilot)
 
-Operational scope only; confidential features are deferred. Critical path:
+Operational scope only; confidential features are deferred. The confidential part of the identity/authorization entry gate stays open, but it gates confidential work only; it does not block operational schema provisioning, the guard-flow framework, operational permission validation or release 1. Temporary test identities and spike assets are removed only after the last release 1 live test that needs them. Critical path:
 
 ```text
-Operational permission sign-off -> operational schema provisioning -> Power Platform environment and solution (after production service identities and environment decision) -> app shell, shared components, guard-flow framework -> timesheet core -> release 1 live test
+Operational permission sign-off (done) -> operational schema provisioning (ready; drift check passed) -> Power Platform environment and solution (after production service identities and environment decision) -> app shell, shared components, guard-flow framework -> timesheet core -> release 1 live test
 ```
