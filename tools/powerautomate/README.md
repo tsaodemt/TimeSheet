@@ -8,6 +8,9 @@
 | `make_read_designer_build.py` | Generates a Playwright script that builds the read flow in the classic designer |
 | `make_read_guard_repaste.py` | Generates a Playwright script that replaces the read flow's guard scope in an existing flow |
 | `build_identity_flow.py` | Defines the identity-resolution guard flow (trusted caller → normalised UPN → indexed, unique `AccountUpn` lookup → OK / NOT_REGISTERED / INACTIVE / DUPLICATE_MAPPING / INVALID_IDENTITY; live role-group check; audit). Build it with `make_read_designer_build.py` and `TS_FLOW_MODULE=build_identity_flow`. |
+| `guard_template.py` | **Reusable authorization guard**: generates the `Guard` scope every guarded flow embeds (trusted caller → employee → live role groups → scope → `Guard_result` + audit). See `docs/authorization-guard.md`. |
+| `build_guard_template_flow.py` | Test harness flow consisting only of the guard template. Build with `make_read_designer_build.py` and `TS_FLOW_MODULE=build_guard_template_flow`. |
+| `wdl_sim.py` | Offline interpreter for the expression subset the guard uses. `tools/identity/test_guard.py` uses it to run the generated template against the reference. |
 | `build_role_probe_flow.py` | Defines a role/scope probe flow: live membership of every configured role group → roles → scope table → allow/deny per probe (action × target), with audit. Used to test the role model one temporary membership at a time. |
 
 Configuration comes from environment variables. Nothing tenant-specific is stored in the source.

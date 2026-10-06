@@ -28,7 +28,9 @@
 
 **Joiner:** a new membership may also take minutes to appear in SharePoint. Ask the user to sign out and in again, or open a new browser session, if access is missing.
 
-**Validation tip:** check a user's current SharePoint authorisation from **their own session** (`_api/web/lists/…/EffectiveBasePermissions`) repeatedly. The admin-side `getusereffectivepermissions` may not reflect front-end caches.
+**Operational rule (confirmed in later staging tests):** plan for **≈ 20–30 minutes** before an Entra group change (add or removal) is reflected by SharePoint direct access. Observed add latency ranged from about 5 to more than 26 minutes. Guard flows update faster (next run).
+
+**Validation tip:** check a user's current SharePoint authorisation from **their own session** (`_api/web/lists/…/EffectiveBasePermissions`) repeatedly. Admin-side `getusereffectivepermissions` is **not** authoritative for access inherited through Entra security groups. It can show no access while the user actually has access.
 
 **Requirement note:** if a security requirement demands *instantaneous* revocation of SharePoint read access, group-based permissions alone do not meet it. Session revocation or account disable is required.
 
