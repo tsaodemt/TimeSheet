@@ -105,7 +105,7 @@ def _str(v):
     if isinstance(v, bool):
         return "True" if v else "False"
     if isinstance(v, (dict, list)):
-        return json.dumps(v, separators=(",", ":"))
+        return json.dumps(v, separators=(",", ":"), ensure_ascii=False)
     return str(v)
 
 
@@ -114,7 +114,8 @@ def _empty(v):
 
 
 class Run:
-    def __init__(self, trigger_body=None, run_name="run-0", mocks=None):
+    def __init__(self, trigger_body=None, run_name="run-0", mocks=None, now="2026-01-01T00:00:00Z"):
+        self.now = now  # utcNow() value (fixed so outputs are comparable)
         self.trigger_body = trigger_body or {}
         self.run_name = run_name
         self.mocks = mocks  # callable(action_name, action_def, evaluated_params) -> (status, body)
@@ -182,9 +183,13 @@ class Run:
     def f_replace(self, s, a, b): return _str(s).replace(a, b)
     def f_concat(self, *a): return "".join(_str(x) for x in a)
     def f_join(self, arr, sep): return sep.join(_str(x) for x in arr)
-    def f_substring(self, s, i, n): return _str(s)[i:i + n]
+    def f_substring(self, s, i, n=None): return _str(s)[i:] if n is None else _str(s)[i:i + n]
     def f_decodeUriComponent(self, s): return unquote(s)
     def f_contains(self, coll, x): return x in coll
+    def f_utcNow(self, fmt=None): return self.now
+    def f_split(self, s, sep): return _str(s).split(sep)
+    def f_indexOf(self, s, t): return _str(s).find(t)
+    def f_add(self, a, b): return a + b
     def f_workflow(self): return {"run": {"name": self.run_name}}
     def f_triggerBody(self): return self.trigger_body
     def f_item(self): return self.item_stack[-1]
@@ -271,6 +276,9 @@ class Run:
             params = self.value(a["inputs"]["parameters"])
             status, body = self.mocks(name, a, params)
             self.results[name] = {"status": status, "outputs": {"body": body}, "body": body}
+        elif t == "Response":
+            v = self.value(a["inputs"]["body"])
+            self.results[name] = {"status": "Succeeded", "outputs": v, "body": v}
         else:
             raise WdlError("unsupported action type %s" % t)
 
