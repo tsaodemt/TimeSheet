@@ -38,5 +38,5 @@ The storage security / permission-model story is split into three parts so that 
 Operational scope only; confidential features are deferred. The confidential part of the identity/authorization entry gate stays open, but it gates confidential work only; it does not block operational schema provisioning, the guard-flow framework, operational permission validation or release 1. Temporary test identities and spike assets are removed only after the last release 1 live test that needs them. Critical path:
 
 ```text
-Operational permission sign-off (done) -> operational schema provisioning (ready; drift check passed) -> Power Platform environment and solution (after production service identities and environment decision) -> app shell, shared components, guard-flow framework -> timesheet core -> release 1 live test
+Operational permission sign-off (done) -> operational schema standard columns (done) -> Power Platform environment and solution (after production service identities and environment decision) -> app shell, shared components, guard-flow framework -> timesheet core -> release 1 live test
 ```
