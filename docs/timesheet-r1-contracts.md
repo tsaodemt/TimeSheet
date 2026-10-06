@@ -88,6 +88,16 @@ Response:
 {ok, code, message, itemId, etag, correlationId, warnings[]}
 ```
 
+## Time semantics
+
+The business time zone is environment configuration: a site regional setting plus an app/flow setting, never a code constant. The current business requirement is Vietnam local time: UTC+07:00, `Asia/Ho_Chi_Minh`, no DST.
+
+- `WorkDate` is a business calendar date in the business time zone, stored date-only.
+- Business times are displayed in the business time zone.
+- Audit and system timestamps (`TimestampUtc` / `OccurredOn`) stay in UTC and are never converted for storage.
+- Business date from an instant: convert the UTC instant to the business time zone, then take the local date. Never truncate the UTC value. Example at UTC+07:00: `2026-10-06T18:30:00Z` → business date `2026-10-07`.
+- No DST logic.
+
 ## Correlation
 
 The flow run name is the correlation ID. It appears in:
