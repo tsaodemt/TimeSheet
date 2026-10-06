@@ -109,3 +109,30 @@ The flow run name is the correlation ID. It appears in:
 ## Result codes shown to users
 
 Codes are stable and shown together with a short message and the correlation ID. Internal details are never shown: no list names, URLs, stack traces or other users' data.
+
+Customer-facing wording is not decided yet. The app maps each code to a message; the flows return the code.
+
+| Code | Source | Blocks the save |
+|---|---|---|
+| `OK` | flow | – |
+| identity codes (`UNMAPPED_IDENTITY`, `INACTIVE_EMPLOYEE`, `DUPLICATE_IDENTITY`, `INVALID_IDENTITY`, `ACCOUNT_NOT_ALLOWED`, `DIRECTORY_ERROR`) | guard | yes |
+| authorization codes (`ROLE_NOT_ALLOWED`, `SCOPE_NOT_ALLOWED`, `UNKNOWN_ACTION`, `UNKNOWN_SCOPE`, `DECISION_PENDING`, `TEMP_ROLE_INACTIVE`) | guard | yes |
+| `CONFIG_UNRESOLVED` / `CONFIG_INVALID` | a required setting is not configured (`app-settings.md`) | yes |
+| `NOT_FOUND`, `FORBIDDEN`, `LOCKED`, `CONFLICT` | edit checks | yes |
+| `VALIDATION_LOOKUP`, `VALIDATION_HOURS`, `VALIDATION_DATE` | validation | yes |
+| `WARN_HOURS_ENTRY`, `WARN_HOURS_DAY`, `WARN_DUPLICATE` | warnings (in `warnings[]`) | no |
+| `ERROR_LEAK` | read leak check | read returns no rows |
+
+## Configuration the operations need
+
+The save needs the pay-period start day, the two warning limits and the project-assignment switch. If any of them is unresolved or invalid, the save refuses with `CONFIG_UNRESOLVED` / `CONFIG_INVALID`; it never assumes a value.
+
+## Create idempotency (open)
+
+Edits are protected by the ETag. Create idempotency is an open decision. The reference implementation keeps it pluggable:
+- default: none — the app disables Save while a call is in flight, and `WARN_DUPLICATE` makes a repeated create visible;
+- option under review: a client-generated request key stored in an indexed, unique column; a repeat of the same key by the same owner with the same values returns the existing entry (`OK_REPLAY`), any other reuse is refused (`IDEMPOTENCY_KEY_REUSED`) without revealing the other entry. This needs a schema change and is not provisioned.
+
+## Reference implementation
+
+`tools/timesheet/entries.py` implements the save and read rules above after the guard decision (`tools/identity/guard.py`); `tools/timesheet/test_entries.py` E01–E22 covers them offline. These offline tests are not the release live tests.
