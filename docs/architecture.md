@@ -19,7 +19,7 @@ Power Apps (canvas, Teams/browser) ──calls──► Power Automate guard flo
 | AD-5 | Historical references use lookup / item-ID keys to the employee master, never Person columns | Former employees have no directory account |
 | AD-6 | Large-list queries always start with an indexed column (`OwnerUpn`/`EmployeeItemId`, `WorkDate`/`PeriodKey`) and are paged by keyset (`Id gt <last>`) | 5,000-item list view threshold; growth past 100k rows |
 | AD-7 | Standard connectors only (SharePoint, Office 365 Users, Office 365 Groups, Outlook, Teams, Approvals) | Licensing |
-| AD-8 | Solution-aware components with environment variables for every URL and ID | Tenant portability; staging → production without editing |
+| AD-8 | ~~Solution-aware components with environment variables for every URL and ID~~ **Superseded (project owner, final): SharePoint is the only data store and Dataverse is rejected.** Solutions, environment variables and connection references are Dataverse-backed, so they are not used. URLs, list titles and group IDs are compiled into the flow definitions at build time from private configuration (`tools/alm/sharepoint_only_pack.py`), with an exact-site guard; business settings stay in SharePoint `AppSettings` | Tenant portability without Dataverse; nothing tenant-specific in source |
 
 ## Guard-flow contract (write)
 
@@ -69,3 +69,10 @@ Identity resolution: see `identity-resolution.md`.
 - **Effective-permission checks:** the admin-side `getusereffectivepermissions` for a user returned no rights while that user had working Read through an Entra security-group grant. Verify group-based access from the user's own session. Newly added group membership took between about 5 and more than 26 minutes to reach SharePoint, so retry before treating a 404 as a failure.
 - **Reference lists:** master-data lists (class M) carry dedicated permissions: staff Read, owners Full Control, no direct write by application roles and no service grant until a guarded master-data flow exists.
 - **Platform identity headers:** `x-ms-user-*` headers injected by a client were overwritten by the connector gateway with the authenticated caller.
+
+## Data platform (final)
+
+- **SharePoint lists are the only application data store** (business data, configuration in `AppSettings`, audit in `AuditLog`).
+- **Dataverse is rejected and out of scope**: no Dataverse tables or database, no capacity purchase, no pay-as-you-go, no model-driven apps, no Dynamics 365.
+- Power Platform is used only for Canvas apps and Power Automate cloud flows, with the SharePoint, Office 365 Users and Office 365 Groups connectors.
+- Release unit: the SharePoint-only deployment pack, with non-solution flows and app. Every flow refuses to run against anything except the approved site (`Site_guard`). See `docs/alm-manifest.md`.

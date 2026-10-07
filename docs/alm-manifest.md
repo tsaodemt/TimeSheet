@@ -29,6 +29,19 @@ Teams or Trial), the publisher prefix is the approved staging prefix, the enviro
 label (never PRODUCTION), every site-URL variable equals the approved staging site URL by exact string equality, and no
 variable value is a GUID. The approved values live in private configuration. Tests: `test_manifest_check.py` DG01–DG05.
 
-Creating a Sandbox with Dataverse needs available Dataverse database capacity (at least 1 GB) or a pay-as-you-go
-billing plan. A tenant with only Microsoft 365 licences has none; that is a capacity/billing decision, not something
-to work around with the Default environment.
+## SharePoint-only ALM (final architecture decision)
+
+Dataverse is rejected. Solutions, publishers, solution environment variables, connection references, pipelines and
+managed-solution promotion are all Dataverse-backed, so they are **not used**. The ALM manifest above remains as design
+history. Its SharePoint-only replacement is `tools/alm/sharepoint_only_pack.py`:
+- the three R1 flows are compiled with the private environment binding (site URL, list titles, domain, role-group IDs,
+  environment label);
+- they use plain connections: SharePoint and Office 365 Groups owned by the service identity, and Office 365 Users
+  provided by the run-only user;
+- each flow gets a `Site_guard` that terminates `SITE_NOT_ALLOWED` before any SharePoint call if the site is not exactly
+  the approved one;
+- the Canvas app source is included.
+
+`tools/alm/architecture_scope.py` holds the decision and the item-by-item ALM classification, and refuses Dataverse,
+pay-as-you-go, capacity workarounds and Default / Production / Developer / Teams / Trial targets. Tests:
+`test_architecture_scope.py` SD01–SD10, PK01–PK04.

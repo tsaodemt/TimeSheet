@@ -49,6 +49,8 @@ MESSAGES = {
     "MSG_VALIDATION_DATE": "Please enter a valid work date.",
     "MSG_ERROR_LEAK": "Your entries could not be shown. Please contact the administrator.",
     "MSG_ERROR": "Something went wrong. Please try again later.",
+    "MSG_ACCOUNT_NOT_ENABLED": "Your account is not enabled for Timesheet. Please contact the administrator.",
+    "MSG_TEMPORARY_PROBLEM": "Timesheet is temporarily unavailable. Please try again later.",
     "WARN_HOURS_ENTRY": "Note: this entry is longer than the usual maximum per entry.",
     "WARN_HOURS_DAY": "Note: the total for this day is above the usual daily maximum.",
     "WARN_DUPLICATE": "Note: a similar entry already exists for this day.",

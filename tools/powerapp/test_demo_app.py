@@ -106,6 +106,12 @@ class DemoApp(unittest.TestCase):
     def test_DA11_no_tenant_values_in_source(self):
         self.assertEqual(re.findall(r"https?://|@[a-z0-9-]+\.[a-z]{2,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-", self.text, re.I), [])
 
+    def test_DA13_appopen_message_codes_covered(self):
+        sys.path.insert(0, os.path.join(HERE, "..", "powerautomate"))
+        import build_appstart_flow as baf
+        for code in set(baf.MESSAGE.values()) | {"MSG_CONFIG_UNRESOLVED", "MSG_CONFIG_INVALID"}:
+            self.assertIn(code, app.MESSAGES, code)
+
     def test_DA12_warnings_never_block_and_messages_hide_internals(self):
         for k, v in app.MESSAGES.items():
             self.assertNotRegex(v, r"(?i)sharepoint|list|flow|http|stack", k)
