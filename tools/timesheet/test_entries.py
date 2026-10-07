@@ -19,7 +19,8 @@ REG = {"settings": [
     {"key": "PayPeriodStartDay", "type": "int", "value": "26", "resolution": "RESOLVED"},
     {"key": "MaxHoursPerEntryWarn", "type": "decimal", "value": "4", "resolution": "RESOLVED"},
     {"key": "MaxHoursPerDayWarn", "type": "decimal", "value": "12", "resolution": "RESOLVED"},
-    {"key": "ProjectAssignmentScoping", "type": "enum", "allowed": ["Off", "On"], "value": None, "resolution": "BLOCKED"}]}
+    {"key": "ProjectAssignmentScoping", "type": "enum", "allowed": ["Off", "On"], "value": None, "resolution": "BLOCKED"},
+    {"key": "BusinessTimezone", "type": "iana_tz", "value": "Asia/Ho_Chi_Minh", "resolution": "RESOLVED"}]}
 SCOPING_OFF = [{"Title": "ProjectAssignmentScoping", "Value": "Off"}]
 
 
@@ -264,13 +265,13 @@ class Read(unittest.TestCase):
         r = self.read(RequestedOwner=OTHER)
         self.assertEqual((r["ok"], r["code"], r["rows"]), (False, E.FORBIDDEN, []))
         self.assertTrue(self.read(RequestedOwner=ME.upper())["ok"])
-        self.assertEqual(E.read_own(guard(ok=False), CALLER, {}, self.st, correlation_id="c")["code"], ROLE_NOT_ALLOWED)
+        self.assertEqual(E.read_own(guard(ok=False), CALLER, {}, self.st, correlation_id="c", business_timezone="Asia/Ho_Chi_Minh")["code"], ROLE_NOT_ALLOWED)
 
     def test_E21_leak_check_returns_no_rows(self):
         class Leaky(FakeStore):
             def query(self, flt):
                 return [(4, {"OwnerUpn": OTHER, "EntryStatus": "Draft"}, "e")]
-        r = E.read_own(guard(), CALLER, {}, Leaky(), correlation_id="c")
+        r = E.read_own(guard(), CALLER, {}, Leaky(), correlation_id="c", business_timezone="Asia/Ho_Chi_Minh")
         self.assertEqual((r["ok"], r["code"], r["rows"]), (False, E.ERROR_LEAK, []))
 
     def test_E22_page_size_clamped_and_filter_text(self):
@@ -281,9 +282,10 @@ class Read(unittest.TestCase):
                             "and WorkDate lt datetime'2026-10-31T17:00:00Z' and EntryStatus ne 'Deleted' and Id gt 5")
 
     def test_E23_date_range_needs_the_business_offset(self):
-        r = E.read_own(guard(), CALLER, {"FromDate": "2026-10-01"}, self.st, correlation_id="c")
+        r = E.read_own(guard(), CALLER, {"FromDate": "2026-10-01", "ToDate": "2026-10-02"}, self.st, correlation_id="c")
         self.assertEqual((r["ok"], r["code"], r["rows"]), (False, E.CONFIG_UNRESOLVED, []))
-        self.assertTrue(E.read_own(guard(), CALLER, {}, self.st, correlation_id="c")["ok"], "no range: offset not needed")
+        r = E.read_own(guard(), CALLER, {}, self.st, correlation_id="c")
+        self.assertEqual((r["ok"], r["code"]), (False, E.CONFIG_UNRESOLVED), "every read needs the zone (business-date output)")
         with self.assertRaises(ValueError):
             E.ReadFilter("a", "2026-10-01", None, 0, 1).odata()  # no business time zone configured
 

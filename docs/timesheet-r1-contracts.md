@@ -2,7 +2,7 @@
 
 Design contract for the first vertical slice: an employee creates, edits and reads **own** timesheet entries. Every operation goes through guarded flows. It builds on the live-validated read/write proxies (`security-read-proxy-spike.md`, `security-write-proxy-spike.md`), the guard (`authorization-guard.md`) and the audit model (`audit-model.md`).
 
-Status: design. The lists and flows are built later, following the backlog dependency order.
+Status: design. The read and save flow templates are generated and tested offline (`tools/powerautomate/build_r1_flows.py`); they are not deployed. The lists and flows are built later, following the backlog dependency order.
 
 ## Ownership
 
@@ -30,7 +30,7 @@ Status: design. The lists and flows are built later, following the backlog depen
 ## Read
 
 Request:
-- `FromDate` / `ToDate` (optional, bounded);
+- `FromDate` / `ToDate` (optional; both or neither, `yyyy-MM-dd`, not reversed — otherwise `VALIDATION_DATE`);
 - `AfterId` (default 0);
 - `PageSize` (clamped to 1…500).
 
@@ -47,7 +47,7 @@ $top     = <PageSize>
 ```
 
 - `FromDate` / `ToDate` are inclusive **business dates** in the business time zone. A date-only value is stored as local midnight of that zone, so the filter is the half-open UTC interval: `fromUtc` = local `FromDate` 00:00 in UTC; `toUtcExclusive` = local (`ToDate` + 1 day) 00:00 in UTC. At UTC+07:00 the range 2026-10-07 → 2026-10-07 becomes `>= 2026-10-06T17:00:00Z` and `< 2026-10-07T17:00:00Z`. No UTC truncation and no 23:59:59 upper bound. (A UTC-midnight bound — the earlier spike generator — drops the first day.)
-- The UTC offset is derived from the configured business time-zone name (it is not a separate setting). A date-range read without a valid time zone refuses with `CONFIG_UNRESOLVED`. The stored-instant behaviour is to be confirmed in the timesheet POC (date round-trip).
+- The UTC offset is derived from the configured business time-zone name (it is not a separate setting). A read without a usable time zone (unset, unknown, or without a Windows zone id for the flow conversion) refuses with `CONFIG_UNRESOLVED`; the response returns `workDate` as the business date. The stored-instant behaviour was confirmed live in the timesheet POC (P4, STAGING, synthetic rows): a `yyyy-MM-dd` value written through the JSON item API is stored as local midnight in UTC, and the half-open filter returns exactly the requested days.
 - Reference: `tools/timesheet/business_dates.py`; flow expression: `tools/powerautomate/date_range.py`; tests `tools/timesheet/test_date_range.py` (RD01–RD15, generated clause = reference for every day of a year).
 - `OwnerUpn` and `WorkDate` are indexed before any data is loaded.
 - The list is never loaded and then filtered in memory.
@@ -84,12 +84,20 @@ Checks, in order:
    - `VALIDATION_DATE`.
 4. Warnings: per-entry hours, per-day hours, possible duplicate. These do not block.
 5. Write by the service identity only, which has no Delete permission. The flow derives the system fields.
-6. One audit row per decision, with the run's correlation ID.
+6. One audit row per decision, with the run's correlation ID (`AuthorizationAllow` / `AuthorizationDeny` for the guard decision, `WriteProxy` with action `Create`, `Update` or `Save` for a refusal).
+
+Template notes (`save_draft_actions`):
+- the create status is always `Draft`; a status, owner, actor, employee, role or scope sent by the caller is ignored and recorded by name only;
+- `WorkDate` is written as `yyyy-MM-dd` through the JSON item API (the path proven by POC P4), never through the locale-dependent validate API;
+- an edit sends `IF-MATCH` with the checked ETag; a change between the check and the write (HTTP 412) returns `CONFLICT`;
+- an unreadable reference list (project, phase, project-phase, work type, shift, hour type, and assignments when scoping is On) refuses with `ERROR`; nothing is assumed;
+- the same-day sum and the duplicate check use the business day of the entry (half-open UTC interval) and skip `Deleted` entries and the edited entry itself;
+- `interim[]` in the response names settings in effect that are owner-approved engineering interim values (for example the assignment switch while B-03 is open). Builds for UAT or PRODUCTION refuse them.
 
 Response:
 
 ```
-{ok, code, message, itemId, etag, correlationId, warnings[]}
+{ok, code, messageCode, itemId, etag, correlationId, warnings[], interim[]}
 ```
 
 ## Time semantics
@@ -126,11 +134,11 @@ Customer-facing wording is not decided yet. The app maps each code to a message;
 | `VALIDATION_LOOKUP`, `VALIDATION_HOURS`, `VALIDATION_DATE` | validation | yes |
 | `WARN_HOURS_ENTRY`, `WARN_HOURS_DAY`, `WARN_DUPLICATE` | warnings (in `warnings[]`) | no |
 | `ERROR_LEAK` | read leak check | read returns no rows |
-| `ERROR` | unexpected technical failure in the flow (shown with the correlation ID only) | yes |
+| `ERROR` | unexpected technical failure in the flow, including unreadable reference data (shown with the correlation ID only) | yes |
 
 ## Configuration the operations need
 
-The save needs the pay-period start day, the two warning limits and the project-assignment switch. If any of them is unresolved or invalid, the save refuses with `CONFIG_UNRESOLVED` / `CONFIG_INVALID`; it never assumes a value.
+The save needs the pay-period start day, the two warning limits, the project-assignment switch and the business time zone. If any of them is unresolved or invalid (including a time zone without a Windows zone id), the save refuses with `CONFIG_UNRESOLVED` / `CONFIG_INVALID`; it never assumes a value.
 
 ## Create idempotency (open)
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import re
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 from zoneinfo import ZoneInfo
 
 
@@ -136,7 +136,7 @@ def _fmt(t, fmt):
     if fmt in (None, "o"):
         return t.strftime("%Y-%m-%dT%H:%M:%S.0000000Z")
     out = fmt
-    for a, b in (("yyyy", "%Y"), ("MM", "%m"), ("dd", "%d"), ("HH", "%H"), ("mm", "%M"), ("ss", "%S")):
+    for a, b in (("yyyy", "%Y"), ("MM", "%m"), ("dd", "%d"), ("HH", "%H"), ("mm", "%M"), ("ss", "%S")):  # yyyy-MM too
         out = out.replace(a, b)
     if re.search(r"[A-Za-z]", re.sub(r"%[YmdHMS]|T", "", out)):
         raise WdlError("unsupported format %r" % fmt)
@@ -151,6 +151,8 @@ class Run:
         self.mocks = mocks  # callable(action_name, action_def, evaluated_params) -> (status, body)
         self.results = {}   # name -> {"status", "outputs", "body"}
         self.item_stack = []
+        self.vars = {}
+        self.loop_items = {}
 
     # ---- expressions
     def ev(self, n):
@@ -214,12 +216,14 @@ class Run:
     def f_json(self, s): return json.loads(s)
     def f_createArray(self, *a): return list(a)
     def f_max(self, *a): return max(a)
+    def f_min(self, *a): return min(a)
     def f_endsWith(self, s, t): return _str(s).lower().endswith(_str(t).lower())
     def f_replace(self, s, a, b): return _str(s).replace(a, b)
     def f_concat(self, *a): return "".join(_str(x) for x in a)
     def f_join(self, arr, sep): return sep.join(_str(x) for x in arr)
     def f_substring(self, s, i, n=None): return _str(s)[i:] if n is None else _str(s)[i:i + n]
     def f_decodeUriComponent(self, s): return unquote(s)
+    def f_encodeUriComponent(self, s): return quote(_str(s), safe="-_.!~*'()")
     def f_contains(self, coll, x): return x in coll
     def f_utcNow(self, fmt=None): return self.now
     def f_split(self, s, sep): return _str(s).split(sep)
@@ -239,6 +243,21 @@ class Run:
             raise WdlError("unknown time zone %s" % tz)
         u = t.replace(tzinfo=ZoneInfo(_WIN_TO_IANA[tz])).astimezone(_dt.timezone.utc).replace(tzinfo=None)
         return _fmt(u, fmt) if fmt else u.strftime("%Y-%m-%dT%H:%M:%S.0000000Z")
+    def f_convertFromUtc(self, ts, tz, fmt=None):
+        t, _ = _parse_ts(ts)
+        if tz not in _WIN_TO_IANA:
+            raise WdlError("unknown time zone %s" % tz)
+        u = t.replace(tzinfo=_dt.timezone.utc).astimezone(ZoneInfo(_WIN_TO_IANA[tz])).replace(tzinfo=None)
+        return _fmt(u, fmt) if fmt else u.strftime("%Y-%m-%dT%H:%M:%S.0000000")
+    def f_guid(self):
+        self._guid = getattr(self, "_guid", 0) + 1
+        return "00000000-0000-4000-8000-%012d" % self._guid
+    def f_last(self, x): return x[-1] if x else None
+    def f_div(self, a, b): return a // b if isinstance(a, int) and isinstance(b, int) else a / b
+    def f_sub(self, a, b): return a - b
+    def f_mul(self, a, b): return a * b
+    def f_variables(self, n): return self.vars[n]
+    def f_items(self, n): return self.loop_items[n]
     def f_workflow(self): return {"run": {"name": self.run_name}}
     def f_triggerBody(self): return self.trigger_body
     def f_item(self): return self.item_stack[-1]
@@ -321,8 +340,43 @@ class Run:
     def _exec(self, name, a):
         t = a["type"]
         if t == "Compose":
-            v = self.value(a["inputs"])
+            if (a.get("metadata") or {}).get("failOnError"):  # expression errors fail the action, as in Power Automate (only where a flow handles it)
+                try:
+                    v = self.value(a["inputs"])
+                except (WdlError, ValueError, TypeError, KeyError) as e:
+                    self.results[name] = {"status": "Failed", "outputs": None, "body": None, "error": str(e)}
+                    return
+            else:
+                v = self.value(a["inputs"])
             self.results[name] = {"status": "Succeeded", "outputs": v, "body": v}
+        elif t == "InitializeVariable":
+            v = a["inputs"]["variables"][0]
+            self.vars[v["name"]] = self.value(v.get("value"))
+            self.results[name] = {"status": "Succeeded", "outputs": None, "body": None}
+        elif t == "IncrementVariable":
+            self.vars[a["inputs"]["name"]] += self.value(a["inputs"]["value"])
+            self.results[name] = {"status": "Succeeded", "outputs": None, "body": None}
+        elif t == "SetVariable":
+            self.vars[a["inputs"]["name"]] = self.value(a["inputs"]["value"])
+            self.results[name] = {"status": "Succeeded", "outputs": None, "body": None}
+        elif t == "Foreach":
+            for it in self.value(a["foreach"]):
+                self.loop_items[name] = it
+                for k in a["actions"]:
+                    self.results.pop(k, None)
+                self.run(a["actions"])
+            self.loop_items.pop(name, None)
+            self.results[name] = {"status": "Succeeded", "outputs": None, "body": None}
+        elif t == "Select":
+            src = self.value(a["inputs"]["from"])
+            out = []
+            for it in src:
+                self.item_stack.append(it)
+                try:
+                    out.append(self.value(a["inputs"]["select"]))
+                finally:
+                    self.item_stack.pop()
+            self.results[name] = {"status": "Succeeded", "outputs": {"body": out}, "body": out}
         elif t == "Query":
             src = self.value(a["inputs"]["from"])
             out = []

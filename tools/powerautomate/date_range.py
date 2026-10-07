@@ -19,19 +19,24 @@ def _q(s: str) -> str:
     return s.replace("'", "''")
 
 
-def local_midnight_utc_expr(date_expr: str, windows_tz: str) -> str:
-    """UTC 'yyyy-MM-ddTHH:mm:ss' of 00:00 local on the business date given by date_expr (no 'Z')."""
-    return "convertToUtc(concat(formatDateTime(%s, 'yyyy-MM-dd'), 'T00:00:00'), '%s', '%s')" % (date_expr, _q(windows_tz), _LOCAL)
+def _tz(windows_tz: str, tz_is_expression: bool) -> str:
+    return windows_tz if tz_is_expression else "'%s'" % _q(windows_tz)
+
+
+def local_midnight_utc_expr(date_expr: str, windows_tz: str, tz_is_expression: bool = False) -> str:
+    """UTC 'yyyy-MM-ddTHH:mm:ss' of 00:00 local on the business date given by date_expr (no 'Z').
+    windows_tz is a literal id, or (tz_is_expression=True) an expression evaluated at run time."""
+    return "convertToUtc(concat(formatDateTime(%s, 'yyyy-MM-dd'), 'T00:00:00'), %s, '%s')" % (date_expr, _tz(windows_tz, tz_is_expression), _LOCAL)
 
 
 def next_day_expr(date_expr: str) -> str:
     return "addDays(concat(formatDateTime(%s, 'yyyy-MM-dd'), 'T00:00:00Z'), 1, 'yyyy-MM-dd')" % date_expr
 
 
-def date_clause_expr(field: str, from_expr: str, to_expr: str, windows_tz: str) -> str:
+def date_clause_expr(field: str, from_expr: str, to_expr: str, windows_tz: str, tz_is_expression: bool = False) -> str:
     """Expression (without the leading '@') producing the half-open filter clause, ending in ' and '."""
-    lo = local_midnight_utc_expr(from_expr, windows_tz)
-    hi = local_midnight_utc_expr(next_day_expr(to_expr), windows_tz)
+    lo = local_midnight_utc_expr(from_expr, windows_tz, tz_is_expression)
+    hi = local_midnight_utc_expr(next_day_expr(to_expr), windows_tz, tz_is_expression)
     return ("concat('%s ge datetime''', %s, 'Z'' and %s lt datetime''', %s, 'Z'' and ')" % (field, lo, field, hi))
 
 
@@ -43,3 +48,9 @@ def reversed_range_expr(from_expr: str, to_expr: str) -> str:
 def windows_zone_from_config(iana: str) -> str:
     """Derive the Windows id from the configured IANA zone; fails closed for an unknown zone."""
     return bd.windows_zone(iana)
+
+
+def windows_zone_map_literal() -> str:
+    """JSON object literal IANA -> Windows id, for a run-time lookup of the configured business time zone."""
+    import json
+    return "json('%s')" % _q(json.dumps(bd.WINDOWS_ZONES))

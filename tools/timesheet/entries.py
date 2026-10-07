@@ -28,6 +28,7 @@ VALIDATION_LOOKUP, VALIDATION_HOURS, VALIDATION_DATE = "VALIDATION_LOOKUP", "VAL
 WARN_HOURS_ENTRY, WARN_HOURS_DAY, WARN_DUPLICATE = "WARN_HOURS_ENTRY", "WARN_HOURS_DAY", "WARN_DUPLICATE"
 CONFIG_UNRESOLVED, CONFIG_INVALID = "CONFIG_UNRESOLVED", "CONFIG_INVALID"
 ERROR_LEAK, IDEMPOTENCY_KEY_REUSED = "ERROR_LEAK", "IDEMPOTENCY_KEY_REUSED"
+ERROR = "ERROR"  # technical failure, e.g. reference data unreadable (fail closed)
 VALIDATION_REQUEST_KEY = "VALIDATION_REQUEST_KEY"  # only with the request-key strategy (R1-Q3 option, not approved)
 
 DRAFT, APPROVED, DELETED = "Draft", "Approved", "Deleted"
@@ -37,7 +38,7 @@ READ_INPUTS = {"FromDate", "ToDate", "AfterId", "PageSize", "RequestedOwner"}
 MAX_PAGE = 500
 # Settings every save needs. ProjectAssignmentScoping is included on purpose: while it is unresolved the save
 # refuses (CONFIG_UNRESOLVED) instead of assuming "Off".
-SAVE_SETTINGS = ("PayPeriodStartDay", "MaxHoursPerEntryWarn", "MaxHoursPerDayWarn", "ProjectAssignmentScoping")
+SAVE_SETTINGS = ("PayPeriodStartDay", "MaxHoursPerEntryWarn", "MaxHoursPerDayWarn", "ProjectAssignmentScoping", "BusinessTimezone")
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,8 @@ class Response:
     warnings: list = field(default_factory=list)
     ignoredInputs: list = field(default_factory=list)
     audit: list = field(default_factory=list)
+    messageCode: str = ""
+    interim: list = field(default_factory=list)  # settings in effect that are interim (engineering only; e.g. B-03)
 
 
 class Store(Protocol):
@@ -179,7 +182,7 @@ class RequestKeyIdempotency:
 
 # ---------------------------------------------------------------- save
 
-def save_entry(guard_result, caller: Optional[Caller], request: Mapping, masters: Masters, settings: Mapping,
+def save_entry(guard_result, caller: Optional[Caller], request: Mapping, masters: Optional[Masters], settings: Mapping,
                store: Store, *, correlation_id: str, idempotency=None, messages: Optional[Mapping] = None) -> Response:
     """TS-SaveEntry for own drafts. `guard_result` is the guard decision for the own-draft capability (scope self)."""
     idem = idempotency or NoIdempotency()
@@ -188,7 +191,8 @@ def save_entry(guard_result, caller: Optional[Caller], request: Mapping, masters
 
     def done(ok, code, **kw):
         action = kw.pop("_action", "Save")
-        r = Response(ok, code, msg(code), correlationId=correlation_id, ignoredInputs=ignored, **kw)
+        r = Response(ok, code, msg(code), correlationId=correlation_id, ignoredInputs=ignored, messageCode="MSG_" + code,
+                     interim=sorted(k for k in SAVE_SETTINGS if k in settings and getattr(settings[k], "interim", False)), **kw)
         r.audit.append({"EventType": "WriteProxy", "Action": action, "Decision": "ALLOW" if ok else "DENY",
                         "ResultCode": code, "CorrelationId": correlation_id, "ActorUpn": caller.upn if caller else "",
                         "TargetItemId": str(r.itemId or ""), "IgnoredInputs": ignored})
@@ -201,6 +205,10 @@ def save_entry(guard_result, caller: Optional[Caller], request: Mapping, masters
     g = _gate(settings, SAVE_SETTINGS)
     if g:
         return done(False, g[0], warnings=[])
+    try:  # flows convert with the Windows id: a configured zone without a mapping is unusable
+        bd.windows_zone(_setting(settings, "BusinessTimezone"))
+    except bd.TimeZoneConfigError:
+        return done(False, CONFIG_INVALID)
 
     item_id = request.get("ItemId") or 0
     try:
@@ -220,7 +228,9 @@ def save_entry(guard_result, caller: Optional[Caller], request: Mapping, masters
         if str(request.get("ETag") or "") != etag:
             return done(False, CONFLICT, itemId=item_id)
 
-    # validation: lookups, then hours, then date
+    # validation: lookups, then hours, then date. Unreadable reference data (masters=None) fails closed.
+    if masters is None:
+        return done(False, ERROR)
     project = _ci(masters.projects, request.get("ProjectCode"))
     if project is None or project.get("status") != "Active":
         return done(False, VALIDATION_LOOKUP)
@@ -337,13 +347,12 @@ def _read_own(guard_result, caller, request, store, correlation_id, tz):
         return dict(base, ok=False, code=FORBIDDEN)
     fd, td = request.get("FromDate"), request.get("ToDate")
     fdd, tdd = (_date(fd) if fd else None), (_date(td) if td else None)
-    if (fd and fdd is None) or (td and tdd is None) or (fdd and tdd and fdd > tdd):
-        return dict(base, ok=False, code=VALIDATION_DATE)
-    if fdd or tdd:
-        try:
-            bd.zone(tz)
-        except bd.TimeZoneConfigError:
-            return dict(base, ok=False, code=CONFIG_UNRESOLVED)  # business time zone not configured / unknown
+    if (fd and fdd is None) or (td and tdd is None) or (fdd and tdd and fdd > tdd) or (bool(fd) != bool(td)):
+        return dict(base, ok=False, code=VALIDATION_DATE)  # both dates or neither (R1 read contract); no reversed range
+    try:  # always needed: stored date-only values are instants; the response returns business dates.
+        bd.windows_zone(tz)  # flows convert with the Windows id: a zone without a mapping is unusable
+    except bd.TimeZoneConfigError:
+        return dict(base, ok=False, code=CONFIG_UNRESOLVED)  # business time zone not configured / unknown
     try:
         after = max(0, int(request.get("AfterId") or 0))
         ps = request.get("PageSize")
@@ -355,7 +364,8 @@ def _read_own(guard_result, caller, request, store, correlation_id, tz):
     rows = store.query(flt)
     if any(f.get("OwnerUpn") != caller.upn or f.get("EntryStatus") == DELETED for _, f, _ in rows):
         return dict(base, ok=False, code=ERROR_LEAK)  # never return a page that contains anything foreign
-    out = [{"id": i, "workDate": f.get("WorkDate"), "projectId": f.get("ProjectId"), "phaseId": f.get("PhaseId"),
+    biz = lambda v: bd.business_date(v, tz) if isinstance(v, str) and v.endswith("Z") else v  # noqa: E731
+    out = [{"id": i, "workDate": biz(f.get("WorkDate")), "projectId": f.get("ProjectId"), "phaseId": f.get("PhaseId"),
             "workTypeId": f.get("WorkTypeId"), "shiftId": f.get("ShiftId"), "hourTypeId": f.get("HourTypeId"),
             "hours": f.get("Hours"), "remark": f.get("Remark"), "status": f.get("EntryStatus"), "etag": e} for i, f, e in rows]
     nxt = out[-1]["id"] if len(out) == size else 0

@@ -15,10 +15,12 @@ from __future__ import annotations
 import json
 
 import audit_template as at
+import date_range as dr
 import build_read_flow as base
 import guard_template as gt
 
 c, sp_http, S, EMPTY, o, nz = base.c, base.sp_http, base.S, base.EMPTY, gt.o, gt.nz
+bd = dr.bd
 CR = {base.SP: "<PFX>_CR_SharePoint_OpsService", base.USERS: "<PFX>_CR_O365Users_Invoker", base.GROUPS: "<PFX>_CR_O365Groups_OpsService"}
 MESSAGE = {"OK": "MSG_OK", "UNMAPPED_IDENTITY": "MSG_ACCOUNT_NOT_ENABLED", "INACTIVE_EMPLOYEE": "MSG_ACCOUNT_NOT_ENABLED",
            "DUPLICATE_IDENTITY": "MSG_ACCOUNT_NOT_ENABLED", "INVALID_IDENTITY": "MSG_ACCOUNT_NOT_ENABLED",
@@ -54,12 +56,13 @@ def _digits_removed(v):
     return e
 
 
-def _rules(registry: dict, overlay: dict) -> list:
+def _rules(registry: dict, overlay: dict, keys=None) -> list:
+    """Per-key value rules baked at build time: the client subset (keys=None) or the named server-side keys."""
     env = (overlay or {}).get("environment")
     vals = (overlay or {}).get("values") or {}
     out = []
     for d in registry["settings"]:
-        if not d.get("exposeToClient"):
+        if (keys is None and not d.get("exposeToClient")) or (keys is not None and d["key"] not in keys):
             continue
         ov = vals.get(d["key"])
         interim = isinstance(ov, dict) and ov.get("interim")
@@ -71,20 +74,9 @@ def _rules(registry: dict, overlay: dict) -> list:
     return out
 
 
-def appstart_actions(*, site: str, domain: str, emp_list: str, audit_list: str, environment: str, registry: dict, overlay: dict,
-                     settings_list: str = "AppSettings", client_type_expr: str = "triggerBody()?['text']",
-                     untrusted_inputs=("CallerUpn", "ActorUpn", "OwnerUpn", "EmployeeId", "Role", "Scope", "UserPrincipalName", "Config"),
-                     refs: dict = None) -> dict:
-    g = at.app_open_actions(site=site, domain=domain, emp_list=emp_list, audit_list=audit_list, environment=environment,
-                            client_type_expr=client_type_expr, untrusted_inputs=untrusted_inputs)
-    g.pop("Respond")
-    ok = "equals(outputs('IdCode'), 'OK')"
-    g["Settings_read"] = sp_http("GET", "_api/web/lists/getbytitle('%s')/items?$select=Title,Value&$top=500" % settings_list,
-                                 S("Write_Audit_event"))
-    g["Settings_rows"] = c("@if(equals(actions('Settings_read')?['status'], 'Succeeded'), body('Settings_read')?['value'], createArray())",
-                           {"Settings_read": ["Succeeded", "Failed"]})
-    prev = "Settings_rows"
-    rules = _rules(registry, overlay)
+def setting_value_actions(g: dict, rules: list, prev: str, read_action: str = "Settings_read", prefix: str = "") -> tuple:
+    """Per setting: Q_ (row), V_ (value or fallback), S_ (OK | MISSING | INVALID), X_ (typed value). Returns
+    (status exprs, value exprs, interim conditions, last action). A failed settings read makes every key MISSING."""
     status, value, interim = {}, {}, {}
     for r in rules:
         k = r["key"]
@@ -109,8 +101,12 @@ def appstart_actions(*, site: str, domain: str, emp_list: str, audit_list: str, 
             m = _lit(json.dumps({a.lower(): a for a in r["allowed"]}))
             valid = "not(equals(json(%s)?[toLower(%s)], null))" % (m, sv)
             num = "json(%s)?[toLower(%s)]" % (m, sv)
+        elif t == "iana_tz":  # value = the derived Windows zone id; a zone without a mapping is unusable by flows
+            m = _lit(json.dumps(bd.WINDOWS_ZONES))
+            valid = "not(equals(json(%s)?[%s], null))" % (m, sv)
+            num = "json(%s)?[%s]" % (m, sv)
         else:
-            raise ValueError("client exposure supports int, decimal and enum only: %s" % k)
+            raise ValueError("flow settings support int, decimal, enum and iana_tz only: %s" % k)
         bounds = []
         if t in ("int", "decimal"):
             if r.get("min") is not None:
@@ -118,7 +114,7 @@ def appstart_actions(*, site: str, domain: str, emp_list: str, audit_list: str, 
             if r.get("max") is not None:
                 bounds.append("not(greater(%s, %s))" % (num, r["max"]))
         okexpr = "and(%s)" % ", ".join([valid] + bounds) if bounds else valid
-        read_ok = "equals(actions('Settings_read')?['status'], 'Succeeded')"  # unknown live values -> unresolved (fail closed)
+        read_ok = "equals(actions('%s')" % read_action + "?['status'], 'Succeeded')"  # unknown live values -> unresolved (fail closed)
         st = "'MISSING'" if r["blocked"] else "if(not(%s), 'MISSING', if(equals(%s, null), 'MISSING', if(%s, 'OK', 'INVALID')))" % (read_ok, V, okexpr)
         g["S_" + k] = c("@" + st, S("V_" + k))
         g["X_" + k] = c("@if(equals(outputs('S_%s'), 'OK'), %s, null)" % (k, num), S("S_" + k))
@@ -126,6 +122,23 @@ def appstart_actions(*, site: str, domain: str, emp_list: str, audit_list: str, 
         if r["interim"]:
             interim[k] = "and(equals(outputs('S_%s'), 'OK'), equals(string(outputs('X_%s')), %s))" % (k, k, _lit(r["interim"][0]))
         prev = "X_" + k
+    return status, value, interim, prev
+
+
+def appstart_actions(*, site: str, domain: str, emp_list: str, audit_list: str, environment: str, registry: dict, overlay: dict,
+                     settings_list: str = "AppSettings", client_type_expr: str = "triggerBody()?['text']",
+                     untrusted_inputs=("CallerUpn", "ActorUpn", "OwnerUpn", "EmployeeId", "Role", "Scope", "UserPrincipalName", "Config"),
+                     refs: dict = None) -> dict:
+    g = at.app_open_actions(site=site, domain=domain, emp_list=emp_list, audit_list=audit_list, environment=environment,
+                            client_type_expr=client_type_expr, untrusted_inputs=untrusted_inputs)
+    g.pop("Respond")
+    ok = "equals(outputs('IdCode'), 'OK')"
+    g["Settings_read"] = sp_http("GET", "_api/web/lists/getbytitle('%s')/items?$select=Title,Value&$top=500" % settings_list,
+                                 S("Write_Audit_event"))
+    g["Settings_rows"] = c("@if(equals(actions('Settings_read')?['status'], 'Succeeded'), body('Settings_read')?['value'], createArray())",
+                           {"Settings_read": ["Succeeded", "Failed"]})
+    rules = _rules(registry, overlay)
+    status, value, interim, prev = setting_value_actions(g, rules, "Settings_rows")
     cfg = "json('{}')"
     for k in status:
         cfg = "if(equals(%s, 'OK'), setProperty(%s, %s, %s), %s)" % (status[k], cfg, _lit(k), value[k], cfg)

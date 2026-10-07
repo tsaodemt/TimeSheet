@@ -104,14 +104,16 @@ class BusinessDateRange(unittest.TestCase):
         self.assertNotIn("2026-10-07T00:00:00Z", f, "UTC-midnight bound of the business date = the old defect")
         self.assertIn("WorkDate ge datetime'2026-10-06T17:00:00Z' and WorkDate lt datetime'2026-10-07T17:00:00Z'", f)
 
-    def test_RD11_from_date_only(self):
+    def test_RD11_from_date_only_is_rejected(self):
         st = SharePointLike(days("2026-10-05", "2026-10-09"))
-        self.assertEqual(read(st, FromDate="2026-10-07")[1], ["2026-10-07", "2026-10-08", "2026-10-09"])
+        r, got = read(st, FromDate="2026-10-07")
+        self.assertEqual((r["code"], got), (E.VALIDATION_DATE, []), "R1 contract: both dates or neither")
         self.assertNotIn(" lt ", E.ReadFilter(ME, "2026-10-07", None, 0, 5, TZ).odata())
 
-    def test_RD12_to_date_only(self):
+    def test_RD12_to_date_only_is_rejected(self):
         st = SharePointLike(days("2026-10-05", "2026-10-09"))
-        self.assertEqual(read(st, ToDate="2026-10-07")[1], ["2026-10-05", "2026-10-06", "2026-10-07"])
+        r, got = read(st, ToDate="2026-10-07")
+        self.assertEqual((r["code"], got), (E.VALIDATION_DATE, []), "R1 contract: both dates or neither")
         self.assertNotIn(" ge datetime", E.ReadFilter(ME, None, "2026-10-07", 0, 5, TZ).odata())
 
     def test_RD13_no_date_filter(self):
@@ -119,9 +121,9 @@ class BusinessDateRange(unittest.TestCase):
         r, got = read(st)
         self.assertEqual(got, days("2026-10-05", "2026-10-09"))
         self.assertNotIn("WorkDate", E.ReadFilter(ME, None, None, 0, 5, TZ).odata())
-        r = E.read_own(GUARD, CALLER, {}, st, correlation_id="c")  # no time zone needed without a range
-        self.assertTrue(r["ok"])
-        r = E.read_own(GUARD, CALLER, {"FromDate": "2026-10-05"}, st, correlation_id="c", business_timezone="Mars/Base")
+        r = E.read_own(GUARD, CALLER, {}, st, correlation_id="c")  # the zone is needed even without a range (business-date output)
+        self.assertEqual(r["code"], E.CONFIG_UNRESOLVED)
+        r = E.read_own(GUARD, CALLER, {"FromDate": "2026-10-05", "ToDate": "2026-10-06"}, st, correlation_id="c", business_timezone="Mars/Base")
         self.assertEqual(r["code"], E.CONFIG_UNRESOLVED, "unknown time zone fails closed")
 
     def test_RD14_paging_with_date_range(self):
