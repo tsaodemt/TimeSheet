@@ -372,11 +372,28 @@ def save_draft_actions(*, scope_config, role_groups, site, domain, emp_list, aud
     row["Title"] = row["Title"].replace(", 'Create', ", ", %s, " % act, 1)
     row["Action"] = "@{%s}" % act
     row["ActionText"] = "@{if(%s, if(%s, %s, %s), %s)}" % (ok, is_edit, _lit(ae.ACTION_TEXT["Update"]), _lit(ae.ACTION_TEXT["Create"]), EMPTY)
+    # AUD-F1 = option B (project owner 2026-10-07, R1): a failed WriteProxy append never turns a committed write into a
+    # failure. The response keeps the business result, adds auditstatus AUDIT_DEGRADED (+ warning when the write was
+    # committed) and the same correlation id; the run then ends Failed so run monitoring alerts operations, and the
+    # entry's CorrelationId is the reconciliation key. No retry is made. A failed decision append (before any write)
+    # still stops the run without a write.
+    g["Audit_status"] = c("@if(equals(actions('Write_Write_proxy')?['status'], 'Succeeded'), 'OK', 'AUDIT_DEGRADED')",
+                          {"Write_Write_proxy": ["Succeeded", "Failed", "Skipped", "TimedOut"]})
+    degraded = "equals(outputs('Audit_status'), 'AUDIT_DEGRADED')"
+    g["Warnings_out"] = {"type": "Query", "runAfter": S("Audit_status"), "inputs": {
+        "from": "@union(body('Warnings'), createArray(if(and(%s, %s), 'AUDIT_DEGRADED', %s)))" % (ok, degraded, EMPTY),
+        "where": "@not(empty(item()))"}}
     body = {"ok": "@{if(%s, 'true', 'false')}" % ok, "resultcode": "@{outputs('Final_code')}",
             "messagecode": "@{concat('MSG_', outputs('Final_code'))}", "itemid": "@{string(outputs('Out_id'))}",
             "etag": "@{outputs('Out_etag')}", "correlationid": "@{workflow()?['run']?['name']}",
-            "warnings": "@{string(body('Warnings'))}", "interim": "@{string(body('Interim'))}"}
-    g["Respond"] = {"type": "Response", "kind": "PowerApp", "runAfter": S("Write_Write_proxy"),
+            "warnings": "@{string(body('Warnings_out'))}", "interim": "@{string(body('Interim'))}",
+            "auditstatus": "@{outputs('Audit_status')}"}
+    g["If_audit_degraded"] = {"type": "If", "runAfter": S("Respond"), "expression": {"equals": ["@outputs('Audit_status')", "AUDIT_DEGRADED"]},
+                              "actions": {"Alert_audit_degraded": {"type": "Terminate", "runAfter": {}, "inputs": {
+                                  "runStatus": "Failed", "runError": {"code": "AUDIT_DEGRADED",
+                                                                      "message": "@{concat('audit append failed; correlation ', workflow()?['run']?['name'])}"}}}},
+                              "else": {"actions": {}}}
+    g["Respond"] = {"type": "Response", "kind": "PowerApp", "runAfter": S("Warnings_out"),
                     "inputs": {"statusCode": 200, "body": body, "schema": {"type": "object", "properties": {
                         k: {"title": k, "x-ms-dynamically-added": True, "type": "string"} for k in body}}}}
     return baf.bind_connection_references(base._fix(g), refs)

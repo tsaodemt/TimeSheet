@@ -90,6 +90,7 @@ Template notes (`save_draft_actions`):
 - the create status is always `Draft`; a status, owner, actor, employee, role or scope sent by the caller is ignored and recorded by name only;
 - `WorkDate` is written as `yyyy-MM-dd` through the JSON item API (the path proven by POC P4), never through the locale-dependent validate API;
 - an edit sends `IF-MATCH` with the checked ETag; a change between the check and the write (HTTP 412) returns `CONFLICT`;
+- audit append failure (AUD-F1 = option B, project owner 2026-10-07, R1): if the operation audit row cannot be appended after a committed write, the response stays `ok = true` with the business result, `auditStatus = AUDIT_DEGRADED`, warning `AUDIT_DEGRADED` and the same `correlationId`; the run then ends Failed so run monitoring alerts operations, and the entry's `CorrelationId` is the reconciliation key. Nothing is retried. For a refused save the code is kept and `auditStatus = AUDIT_DEGRADED` without the warning. A failed decision append (before any write) still stops the run without a write. A durable outbox / retry is a later production-hardening option, not designed;
 - a write that persisted is never reported as failed. If its new ETag cannot be read back (or equals the one sent), the response has `etag = ""` and `WARN_RELOAD_REQUIRED`. The client then discards the ETag it holds and re-reads the item before another edit; an edit with the old ETag gets `CONFLICT`;
 - an unreadable reference list (project, phase, project-phase, work type, shift, hour type, and assignments when scoping is On) refuses with `ERROR`; nothing is assumed;
 - the same-day sum and the duplicate check use the business day of the entry (half-open UTC interval) and skip `Deleted` entries and the edited entry itself;
@@ -98,7 +99,7 @@ Template notes (`save_draft_actions`):
 Response:
 
 ```
-{ok, code, messageCode, itemId, etag, correlationId, warnings[], interim[]}
+{ok, code, messageCode, itemId, etag, correlationId, warnings[], interim[], auditStatus}
 ```
 
 ## Time semantics
@@ -135,6 +136,7 @@ Customer-facing wording is not decided yet. The app maps each code to a message;
 | `VALIDATION_LOOKUP`, `VALIDATION_HOURS`, `VALIDATION_DATE` | validation | yes |
 | `WARN_HOURS_ENTRY`, `WARN_HOURS_DAY`, `WARN_DUPLICATE` | warnings (in `warnings[]`) | no |
 | `WARN_RELOAD_REQUIRED` | the save persisted but its new ETag is unavailable (`etag` empty): re-read before the next edit | no |
+| `AUDIT_DEGRADED` | the save persisted but its audit row could not be appended (`auditStatus`); do **not** retry — operations reconcile by correlation id | no |
 | `ERROR_LEAK` | read leak check | read returns no rows |
 | `ERROR` | unexpected technical failure in the flow, including unreadable reference data (shown with the correlation ID only) | yes |
 

@@ -212,7 +212,7 @@ def run_flow(upn, request, store, settings, roles=("EMP",), decoys=None, cid="ru
     b = run.results["Respond"]["outputs"]
     return ({"ok": b["ok"] == "true", "code": b["resultcode"], "messageCode": b["messagecode"], "itemId": int(b["itemid"]),
              "etag": b["etag"], "correlationId": b["correlationid"], "warnings": json.loads(b["warnings"]),
-             "interim": json.loads(b["interim"])}, posts, writes, run)
+             "interim": json.loads(b["interim"]), "auditStatus": b["auditstatus"]}, posts, writes, run)
 
 
 def masters():
@@ -229,7 +229,7 @@ def masters():
         assignments=[code["Projects"][r["ProjectId"]] for r in MASTER_ROWS["ProjectAssignments"] if r["EmployeeItemId"] == ME_EMP.item_id])
 
 
-def ref(upn, request, store, settings, roles=("EMP",), cid="run-rs", fail=(), reg=REG, ovl=OVL):
+def ref(upn, request, store, settings, roles=("EMP",), cid="run-rs", fail=(), reg=REG, ovl=OVL, fail_audit=None):
     ident = TrustedIdentity(upn=upn, group_ids=["g-" + r.lower() for r in roles])
     lk = lambda n: [e for e in tg.EMPS if e.account_upn == n]  # noqa: E731
     g = G.authorize(ident, lk, lk, tg.CFG, tg.POLICY, "TS.EditOwnDraft", "self", correlation_id=cid)
@@ -239,8 +239,9 @@ def ref(upn, request, store, settings, roles=("EMP",), cid="run-rs", fail=(), re
     lists = set(MASTER_ROWS) - ({"ProjectAssignments"} if cfg.plain(s).get("ProjectAssignmentScoping") != "On" else set())
     m = None if set(fail) & lists else masters()  # the reference takes reference data all-or-nothing
     r = E.save_entry(g, caller, {k: v for k, v in request.items() if v != ""}, m, s, store, correlation_id=cid)
+    r = E.finalize_audit(r, appended=fail_audit != "WriteProxy")
     return {"ok": r.ok, "code": r.code, "messageCode": r.messageCode, "itemId": r.itemId, "etag": r.etag, "correlationId": cid,
-            "warnings": r.warnings, "interim": r.interim}, r
+            "warnings": r.warnings, "interim": r.interim, "auditStatus": r.auditStatus}, r
 
 
 class _Both(unittest.TestCase):
@@ -534,6 +535,76 @@ class FlowGaps(_Both):
         self.assertIn("$select=Id,LegacyId,IsActive,Discipline/DisciplineCode,AccountUpn", flow)
         self.assertIn("&$expand=Discipline", flow)
         self.assertNotIn("IsActive,DisciplineCode,AccountUpn", flow, "Employees has no DisciplineCode column")
+
+
+
+class AuditFailure(_Both):
+    """AUD-F1 = option B (project owner 2026-10-07, R1): AF01-AF08."""
+
+    def run_both(self, request, fail_audit=None, items=ITEMS, upn=ME):
+        f = self.both(upn, request, items=items, fail_audit=fail_audit)
+        return f, self.ctx["run"]
+
+    def test_AF01_create_and_audit_succeed(self):
+        f, run = self.run_both(req())
+        self.assertEqual((f["ok"], f["code"], f["auditStatus"]), (True, "OK", "OK"))
+        self.assertNotIn("AUDIT_DEGRADED", f["warnings"])
+        self.assertIsNone(run.terminated)
+        self.assertEqual([p["EventType"] for p in self.ctx["posts"]], ["AuthorizationAllow", "WriteProxy"])
+
+    def test_AF02_create_ok_audit_fails_is_ok_and_degraded(self):
+        f, run = self.run_both(req(), fail_audit="WriteProxy")
+        self.assertEqual((f["ok"], f["code"], f["messageCode"], f["auditStatus"]), (True, "OK", "MSG_OK", "AUDIT_DEGRADED"))
+        self.assertIn("AUDIT_DEGRADED", f["warnings"])
+        self.assertGreater(f["itemId"], 0)
+        self.assertTrue(f["etag"])
+        self.assertEqual(f["correlationId"], "run-rs")
+        self.assertEqual((run.terminated["runStatus"], run.terminated["runError"]["code"]), ("Failed", "AUDIT_DEGRADED"), "run alert")
+        self.assertIn("run-rs", run.terminated["runError"]["message"], "reconciliation key")
+        self.assertEqual(self.ctx["store"].items[f["itemId"]]["CorrelationId"], "run-rs", "the entry carries the reconciliation key")
+
+    def test_AF03_edit_ok_audit_fails_is_ok_and_degraded(self):
+        f, run = self.run_both(req(ItemId="1", ETag='"1,1"', Hours="3"), fail_audit="WriteProxy")
+        self.assertEqual((f["ok"], f["code"], f["itemId"], f["auditStatus"]), (True, "OK", 1, "AUDIT_DEGRADED"))
+        self.assertIn("AUDIT_DEGRADED", f["warnings"])
+        self.assertEqual(run.terminated["runError"]["code"], "AUDIT_DEGRADED")
+
+    def test_AF04_audit_failure_never_changes_committed_data(self):
+        for request in (req(), req(ItemId="1", ETag='"1,1"', Hours="3")):
+            self.run_both(request)
+            good = self.ctx["store"].state()
+            self.run_both(request, fail_audit="WriteProxy")
+            self.assertEqual(self.ctx["store"].state(), good, request)
+
+    def test_AF05_never_a_generic_failure_after_commit(self):
+        for request in (req(), req(ItemId="1", ETag='"1,1"', Hours="3")):
+            f, _ = self.run_both(request, fail_audit="WriteProxy")
+            self.assertTrue(f["ok"])
+            self.assertNotEqual(f["code"], "ERROR")
+
+    def test_AF06_no_automatic_duplicate_retry(self):
+        f, _ = self.run_both(req(), fail_audit="WriteProxy")
+        creates = [w for w in self.ctx["writes"] if "X-HTTP-Method" not in w[1]]
+        self.assertEqual(len(creates), 1, "exactly one create")
+        self.assertEqual(len(self.ctx["store"].items), len(ITEMS) + 1)
+        flow = json.dumps(FLOW)
+        self.assertNotIn('"retryPolicy"', flow)
+        self.assertEqual(flow.count("getbytitle('TimesheetEntries')/items\""), 1, "one create action, no loop")
+
+    def test_AF07_deny_path_audit_failure_is_distinguishable(self):
+        f, run = self.run_both(req(Hours="0"), fail_audit="WriteProxy")
+        self.assertEqual((f["ok"], f["code"], f["auditStatus"]), (False, "VALIDATION_HOURS", "AUDIT_DEGRADED"))
+        self.assertNotIn("AUDIT_DEGRADED", f["warnings"], "warning only when a write was committed")
+        self.nothing_written()
+        self.assertEqual(run.terminated["runError"]["code"], "AUDIT_DEGRADED")
+        # a failed decision row (before any write) stays fail-closed with no write and no response: test_auditlog AL17
+
+    def test_AF08_warning_carries_no_confidential_payload(self):
+        f, run = self.run_both(req(Remark="secret note"), fail_audit="WriteProxy")
+        out = json.dumps(f) + json.dumps(run.terminated)
+        for bad in ("secret note", ME, "_Audit", "TimesheetEntries", "http", "ChangeJson", "Remark", "statusCode"):
+            self.assertNotIn(bad, out, bad)
+        self.assertTrue(set(f["warnings"]) <= {"WARN_HOURS_ENTRY", "WARN_HOURS_DAY", "WARN_DUPLICATE", "WARN_RELOAD_REQUIRED", "AUDIT_DEGRADED"})
 
 
 if __name__ == "__main__":

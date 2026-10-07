@@ -78,6 +78,7 @@ class Response:
     audit: list = field(default_factory=list)
     messageCode: str = ""
     interim: list = field(default_factory=list)  # settings in effect that are interim (engineering only; e.g. B-03)
+    auditStatus: str = "OK"  # AUDIT_DEGRADED when the operation's audit append failed (AUD-F1 option B)
 
 
 class Store(Protocol):
@@ -386,3 +387,17 @@ def _read_own(guard_result, caller, request, store, correlation_id, tz):
             "hours": f.get("Hours"), "remark": f.get("Remark"), "status": f.get("EntryStatus"), "etag": e} for i, f, e in rows]
     nxt = out[-1]["id"] if len(out) == size else 0
     return dict(base, ok=True, code=OK, rows=out, nextAfterId=nxt, pageSize=size)
+
+
+AUDIT_DEGRADED = "AUDIT_DEGRADED"
+
+
+def finalize_audit(r: Response, appended: bool) -> Response:
+    """AUD-F1 option B (R1): the operation audit row could not be appended. A committed result stays a success
+    (never a generic failure that invites a duplicate retry) and carries AUDIT_DEGRADED; a refusal keeps its code.
+    Either way the correlation id is unchanged and nothing is retried."""
+    if not appended:
+        r.auditStatus = AUDIT_DEGRADED
+        if r.ok and AUDIT_DEGRADED not in r.warnings:
+            r.warnings = list(r.warnings) + [AUDIT_DEGRADED]
+    return r

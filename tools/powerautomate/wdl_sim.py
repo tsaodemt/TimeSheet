@@ -165,6 +165,7 @@ def _fmt(t, fmt):
 class Run:
     def __init__(self, trigger_body=None, run_name="run-0", mocks=None, now="2026-01-01T00:00:00Z", branches=None):
         self.branches = branches or BRANCH_MODE
+        self.terminated = None  # inputs of a Terminate action (run ended Failed / Cancelled), else None
         self.action = None
         self.now = now  # utcNow() value (fixed so outputs are comparable)
         self.trigger_body = trigger_body or {}
@@ -248,6 +249,12 @@ class Run:
     def f_greater(self, a, b): return a > b
     def f_less(self, a, b): return a < b
     def f_setProperty(self, obj, k, v): return dict(obj, **{k: v})
+    def f_union(self, a, b):  # arrays: items of a then new items of b, duplicates removed (Power Automate semantics)
+        out = []
+        for x in list(a or []) + list(b or []):
+            if x not in out:
+                out.append(x)
+        return out
     def f_startsWith(self, s, t): return _str(s).lower().startswith(_str(t).lower())
     def f_float(self, x): return float(x)
     def f_removeProperty(self, obj, k): return {x: v for x, v in obj.items() if x != k}
@@ -446,6 +453,10 @@ class Run:
         elif t == "Response":
             v = self.value(a["inputs"]["body"])
             self.results[name] = {"status": "Succeeded", "outputs": v, "body": v}
+        elif t == "Terminate":
+            v = self.value(a["inputs"])
+            self.terminated = v
+            self.results[name] = {"status": "Succeeded", "outputs": v, "body": None}
         else:
             raise WdlError("unsupported action type %s" % t)
 

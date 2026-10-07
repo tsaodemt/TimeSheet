@@ -127,7 +127,11 @@ Options and recommendations for AUD-F1, AUD-P1 and the unbounded read: `docs/aud
   - the discipline is read through the required `Discipline` lookup; an employee without one gets `CONFIG_INVALID` before any write — fixed;
   - a no-date `TS-ReadOwn` for an owner with more than 5,000 entries would hit the threshold. Recommendation: the app always sends a range; the API decision stays open.
 
-## Phased live plans (not executed)
+## Phased live plans
+
+Status 2026-10-07: **AuditLog Phase 1 (schema + lockdown) applied on STAGING** — 48/48 requests, post-live reconciliation 0
+operations, unique permissions = site administrator + Owners Full Control only, no service grant (AUD-P1 open). All other
+plans below are not executed.
 
 | Plan | Mutating REST calls | Second run |
 |---|---|---|

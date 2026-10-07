@@ -183,24 +183,25 @@ class AuditLog(unittest.TestCase):
                 else:
                     self.assertIsInstance(v, str, n)
 
-    def test_AL17_current_audit_failure_behaviour_is_fail_closed(self):
-        """Documents what the generated flows do today (decision AUD-F1 is open): a failed decision append stops the run
-        before any write; a failed WriteProxy append after a persisted write leaves the caller without a response."""
+    def test_AL17_audit_failure_behaviour_aud_f1_option_b(self):
+        """AUD-F1 = option B (project owner 2026-10-07): a failed decision append stops the run before any write; a failed
+        WriteProxy append after a committed write still responds ok with AUDIT_DEGRADED (details: test_r1_save_flow AF01-AF08)."""
         import test_r1_save_flow as rs
 
         def attempt(event):
             store = rs.Store(rs.ITEMS)
             try:
-                resp = rs.run_flow(rs.ME, rs.req(), store, rs.SCOPING_OFF, fail_audit=event)[3].results["Respond"]["status"]
-            except Exception:  # noqa: BLE001 - a downstream expression error ends the run (no response either way)
+                f, _, _, run = rs.run_flow(rs.ME, rs.req(), store, rs.SCOPING_OFF, fail_audit=event)
+                resp = (f["ok"], f["auditStatus"])
+            except Exception:  # noqa: BLE001 - a downstream expression error ends the run (no response)
                 resp = "NO RESPONSE (run failed)"
             return resp, store
         resp, store = attempt("AuthorizationAllow")
-        self.assertNotEqual(resp, "Succeeded")
+        self.assertEqual(resp, "NO RESPONSE (run failed)")
         self.assertEqual(len(store.items), len(rs.ITEMS), "no write after a failed decision append")
         resp, store = attempt("WriteProxy")
-        self.assertNotEqual(resp, "Succeeded", "no response after a failed post-write append")
-        self.assertEqual(len(store.items), len(rs.ITEMS) + 1, "the entry was persisted (AUD-F1)")
+        self.assertEqual(resp, (True, "AUDIT_DEGRADED"), "committed write stays a success")
+        self.assertEqual(len(store.items), len(rs.ITEMS) + 1)
 
     def test_AL20_aud_p1_options_least_privilege(self):
         o = rl.aud_p1_options()
@@ -235,6 +236,21 @@ class AuditLog(unittest.TestCase):
             self.assertNotIn(pid, {a.principal_id for a in after})
         again = rl.permission_plan(A, 1, True, after, owners_id=OWNERS, admin_id=ADMIN)
         self.assertEqual((again["ops"], [g["status"] for g in again["gated"]]), ([], ["GATED"]), "no service grant in Phase 1")
+
+    def test_AL22_aud_p1_exact_named_rights(self):
+        r = rl.aud_p1_analysis()
+        b = r["B"]
+        self.assertEqual([x["api"] for x in b["rights"]], ["ViewListItems", "AddListItems", "Open", "ViewPages", "UseRemoteAPIs"])
+        self.assertEqual((b["dependenciesMissing"], b["dangerousPresent"], b["beyondNeed"], b["unknownBits"]), ([], [], [], []))
+        self.assertTrue(all(b["checks"].values()), b["checks"])
+        self.assertTrue(b["addWorksEvidence"].startswith("INFERRED"), "Add with level B is not proven live yet")
+        a = r["A"]
+        self.assertEqual(a["unknownBits"], [])
+        self.assertEqual(a["dangerousPresent"], ["CancelCheckout", "CreateSSCSite", "EditListItems"])
+        self.assertFalse(a["checks"]["siteCreationAbsent"], "proven TS Service mask carries Use Self-Service Site Creation")
+        for k, (api, _) in rl.BASE_PERMISSIONS.items():  # round trip: every named right resolves from its own bit
+            lo, hi = ((1 << (k - 1)), 0) if k <= 32 else (0, 1 << (k - 33))
+            self.assertEqual([x[1] for x in rl.named_rights(lo, hi)], [api])
 
     @unittest.skipUnless(os.environ.get("TS_TARGET_SCHEMA"), "set TS_TARGET_SCHEMA to reconcile with the local target")
     def test_AL18_reconciles_with_the_target_schema(self):

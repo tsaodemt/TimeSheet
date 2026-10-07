@@ -342,6 +342,91 @@ def aud_p1_options() -> dict:
             "recommended": "B"}
 
 
+# Every SP.BasePermissions right (PermissionKind number -> API name, permission-level UI label) and the dependencies
+# the SharePoint permission-level editor enforces. Used to resolve masks back to named rights (AUD-P1).
+BASE_PERMISSIONS = {
+    1: ("ViewListItems", "View Items"), 2: ("AddListItems", "Add Items"), 3: ("EditListItems", "Edit Items"),
+    4: ("DeleteListItems", "Delete Items"), 5: ("ApproveItems", "Approve Items"), 6: ("OpenItems", "Open Items"),
+    7: ("ViewVersions", "View Versions"), 8: ("DeleteVersions", "Delete Versions"), 9: ("CancelCheckout", "Override List Behaviors"),
+    10: ("ManagePersonalViews", "Create/Manage Personal Views"), 12: ("ManageLists", "Manage Lists"), 13: ("ViewFormPages", "View Application Pages"),
+    14: ("AnonymousSearchAccessList", "Anonymous search access (list)"), 17: ("Open", "Open"), 18: ("ViewPages", "View Pages"),
+    19: ("AddAndCustomizePages", "Add and Customize Pages"), 20: ("ApplyThemeAndBorder", "Apply Themes and Borders"),
+    21: ("ApplyStyleSheets", "Apply Style Sheets"), 22: ("ViewUsageData", "View Web Analytics Data"),
+    23: ("CreateSSCSite", "Use Self-Service Site Creation"), 24: ("ManageSubwebs", "Create Subsites"), 25: ("CreateGroups", "Create Groups"),
+    26: ("ManagePermissions", "Manage Permissions"), 27: ("BrowseDirectories", "Browse Directories"), 28: ("BrowseUserInfo", "Browse User Information"),
+    29: ("AddDelPrivateWebParts", "Add/Remove Personal Web Parts"), 30: ("UpdatePersonalWebParts", "Update Personal Web Parts"),
+    31: ("ManageWeb", "Manage Web Site"), 32: ("AnonymousSearchAccessWebLists", "Anonymous search access (web lists)"),
+    37: ("UseClientIntegration", "Use Client Integration Features"), 38: ("UseRemoteAPIs", "Use Remote Interfaces"),
+    39: ("ManageAlerts", "Manage Alerts"), 40: ("CreateAlerts", "Create Alerts"), 41: ("EditMyUserInfo", "Edit Personal User Information"),
+    63: ("EnumeratePermissions", "Enumerate Permissions"),
+}
+UI_DEPENDENCIES = {  # right -> rights the permission-level editor requires with it
+    "ViewListItems": {"ViewPages", "Open"}, "AddListItems": {"ViewListItems", "ViewPages", "Open"},
+    "EditListItems": {"ViewListItems", "ViewPages", "Open"}, "DeleteListItems": {"ViewListItems", "ViewPages", "Open"},
+    "OpenItems": {"ViewListItems", "ViewPages", "Open"}, "ViewVersions": {"ViewListItems", "OpenItems", "ViewPages", "Open"},
+    "ViewPages": {"Open"}, "UseRemoteAPIs": {"Open"}, "ViewFormPages": {"Open"}, "BrowseUserInfo": {"Open"},
+    "ManagePersonalViews": {"ViewListItems", "ViewPages", "Open"}, "CreateAlerts": {"ViewListItems", "ViewPages", "Open"},
+    "AddDelPrivateWebParts": {"ViewPages", "Open", "UpdatePersonalWebParts"}, "UpdatePersonalWebParts": {"ViewPages", "Open"},
+    "UseClientIntegration": {"UseRemoteAPIs", "Open"}, "EditMyUserInfo": {"BrowseUserInfo", "Open"}, "BrowseDirectories": {"Open"},
+    "CreateSSCSite": {"ViewPages", "Open"},
+}
+_DANGEROUS = {"EditListItems", "DeleteListItems", "DeleteVersions", "ManageLists", "ManagePermissions", "ManageWeb", "ManageSubwebs",
+              "CreateSSCSite", "CreateGroups", "AddAndCustomizePages", "ApplyThemeAndBorder", "ApplyStyleSheets", "EnumeratePermissions",
+              "CancelCheckout", "ApproveItems", "ManageAlerts", "AnonymousSearchAccessList", "AnonymousSearchAccessWebLists"}
+APPEND_NEED = {"AddListItems", "UseRemoteAPIs"}  # what an audit append through the flow's SharePoint REST call needs
+
+
+def named_rights(low: int, high: int) -> list:
+    """Mask -> sorted [(kind, api name, UI label)]; unknown set bits are reported as ('?', bit)."""
+    out = []
+    for b in range(64):
+        if (low if b < 32 else high) >> (b % 32) & 1:
+            k = b + 1
+            out.append((k,) + BASE_PERMISSIONS.get(k, ("UNKNOWN_BIT_%d" % b, "?")))
+    return out
+
+
+def aud_p1_analysis() -> dict:
+    """AUD-P1 exact analysis, resolved to named BasePermissions (not only masks). Option A = the PROVEN TS Service mask;
+    option B = the proposed TS Audit Append rights. 'Add works' is INFERRED until a STAGING probe proves it."""
+    proven_a = (1011028839, 432)
+    b_rights = {"ViewListItems", "AddListItems", "Open", "ViewPages", "UseRemoteAPIs"}
+    kind = {api: k for k, (api, _) in BASE_PERMISSIONS.items()}
+
+    def mask(rights):
+        lo = hi = 0
+        for r in rights:
+            bit = kind[r] - 1
+            if bit < 32:
+                lo |= 1 << bit
+            else:
+                hi |= 1 << (bit - 32)
+        return lo, hi
+
+    def one(lo, hi, label):
+        named = named_rights(lo, hi)
+        rights = {api for _, api, _ in named}
+        deps_missing = sorted({d for r in rights for d in UI_DEPENDENCIES.get(r, ())} - rights)
+        return {"level": label, "mask": (lo, hi), "rights": [{"kind": k, "api": api, "ui": ui} for k, api, ui in named],
+                "dependenciesMissing": deps_missing,
+                "checks": {"addItems": "AddListItems" in rights and not deps_missing,
+                           "viewItemsPresent": "ViewListItems" in rights,
+                           "viewItemsUnavoidable": "ViewListItems" in UI_DEPENDENCIES["AddListItems"],
+                           "editItemsAbsent": "EditListItems" not in rights, "deleteItemsAbsent": "DeleteListItems" not in rights,
+                           "deleteVersionsAbsent": "DeleteVersions" not in rights, "manageListsAbsent": "ManageLists" not in rights,
+                           "managePermissionsAbsent": "ManagePermissions" not in rights,
+                           "siteCreationAbsent": not rights & {"CreateSSCSite", "ManageSubwebs", "ManageWeb"},
+                           "overrideListBehaviorsAbsent": "CancelCheckout" not in rights},
+                "dangerousPresent": sorted(rights & _DANGEROUS),
+                "beyondNeed": sorted(rights - APPEND_NEED - {d for r in APPEND_NEED for d in UI_DEPENDENCIES.get(r, ())}),
+                "unknownBits": [api for _, api, _ in named if api.startswith("UNKNOWN")]}
+    a = one(*proven_a, label=SERVICE_LEVEL)
+    b = one(*mask(b_rights), label=AUDIT_APPEND_LEVEL)
+    b["addWorksEvidence"] = "INFERRED (dependency-complete); verify with a STAGING probe before approval"
+    a["addWorksEvidence"] = "VERIFIED (spike write proxy on the equivalent TEMP level)"
+    return {"A": a, "B": b}
+
+
 def level_assessment(name: str) -> dict:
     need = NEEDED_RIGHTS[name]
     item_rights = {"ViewListItems", "AddListItems", "EditListItems", "DeleteListItems", "OverrideListBehaviors"}

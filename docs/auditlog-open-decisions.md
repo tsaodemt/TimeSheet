@@ -21,6 +21,22 @@ SharePoint has no add-only level: **Add Items depends on View Items** (and Open,
 | Operations and debugging | A support fix through the service could rewrite history. Nobody should ever need to do that. | Corrections are made by an administrator under an audited maintenance change. The service can still read rows if a later support flow needs a CorrelationId lookup. |
 | Portability | already scripted | scripted the same way (`rights_mask`), recreated per environment |
 
+Exact right-by-right analysis (named BasePermissions, dependencies, absent rights): `tools/provisioning/r1_lists.py`
+`aud_p1_analysis()` (test AL22) and the table below.
+
+| Check (named BasePermissions) | A. `TS Service` (proven mask) | B. `TS Audit Append` (proposed) |
+|---|---|---|
+| Rights | ViewListItems, AddListItems, EditListItems, OpenItems, ViewVersions, CancelCheckout (Override List Behaviors), ManagePersonalViews, ViewFormPages, Open, ViewPages, **CreateSSCSite**, BrowseDirectories, BrowseUserInfo, AddDelPrivateWebParts, UpdatePersonalWebParts, UseClientIntegration, UseRemoteAPIs, CreateAlerts, EditMyUserInfo | ViewListItems, AddListItems, Open, ViewPages, UseRemoteAPIs |
+| Dependencies complete | yes | yes (Add Items → View Items, View Pages, Open; Use Remote Interfaces → Open) |
+| Add Items works | VERIFIED (spike) | INFERRED — STAGING probe needed before approval |
+| View Items unavoidable | yes | yes |
+| Edit Items absent | **no** | yes |
+| Delete Items / Delete Versions absent | yes | yes |
+| Manage Lists / Manage Permissions absent | yes | yes |
+| Site / subsite creation absent | **no** (Use Self-Service Site Creation) | yes (no CreateSSCSite, ManageSubwebs, ManageWeb) |
+| Unrelated broad rights | CancelCheckout, CreateSSCSite, Edit, personal views/web parts, alerts, client integration, directories, user info | none |
+| Unknown bits | none | none |
+
 **Recommendation: B.** It is the least privilege that can append. It takes Edit, Override List Behaviors and web-level extras away from the account that writes every audit row. The cost is one extra role definition per environment.
 
 Before production, run a STAGING check (decision-gated) that the flow's SharePoint connector can append with level B, and that an edit attempt is refused with 403.
@@ -51,7 +67,10 @@ So the entry is persisted, but the user sees a failure. Create idempotency (R1-Q
 
 A reaches acceptable only after R1-Q3 provides create idempotency. With B, a user is never led into creating a duplicate. The decision row still proves the authorization, and the missing operation row stays detectable.
 
-**AUD-F1 stays OPEN.** `TS-SaveEntry` must not be deployed until it is decided.
+**Decided for R1 (project owner 2026-10-07): option B.** Implemented in the save flow template and the reference
+(`auditStatus`, warning `AUDIT_DEGRADED`, run ends Failed for monitoring, correlation id = reconciliation key, no retry;
+tests AF01–AF08). Option C (durable outbox / retry) is a production-hardening item that is **not designed**.
+`TS-SaveEntry` is not deployed.
 
 ## R1 read without a date range (owner with more than 5,000 entries)
 
@@ -63,7 +82,11 @@ A reaches acceptable only after R1-Q3 provides create idempotency. With B, a use
 | 2. The API keeps optional dates, documents the limit, and returns `ERROR` above the threshold | none | the current behaviour; the failure is safe (no rows, no leak) but not user-friendly |
 | 3. The API rejects an unbounded read with `VALIDATION_DATE`, or limits the span (e.g. at most 12 periods) | **yes** (R1 contract) | threshold-safe by design |
 
-**Recommendation:** adopt **1 now** (app design S05.2/S06; no contract change). Decide between **2 and 3** before production, after migration volumes are known. The R1 contract is unchanged; this decision is **OPEN**.
+**Recorded recommendation (project owner 2026-10-07):** the Power App always calls `TS-ReadOwn` with a bounded range,
+normally the active pay period. Unbounded API behaviour stays an OPEN production-hardening decision: before production,
+decide A (retain optional unbounded reads) or B (reject unbounded reads). It does not block the engineering R1 demo.
+
+Earlier recommendation: adopt **1 now** (app design S05.2/S06; no contract change). Decide between **2 and 3** before production, after migration volumes are known. The R1 contract is unchanged; this decision is **OPEN**.
 
 ## Fixed in this change (no decision needed)
 
