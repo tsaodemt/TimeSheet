@@ -7,9 +7,11 @@ Strict on purpose: string(null), indexing null without '?', unknown functions ->
 """
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import re
 from urllib.parse import unquote
+from zoneinfo import ZoneInfo
 
 
 class WdlError(Exception):
@@ -113,6 +115,34 @@ def _empty(v):
     return v is None or v == "" or v == [] or v == {}
 
 
+# Windows time-zone ids used by convertToUtc in the simulator (fixed, no-DST zones plus one DST zone for tests).
+_WIN_TO_IANA = {"SE Asia Standard Time": "Asia/Bangkok", "UTC": "UTC", "Pacific Standard Time": "America/Los_Angeles"}
+_TS = re.compile(r"^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?)?(Z)?$")
+
+
+def _parse_ts(s):
+    m = _TS.match(_str(s).strip())
+    if not m:
+        raise WdlError("not a timestamp: %r" % s)
+    y, mo, d, hh, mi, ss, z = m.groups()
+    try:
+        t = _dt.datetime(int(y), int(mo), int(d), int(hh or 0), int(mi or 0), int(ss or 0))
+    except ValueError as e:
+        raise WdlError("invalid timestamp %r" % s) from e
+    return t, bool(z)
+
+
+def _fmt(t, fmt):
+    if fmt in (None, "o"):
+        return t.strftime("%Y-%m-%dT%H:%M:%S.0000000Z")
+    out = fmt
+    for a, b in (("yyyy", "%Y"), ("MM", "%m"), ("dd", "%d"), ("HH", "%H"), ("mm", "%M"), ("ss", "%S")):
+        out = out.replace(a, b)
+    if re.search(r"[A-Za-z]", re.sub(r"%[YmdHMS]|T", "", out)):
+        raise WdlError("unsupported format %r" % fmt)
+    return t.strftime(out)
+
+
 class Run:
     def __init__(self, trigger_body=None, run_name="run-0", mocks=None, now="2026-01-01T00:00:00Z"):
         self.now = now  # utcNow() value (fixed so outputs are comparable)
@@ -190,6 +220,20 @@ class Run:
     def f_split(self, s, sep): return _str(s).split(sep)
     def f_indexOf(self, s, t): return _str(s).find(t)
     def f_add(self, a, b): return a + b
+    # date functions (subset): timestamps are ISO-8601 strings; formats are .NET custom formats (yyyy MM dd HH mm ss)
+    def f_formatDateTime(self, ts, fmt="o"): return _fmt(_parse_ts(ts)[0], fmt)
+    def f_addDays(self, ts, n, fmt=None):
+        t, _ = _parse_ts(ts)
+        t = t + _dt.timedelta(days=int(n))
+        return _fmt(t, fmt) if fmt else t.strftime("%Y-%m-%dT%H:%M:%S.0000000Z")
+    def f_convertToUtc(self, ts, tz, fmt=None):
+        t, zoned = _parse_ts(ts)
+        if zoned:
+            raise WdlError("convertToUtc expects a local (unzoned) timestamp")
+        if tz not in _WIN_TO_IANA:
+            raise WdlError("unknown time zone %s" % tz)
+        u = t.replace(tzinfo=ZoneInfo(_WIN_TO_IANA[tz])).astimezone(_dt.timezone.utc).replace(tzinfo=None)
+        return _fmt(u, fmt) if fmt else u.strftime("%Y-%m-%dT%H:%M:%S.0000000Z")
     def f_workflow(self): return {"run": {"name": self.run_name}}
     def f_triggerBody(self): return self.trigger_body
     def f_item(self): return self.item_stack[-1]

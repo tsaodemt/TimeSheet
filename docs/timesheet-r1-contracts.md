@@ -38,14 +38,17 @@ Identity-, role- or scope-claiming fields are ignored and recorded by name only.
 
 ```
 $filter  = OwnerUpn eq '<trusted caller>'
-           [and WorkDate ge '<from>' and WorkDate le '<to>']
+           [and WorkDate ge datetime'<fromUtc>']
+           [and WorkDate lt datetime'<toUtcExclusive>']
            and EntryStatus ne 'Deleted'
            and Id gt <AfterId>
 $orderby = Id asc
 $top     = <PageSize>
 ```
 
-- Date bounds are business dates. A date-only value is stored as local midnight of the business time zone, so the bound sent to SharePoint is that instant in UTC: at UTC+07:00, `FromDate` 2026-10-01 becomes `datetime'2026-09-30T17:00:00Z'` (a bound of `…-10-01T00:00:00Z` would miss the first day). The offset comes from configuration; a date-range read without it refuses with `CONFIG_UNRESOLVED`. To be confirmed in the timesheet POC (date round-trip).
+- `FromDate` / `ToDate` are inclusive **business dates** in the business time zone. A date-only value is stored as local midnight of that zone, so the filter is the half-open UTC interval: `fromUtc` = local `FromDate` 00:00 in UTC; `toUtcExclusive` = local (`ToDate` + 1 day) 00:00 in UTC. At UTC+07:00 the range 2026-10-07 → 2026-10-07 becomes `>= 2026-10-06T17:00:00Z` and `< 2026-10-07T17:00:00Z`. No UTC truncation and no 23:59:59 upper bound. (A UTC-midnight bound — the earlier spike generator — drops the first day.)
+- The UTC offset is derived from the configured business time-zone name (it is not a separate setting). A date-range read without a valid time zone refuses with `CONFIG_UNRESOLVED`. The stored-instant behaviour is to be confirmed in the timesheet POC (date round-trip).
+- Reference: `tools/timesheet/business_dates.py`; flow expression: `tools/powerautomate/date_range.py`; tests `tools/timesheet/test_date_range.py` (RD01–RD15, generated clause = reference for every day of a year).
 - `OwnerUpn` and `WorkDate` are indexed before any data is loaded.
 - The list is never loaded and then filtered in memory.
 - Every returned row is re-checked against the owner. Any mismatch returns `ERROR_LEAK` and no rows.

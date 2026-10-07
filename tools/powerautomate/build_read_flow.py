@@ -11,14 +11,24 @@ Security model
 - Every read writes an audit row (decision, caller, filter, returned ids, correlation id).
 
 Configuration (environment variables): TS_SITE_URL, TS_REVIEWER_GROUP_ID, TS_LIST (default _TS_SecuritySpike),
-TS_AUDIT_LIST (default _TS_SecuritySpikeAudit).
+TS_AUDIT_LIST (default _TS_SecuritySpikeAudit), TS_BUSINESS_TIMEZONE (IANA name of the environment's business time
+zone; the Windows id for convertToUtc and any UTC offset are derived from it, never configured separately).
+
+Date range (fixed 2026-10-07): FromDate/ToDate are inclusive BUSINESS dates. A date-only value is stored as local
+midnight, so the filter is the half-open UTC interval [local FromDate 00:00, local ToDate+1 00:00). The earlier version
+used UTC-midnight bounds, which dropped the first day of the range in a time zone east of UTC. Both dates or neither;
+a reversed range is refused (VALIDATION).
 """
 import os, re
+
+from date_range import date_clause_expr, reversed_range_expr, windows_zone_from_config
 
 SITE = os.environ.get("TS_SITE_URL", "https://<tenant>.sharepoint.com/sites/<staging-site>")
 GROUP_ID = os.environ.get("TS_REVIEWER_GROUP_ID", "<reviewer-group-object-id>")
 LIST = os.environ.get("TS_LIST", "_TS_SecuritySpike")
 AUDIT = os.environ.get("TS_AUDIT_LIST", "_TS_SecuritySpikeAudit")
+_TZ = os.environ.get("TS_BUSINESS_TIMEZONE", "")
+WIN_TZ = windows_zone_from_config(_TZ) if _TZ else "<business-windows-timezone>"  # unset: a range request cannot run
 SP, USERS, GROUPS = "shared_sharepointonline", "shared_office365users", "shared_office365groups"
 API = lambda n: "/providers/Microsoft.PowerApps/apis/" + n
 S = lambda *n: {x: ["Succeeded"] for x in n}
@@ -54,9 +64,12 @@ RESULT = ("@if(and(not(empty({H})), not(equals({H}, {T}))), 'IDENTITY_MISMATCH',
           "if(and(equals({M}, 'team'), not({R})), 'FORBIDDEN', "
           "if(and(equals({M}, 'own'), not(empty({Q})), not(equals({Q}, {T}))), 'FORBIDDEN', "
           "if(and(equals({M}, 'team'), not(empty({Q})), not({V})), 'VALIDATION_OWNER_UNKNOWN', "
-          "if(and({HR}, empty({TO})), 'VALIDATION', 'OK')))))))").format(
+          "if(and({HR}, or(empty({FR}), empty({TO}))), 'VALIDATION', "
+          "if(and({HR}, {REV}), 'VALIDATION', 'OK'))))))))").format(
     H=o("HeaderUpn"), T=o("Trusted"), M=o("Mode"), R=o("IsReviewer"), Q=o("ReqOwner"), V=o("ReqOwnerValid"),
-    HR=o("HasRange"), TO=o("ToRaw"))
+    HR=o("HasRange"), FR=o("FromRaw"), TO=o("ToRaw"),
+    REV=reversed_range_expr("if(empty(%s), '2000-01-01', %s)" % (o("FromRaw"), o("FromRaw")),
+                            "if(empty(%s), '2000-01-01', %s)" % (o("ToRaw"), o("ToRaw"))))
 
 INIT = {
     "Init_RowsJson": ("RowsJson", "string", "[]"),
@@ -92,14 +105,14 @@ guard = {
     "AfterId": c("@max(int(triggerBody()?['number']), 0)", S("PageSize")),
     "FromRaw": c("@trim(%s)" % tb("text_4"), S("AfterId")),
     "ToRaw": c("@trim(%s)" % tb("text_5"), S("FromRaw")),
-    "HasRange": c("@not(empty(outputs('FromRaw')))", S("ToRaw")),
+    "HasRange": c("@or(not(empty(outputs('FromRaw'))), not(empty(outputs('ToRaw'))))", S("ToRaw")),
     "ResultCode": c(RESULT, S("HasRange")),
     "FilterOwner": c("@if(equals(outputs('Mode'), 'team'), if(empty(outputs('ReqOwner')), %s, outputs('ReqOwnerCanon')), outputs('Trusted'))" % EMPTY, S("ResultCode")),
     "If_ok": {"type": "If", "runAfter": S("FilterOwner"),
               "expression": {"equals": ["@outputs('ResultCode')", "OK"]},
               "actions": {
                   "OwnerClause": c("@if(empty(outputs('FilterOwner')), %s, concat('OwnerUpn eq ''', outputs('FilterOwner'), ''' and '))" % EMPTY, {}),
-                  "DateClause": c("@if(outputs('HasRange'), concat('WorkDate ge datetime''', formatDateTime(outputs('FromRaw'), 'yyyy-MM-dd'), 'T00:00:00Z'' and WorkDate le datetime''', formatDateTime(outputs('ToRaw'), 'yyyy-MM-dd'), 'T00:00:00Z'' and '), %s)" % EMPTY, S("OwnerClause")),
+                  "DateClause": c("@if(outputs('HasRange'), %s, %s)" % (date_clause_expr("WorkDate", o("FromRaw"), o("ToRaw"), WIN_TZ), EMPTY), S("OwnerClause")),
                   "FilterExpr": c("@concat(outputs('OwnerClause'), outputs('DateClause'), 'Id gt ', string(outputs('AfterId')))", S("DateClause")),
                   "Query": sp_http("GET", ITEMS + "?$select=Id,Title,OwnerUpn,ActorUpn,IsOnBehalf,EntryStatus,Hours,WorkDate&$filter=@{outputs('FilterExpr')}&$orderby=Id asc&$top=@{outputs('PageSize')}", S("FilterExpr")),
                   "Select_rows": {"type": "Select", "runAfter": S("Query"), "inputs": {"from": "@body('Query')?['value']",
@@ -156,5 +169,6 @@ guard = _fix(guard)
 INPUTS = [("Text", "Mode", "own | team"), ("Number", "AfterId", "keyset paging: last Id seen (0 = first page)"),
           ("Number", "PageSize", "1-500 (default 50)"), ("Text", "RequestedOwner", "optional; honoured only for verified reviewers"),
           ("Text", "CallerUpn", "DECOY - logged, never trusted"), ("Text", "ClaimReviewer", "DECOY - logged, never trusted"),
-          ("Text", "FromDate", "yyyy-MM-dd (optional)"), ("Text", "ToDate", "yyyy-MM-dd (required with FromDate)"),
+          ("Text", "FromDate", "yyyy-MM-dd business date (optional; with ToDate)"),
+          ("Text", "ToDate", "yyyy-MM-dd business date, inclusive (required with FromDate)"),
           ("Text", "ClientRequestId", "caller correlation token")]

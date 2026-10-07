@@ -20,6 +20,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Iterable, Mapping, Optional, Protocol
 
+import business_dates as bd
+
 OK, OK_REPLAY = "OK", "OK_REPLAY"
 NOT_FOUND, FORBIDDEN, LOCKED, CONFLICT = "NOT_FOUND", "FORBIDDEN", "LOCKED", "CONFLICT"
 VALIDATION_LOOKUP, VALIDATION_HOURS, VALIDATION_DATE = "VALIDATION_LOOKUP", "VALIDATION_HOURS", "VALIDATION_DATE"
@@ -290,40 +292,42 @@ class ReadFilter:
     to_date: Optional[str]
     after_id: int
     top: int
-    utc_offset_minutes: Optional[int] = None
+    business_timezone: Optional[str] = None
 
-    def _bound(self, d: str) -> str:
-        """A date-only business date is stored as local midnight, i.e. the UTC instant (date 00:00 - offset).
-        At UTC+07, 2026-10-06 is 2026-10-05T17:00:00Z, so `datetime'2026-10-06T00:00:00Z'` would miss that day."""
-        if self.utc_offset_minutes is None:
-            raise ValueError("business UTC offset not configured")
-        t = _dt.datetime.combine(_dt.date.fromisoformat(d), _dt.time()) - _dt.timedelta(minutes=self.utc_offset_minutes)
-        return "datetime'%s'" % t.strftime("%Y-%m-%dT%H:%M:%SZ")
+    def utc_bounds(self) -> tuple:
+        """Half-open UTC interval [local from 00:00, local to+1 00:00) of the inclusive business-date range
+        (business_dates.utc_range). A date-only value is stored as local midnight; at UTC+07, 2026-10-07 is
+        2026-10-06T17:00:00Z, so a UTC-midnight bound would lose the first day."""
+        if not (self.from_date or self.to_date):
+            return None, None
+        return bd.utc_range(self.from_date, self.to_date, self.business_timezone)
 
     def odata(self) -> str:
         """The $filter the read flow sends (indexed OwnerUpn first; values are trusted or validated, quotes doubled).
-        Date bounds: REQUIRES POC VERIFICATION of the stored instant (S06.11 P4)."""
+        Stored-instant behaviour of date-only columns: confirm in the timesheet POC (S06.11 P4)."""
         q = lambda s: s.replace("'", "''")  # noqa: E731
         parts = ["OwnerUpn eq '%s'" % q(self.owner_upn)]
-        if self.from_date:
-            parts.append("WorkDate ge %s" % self._bound(self.from_date))
-        if self.to_date:
-            parts.append("WorkDate le %s" % self._bound(self.to_date))
+        lo, hi = self.utc_bounds()
+        if lo:
+            parts.append("WorkDate ge datetime'%s'" % lo)
+        if hi:
+            parts.append("WorkDate lt datetime'%s'" % hi)
         parts += ["EntryStatus ne '%s'" % DELETED, "Id gt %d" % self.after_id]
         return " and ".join(parts)
 
 
 def read_own(guard_result, caller: Optional[Caller], request: Mapping, store: Store, *, correlation_id: str,
-             business_utc_offset_minutes: Optional[int] = None) -> dict:
-    """TS-ReadOwn. Returns the contract response dict, with the one `ReadProxy` audit row of the call in `audit`."""
-    r = _read_own(guard_result, caller, request, store, correlation_id, business_utc_offset_minutes)
+             business_timezone: Optional[str] = None) -> dict:
+    """TS-ReadOwn. Returns the contract response dict, with the one `ReadProxy` audit row of the call in `audit`.
+    `business_timezone` is the configured IANA zone (AppSettings BusinessTimezone); the offset is derived from it."""
+    r = _read_own(guard_result, caller, request, store, correlation_id, business_timezone)
     r["audit"] = [{"EventType": "ReadProxy", "Action": "ReadOwn", "Decision": "ALLOW" if r["ok"] else "DENY",
                    "ResultCode": r["code"], "CorrelationId": correlation_id, "ActorUpn": caller.upn if caller else "",
                    "RowCount": len(r["rows"]), "IgnoredInputs": r["ignoredInputs"]}]
     return r
 
 
-def _read_own(guard_result, caller, request, store, correlation_id, offset):
+def _read_own(guard_result, caller, request, store, correlation_id, tz):
     ignored = sorted(k for k in request if k not in READ_INPUTS)
     base = {"correlationId": correlation_id, "rows": [], "nextAfterId": 0, "pageSize": 0, "ignoredInputs": ignored}
     if guard_result is None or not guard_result.allowed or caller is None or caller.upn != guard_result.AuthenticatedUpn:
@@ -335,8 +339,11 @@ def _read_own(guard_result, caller, request, store, correlation_id, offset):
     fdd, tdd = (_date(fd) if fd else None), (_date(td) if td else None)
     if (fd and fdd is None) or (td and tdd is None) or (fdd and tdd and fdd > tdd):
         return dict(base, ok=False, code=VALIDATION_DATE)
-    if (fdd or tdd) and offset is None:
-        return dict(base, ok=False, code=CONFIG_UNRESOLVED)  # BusinessUtcOffsetMinutes not configured
+    if fdd or tdd:
+        try:
+            bd.zone(tz)
+        except bd.TimeZoneConfigError:
+            return dict(base, ok=False, code=CONFIG_UNRESOLVED)  # business time zone not configured / unknown
     try:
         after = max(0, int(request.get("AfterId") or 0))
         ps = request.get("PageSize")
@@ -344,7 +351,7 @@ def _read_own(guard_result, caller, request, store, correlation_id, offset):
     except (TypeError, ValueError):
         return dict(base, ok=False, code=VALIDATION_LOOKUP)
     size = min(max(size, 1), MAX_PAGE)
-    flt = ReadFilter(caller.upn, fdd.isoformat() if fdd else None, tdd.isoformat() if tdd else None, after, size, offset)
+    flt = ReadFilter(caller.upn, fdd.isoformat() if fdd else None, tdd.isoformat() if tdd else None, after, size, tz)
     rows = store.query(flt)
     if any(f.get("OwnerUpn") != caller.upn or f.get("EntryStatus") == DELETED for _, f, _ in rows):
         return dict(base, ok=False, code=ERROR_LEAK)  # never return a page that contains anything foreign

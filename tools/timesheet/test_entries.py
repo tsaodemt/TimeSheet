@@ -246,7 +246,7 @@ class Read(unittest.TestCase):
                                  "EntryStatus": "Deleted" if i == 5 else "Draft", "Hours": 1}, "e%d-1" % i)
 
     def read(self, **r):
-        return E.read_own(guard(), CALLER, r, self.st, correlation_id="run-2", business_utc_offset_minutes=420)
+        return E.read_own(guard(), CALLER, r, self.st, correlation_id="run-2", business_timezone="Asia/Ho_Chi_Minh")
 
     def test_E18_own_rows_only_paged_without_deleted(self):
         p1 = self.read(PageSize=2, CallerUpn=OTHER)
@@ -276,16 +276,16 @@ class Read(unittest.TestCase):
     def test_E22_page_size_clamped_and_filter_text(self):
         self.assertEqual(self.read(PageSize=10000)["pageSize"], 500)
         self.assertEqual(self.read(PageSize=0)["pageSize"], 1)
-        f = E.ReadFilter("o'neil@tenant-a.invalid", "2026-10-01", "2026-10-31", 5, 50, 420).odata()
+        f = E.ReadFilter("o'neil@tenant-a.invalid", "2026-10-01", "2026-10-31", 5, 50, "Asia/Ho_Chi_Minh").odata()
         self.assertEqual(f, "OwnerUpn eq 'o''neil@tenant-a.invalid' and WorkDate ge datetime'2026-09-30T17:00:00Z' "
-                            "and WorkDate le datetime'2026-10-30T17:00:00Z' and EntryStatus ne 'Deleted' and Id gt 5")
+                            "and WorkDate lt datetime'2026-10-31T17:00:00Z' and EntryStatus ne 'Deleted' and Id gt 5")
 
     def test_E23_date_range_needs_the_business_offset(self):
         r = E.read_own(guard(), CALLER, {"FromDate": "2026-10-01"}, self.st, correlation_id="c")
         self.assertEqual((r["ok"], r["code"], r["rows"]), (False, E.CONFIG_UNRESOLVED, []))
         self.assertTrue(E.read_own(guard(), CALLER, {}, self.st, correlation_id="c")["ok"], "no range: offset not needed")
         with self.assertRaises(ValueError):
-            E.ReadFilter("a", "2026-10-01", None, 0, 1).odata()
+            E.ReadFilter("a", "2026-10-01", None, 0, 1).odata()  # no business time zone configured
 
     def test_E24_every_read_writes_one_audit_row(self):
         ok, bad = self.read(PageSize=2, CallerUpn=OTHER), self.read(RequestedOwner=OTHER)
