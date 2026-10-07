@@ -256,5 +256,46 @@ class R1Alm(unittest.TestCase):
         self.assertTrue(check().ready, "all criteria met + everything else resolved -> ready")
 
 
+
+class DemoReadiness(unittest.TestCase):
+    """DEMO readiness is separate from UAT / PRODUCTION (DM01-DM04)."""
+
+    def setUp(self):
+        import demo_readiness as dmr
+        self.dmr = dmr
+
+    ALL = {"environmentSelected": True, "demoPrefix": "demo", "flowsDeployed": True, "appDeployed": True, "identityMapped": True,
+           "identityInRoleGroup": True}
+
+    def test_DM01_production_only_blockers_never_block_the_demo(self):
+        acc = {"criteria": dict(ACCEPTED["criteria"], CUSTODIAN_LIFECYCLE_DOCUMENTED={"met": False, "evidence": "not supplied"})}
+        m = resolved_manifest()
+        m["environmentDecisions"]["dlp"] = "<ENV-D3: TBD>"
+        r = check(identity_acceptance=acc, manifest=m)
+        d = self.dmr.demo_readiness(r, self.ALL)
+        self.assertFalse(r.ready)
+        self.assertTrue(d["ready"], d["demo"])
+        self.assertEqual(sorted({c for c, _, _ in d["postDemo"]}), ["D3_OPERATIONAL_READINESS_INCOMPLETE", "ENVIRONMENT_UNRESOLVED"])
+
+    def test_DM02_current_staging_shape_is_not_demo_ready_for_the_right_reasons(self):
+        r = check(manifest=SAMPLE, overlay=OVL_NOW, state=STATE_NOW, permissions={})
+        d = self.dmr.demo_readiness(r, {"environmentSelected": True})
+        cats = {c for c, _, _ in d["demo"]}
+        self.assertFalse(d["ready"])
+        self.assertTrue({"TARGET_LIST_MISSING", "REFERENCE_DATA_MISSING", "CONNECTION_REFERENCE_UNBOUND", "FLOWS_NOT_DEPLOYED",
+                         "APP_NOT_DEPLOYED", "DEMO_IDENTITY_NOT_MAPPED", "PUBLISHER_PREFIX_UNRESOLVED"} <= cats, cats)
+
+    def test_DM03_demo_checks_each_named(self):
+        for key, code, _ in self.dmr.DEMO_CHECKS:
+            facts = dict(self.ALL, **{key: False})
+            d = self.dmr.demo_readiness(check(), facts)
+            self.assertEqual([c for c, _, _ in d["demo"]], [code], key)
+
+    def test_DM04_security_drift_always_blocks_the_demo(self):
+        p = perms(write_role="Full Control")
+        d = self.dmr.demo_readiness(check(permissions=p), self.ALL)
+        self.assertIn("SECURITY_DRIFT", {c for c, _, _ in d["demo"]})
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

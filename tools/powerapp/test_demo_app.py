@@ -1,0 +1,148 @@
+"""R1 demo Canvas app source tests DA01-DA12 (offline; generated Power Apps YAML) and DEMO_ONLY data tests DD01-DD04."""
+import json
+import os
+import re
+import sys
+import tempfile
+import unittest
+
+import yaml
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path[:0] = [HERE, os.path.join(HERE, "..", "demo")]
+import build_demo_app as app  # noqa: E402
+import demo_data as dd  # noqa: E402
+
+CONTRACT = os.path.join(HERE, "..", "..", "docs", "timesheet-r1-contracts.md")
+
+
+def source():
+    d = tempfile.mkdtemp()
+    files = app.build(d)
+    text = "\n".join(open(f, encoding="utf-8").read() for f in files if f.endswith(".pa.yaml"))
+    return files, text
+
+
+class DemoApp(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.files, cls.text = source()
+
+    def test_DA01_four_screens_and_valid_yaml(self):
+        names = {os.path.basename(f) for f in self.files}
+        self.assertEqual(names, {"App.pa.yaml", "scrStartup.pa.yaml", "scrAccessDenied.pa.yaml", "scrMyTimesheets.pa.yaml",
+                                 "scrEntry.pa.yaml", "messages.json"})
+        for f in self.files:
+            if f.endswith(".pa.yaml"):
+                self.assertIsInstance(yaml.safe_load(open(f, encoding="utf-8")), dict, f)
+
+    def test_DA02_startup_calls_appopen_and_routes_denied_or_config_error(self):
+        s = app.screens()["scrStartup"]["Properties"]["OnVisible"]
+        self.assertIn("'TS-AppOpen'.Run(", s)
+        self.assertIn('varOpen.configstatus = "OK"', s)
+        self.assertIn("Navigate(scrAccessDenied", s)
+        self.assertIn("Navigate(scrMyTimesheets", s)
+
+    def test_DA03_list_is_bounded_current_pay_period(self):
+        s = app.screens()["scrMyTimesheets"]["Properties"]["OnVisible"]
+        self.assertIn("varStartDay", s)
+        self.assertRegex(s, r"'TS-ReadOwn'\.Run\(Text\(varFrom, \"yyyy-mm-dd\"\), Text\(varTo, \"yyyy-mm-dd\"\)")
+        self.assertNotRegex(self.text, r"'TS-ReadOwn'\.Run\(\"\", *\"\"", "never an unbounded read")
+
+    def test_DA04_requested_owner_never_sent(self):
+        for m in re.finditer(r"'TS-ReadOwn'\.Run\(([^;]*?)\);", self.text, re.S):
+            self.assertTrue(m.group(1).rstrip().rstrip(")").endswith('""'), "RequestedOwner must stay empty (server uses the trusted caller)")
+
+    def test_DA05_save_arguments_match_the_trigger(self):
+        s = app.SAVE_ONSELECT
+        args = s[s.index("'TS-SaveEntry'.Run(") + len("'TS-SaveEntry'.Run("):s.index(");\nSet(varSaving, false)")]
+        depth, parts, cur = 0, [], ""
+        for ch in args:
+            depth += ch == "(" or ch == "{"
+            depth -= ch == ")" or ch == "}"
+            if ch == "," and depth == 0:
+                parts.append(cur)
+                cur = ""
+            else:
+                cur += ch
+        parts.append(cur)
+        self.assertEqual(len(parts), 10, "ItemId, ETag, WorkDate, Project, Phase, WorkType, Shift, HourType, Hours, Remark")
+        self.assertNotIn("Owner", args)
+        self.assertNotIn("User()", args)
+
+    def test_DA06_save_disabled_while_running(self):
+        e = {k: v for c in app.screens()["scrEntry"]["Children"] for k, v in c.items()}
+        self.assertIn("varSaving", e["btnSave"]["Properties"]["DisplayMode"])
+        self.assertTrue(app.SAVE_ONSELECT.strip().startswith("Set(varSaving, true)"))
+
+    def test_DA07_audit_degraded_is_success_with_warning(self):
+        s = app.SAVE_ONSELECT
+        self.assertIn('If(varSave.ok = "true"', s)
+        self.assertIn("AUDIT_DEGRADED", app.MESSAGES)
+        self.assertIn("Do not save again", app.MESSAGES["AUDIT_DEGRADED"])
+        self.assertNotIn("Run(", s[s.index('If(varSave.ok = "true"'):], "no automatic retry")
+
+    def test_DA08_conflict_and_reload_required_force_a_reread(self):
+        s = app.SAVE_ONSELECT
+        self.assertIn('varSave.resultcode = "CONFLICT"', s)
+        self.assertIn("varReloadRequired", s)
+        self.assertIn("Navigate(scrMyTimesheets", s)  # list OnVisible re-reads (fresh ETags)
+
+    def test_DA09_every_contract_code_has_provisional_wording(self):
+        txt = open(CONTRACT, encoding="utf-8").read()
+        codes = set(re.findall(r"`([A-Z][A-Z_]{2,})`", txt.split("## Result codes shown to users")[1].split("## ")[0]))
+        codes -= {"OK"}
+        for c in codes:
+            key = c if c.startswith("WARN_") or c == "AUDIT_DEGRADED" else "MSG_" + c
+            self.assertIn(key, app.MESSAGES, c)
+        self.assertIn("PROVISIONAL", open(next(f for f in self.files if f.endswith("messages.json")), encoding="utf-8").read())
+
+    def test_DA10_no_protected_list_data_source_or_direct_write(self):
+        for lst in app.PROTECTED_LISTS:
+            self.assertNotRegex(self.text, r"\b%s\b" % lst, lst)
+        for verb in ("Patch(", "SubmitForm(", "Remove(", "RemoveIf(", "UpdateIf("):
+            self.assertNotIn(verb, self.text)
+
+    def test_DA11_no_tenant_values_in_source(self):
+        self.assertEqual(re.findall(r"https?://|@[a-z0-9-]+\.[a-z]{2,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-", self.text, re.I), [])
+
+    def test_DA12_warnings_never_block_and_messages_hide_internals(self):
+        for k, v in app.MESSAGES.items():
+            self.assertNotRegex(v, r"(?i)sharepoint|list|flow|http|stack", k)
+        self.assertIn("you can still save", self.text)
+
+
+class DemoData(unittest.TestCase):
+    def test_DD01_rows_valid_and_marked(self):
+        self.assertEqual(dd.validate(dd.demo_rows()), [])
+        for lst, rs in dd.demo_rows().items():
+            for r in rs:
+                self.assertEqual(r["MigrationBatch"], "DEMO_ONLY", lst)
+                self.assertTrue(r["LegacyId"].startswith("DEMO-"))
+
+    def test_DD02_validation_catches_problems(self):
+        bad = dd.demo_rows()
+        bad["Phases"][0]["MigrationBatch"] = "CANONICAL"
+        bad["ProjectPhases"][0]["Phase"] = "NOPE"
+        bad["HourTypes"] = []
+        p = dd.validate(bad)
+        self.assertTrue(any("DEMO_ONLY" in x for x in p) and any("unknown" in x for x in p) and any("normal hour" in x for x in p), p)
+
+    def test_DD03_minimal_set_is_enough_for_the_save_path(self):
+        r = dd.demo_rows()
+        self.assertEqual([len(r[k]) for k in ("Projects", "Shifts", "HourTypes")], [1, 1, 1])
+        self.assertTrue(all(x["Status"] == "Active" for x in r["Projects"]))
+        self.assertEqual({x["Phase"] for x in r["ProjectPhases"]}, {x["PhaseCode"] for x in r["Phases"]})
+
+    def test_DD04_demo_employee_identity_from_configuration_only(self):
+        with self.assertRaises(ValueError):
+            dd.demo_employee("", 1, 1)
+        e = dd.demo_employee("Someone@Tenant-A.invalid", 3, 4)
+        self.assertEqual((e["AccountUpn"], e["DepartmentId"], e["DisciplineId"], e["IsActive"], e["MigrationBatch"]),
+                         ("someone@tenant-a.invalid", 3, 4, True, "DEMO_ONLY"))
+        src = open(os.path.join(HERE, "..", "demo", "demo_data.py"), encoding="utf-8").read()
+        self.assertEqual(re.findall(r"[a-z0-9.-]+@[a-z0-9-]+\.(?:vn|com)", src), [])
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
