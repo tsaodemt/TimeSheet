@@ -107,6 +107,11 @@ FORBIDDEN_COLUMNS = {ENTRIES: {"ApprovalStatus", "IsDeleted", "RequestKey", "Ent
 
 # ---------------------------------------------------------------- index decisions (from query paths, not habit)
 REQUIRED, RECOMMENDED, NOT_REQUIRED, DEFER_P5 = "REQUIRED", "RECOMMENDED", "NOT REQUIRED", "DEFER P5"
+# Approved by the project owner 2026-10-07 (supersedes the earlier 7 / 9 index targets): AuditLog exactly these 4;
+# TimesheetEntries these 8 (EntryStatus NOT REQUIRED FOR CURRENT R1 TARGET / REVISIT AFTER P5 IF NEEDED).
+APPROVED_INDEXES = {AUDITLOG: ("OccurredOn", "CorrelationId", "OwnerEmployeeItemId", "TargetLegacyId"),
+                    ENTRIES: ("OwnerUpn", "WorkDate", "LegacyId", "Employee", "Project", "EmployeeItemId", "PeriodKey",
+                                         "DisciplineCode")}
 INDEX_DECISIONS = {
     AUDITLOG: {  # scale: 0 -> ~100k rows at +5 years (target model §8), so every first filter must be indexed
         "OccurredOn": (REQUIRED, "audit viewer views Today / Last 7 days / On-behalf / Approvals (RPT-15); retention purge OccurredOn lt cutoff",
@@ -118,11 +123,11 @@ INDEX_DECISIONS = {
         "TargetLegacyId": (RECOMMENDED, "history of one record: TargetLegacyId eq <LegacyId> (record trail, S06.9 / reporting join)",
                            "~100k", "selective; created before load (adding later re-indexes a large list); R1 rows do not yet stamp it"),
         "ActorUpn": (NOT_REQUIRED, "no approved query filters by actor first", "~100k",
-                     "investigations use OccurredOn first; target schema had it indexed: reconciliation item"),
+                     "investigations use OccurredOn first; not indexed for consistency (project owner 2026-10-07)"),
         "EventType": (NOT_REQUIRED, "only as a second filter after OccurredOn", "~100k",
                       "~10 values: each value matches > 5,000 rows, so an index cannot make an EventType-first query threshold-safe"),
         "Action": (NOT_REQUIRED, "only as a second filter after OccurredOn ('Approvals' view)", "~100k",
-                   "low cardinality, same reason as EventType; target schema had it indexed: reconciliation item"),
+                   "low cardinality, same reason as EventType (project owner 2026-10-07)"),
     },
     ENTRIES: {  # scale: 44,997 legacy rows -> ~95-105k at +5 years; one period <= ~1.2k rows; one person x period 40-60 rows
         "OwnerUpn": (REQUIRED, "R1 read: OwnerUpn eq <caller> [and WorkDate range] and EntryStatus ne 'Deleted' and Id gt <after>; "
@@ -142,8 +147,8 @@ INDEX_DECISIONS = {
         "EntryStatus": (NOT_REQUIRED, "none filters EntryStatus first: R1 uses ne 'Deleted' after OwnerUpn; PendingRecent after WorkDate; "
                         "approval after PeriodKey", "~100k",
                         "3 values (Approved ~ most rows): each value matches > 5,000 rows, so an index cannot make a status-first query "
-                        "threshold-safe; 'ne' cannot use an index. P5-06/07 confirm the behaviour live. Target schema had it indexed "
-                        "(9 -> 8 indexes): reconciliation item for the owner"),
+                        "threshold-safe; 'ne' cannot use an index. Project owner 2026-10-07: not required for the current R1 target; "
+                        "revisit after P5 only if live Choice-column evidence shows a need"),
     },
 }
 
@@ -293,6 +298,48 @@ TS_SERVICE_RIGHTS = {"ViewListItems", "AddListItems", "EditListItems", "OpenItem
                      "AddDelPrivateWebParts", "UpdatePersonalWebParts", "UseClientIntegration", "UseRemoteAPIs", "CreateAlerts",
                      "EditMyUserInfo"}
 NEVER = {"DeleteListItems", "DeleteVersions", "ManageLists", "ManagePermissions", "ManageWeb", "FullMask"}
+
+
+# ---------------------------------------------------------------- AUD-P1 (open): service level for AuditLog
+# SP.PermissionKind numbers (bit = kind - 1; kinds > 32 go to the High word). "OverrideListBehaviors" is the
+# CancelCheckout kind ("Override List Behaviors" in the permission-level UI).
+PERMISSION_KIND = {"ViewListItems": 1, "AddListItems": 2, "EditListItems": 3, "DeleteListItems": 4, "ApproveItems": 5, "OpenItems": 6,
+                   "ViewVersions": 7, "DeleteVersions": 8, "OverrideListBehaviors": 9, "ManagePersonalViews": 10, "ManageLists": 12,
+                   "ViewFormPages": 13, "Open": 17, "ViewPages": 18, "CreateSSCSite": 23, "ManagePermissions": 26, "BrowseDirectories": 27,
+                   "BrowseUserInfo": 28, "AddDelPrivateWebParts": 29, "UpdatePersonalWebParts": 30, "ManageWeb": 31,
+                   "UseClientIntegration": 37, "UseRemoteAPIs": 38, "CreateAlerts": 40, "EditMyUserInfo": 41}
+AUDIT_APPEND_LEVEL = "TS Audit Append"  # option B (not created; a live permission-level change needs separate approval)
+# Add Items cannot exist without View Items (+ Open, View Pages) in SharePoint; Use Remote Interfaces is needed for the
+# REST call the flow makes. Nothing else: no Edit, Delete, versions management, Override List Behaviors or web rights.
+AUDIT_APPEND_RIGHTS = {"ViewListItems", "AddListItems", "Open", "ViewPages", "UseRemoteAPIs"}
+
+
+def rights_mask(rights) -> tuple:
+    low = high = 0
+    for r in rights:
+        b = PERMISSION_KIND[r] - 1
+        if b < 32:
+            low |= 1 << b
+        else:
+            high |= 1 << (b - 32)
+    return low, high
+
+
+def rights_from_mask(low: int, high: int) -> set:
+    return {r for r, k in PERMISSION_KIND.items() if ((low >> (k - 1)) & 1 if k <= 32 else (high >> (k - 33)) & 1)}
+
+
+def aud_p1_options() -> dict:
+    """AUD-P1 analysis: A = reuse TS Service on AuditLog; B = dedicated append level. Decision stays with the owner."""
+    def row(rights, level):
+        return {"level": level, "rights": sorted(rights), "mask": rights_mask(rights),
+                "canAdd": "AddListItems" in rights, "readsRows": "ViewListItems" in rights,
+                "canEditExisting": "EditListItems" in rights, "canDelete": "DeleteListItems" in rights,
+                "canOverrideListBehaviors": "OverrideListBehaviors" in rights, "forbiddenPresent": sorted(set(rights) & NEVER),
+                "beyondAppend": sorted(set(rights) - AUDIT_APPEND_RIGHTS)}
+    return {"A": dict(row(TS_SERVICE_RIGHTS, SERVICE_LEVEL), newRoleDefinition=False),
+            "B": dict(row(AUDIT_APPEND_RIGHTS, AUDIT_APPEND_LEVEL), newRoleDefinition=True),
+            "recommended": "B"}
 
 
 def level_assessment(name: str) -> dict:

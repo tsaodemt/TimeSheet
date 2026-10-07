@@ -130,7 +130,7 @@ def appstart_actions(*, site: str, domain: str, emp_list: str, audit_list: str, 
                      untrusted_inputs=("CallerUpn", "ActorUpn", "OwnerUpn", "EmployeeId", "Role", "Scope", "UserPrincipalName", "Config"),
                      refs: dict = None) -> dict:
     g = at.app_open_actions(site=site, domain=domain, emp_list=emp_list, audit_list=audit_list, environment=environment,
-                            client_type_expr=client_type_expr, untrusted_inputs=untrusted_inputs)
+                            client_type_expr=client_type_expr, untrusted_inputs=untrusted_inputs, fields=gt.EMPLOYEES_FIELDS)
     g.pop("Respond")
     ok = "equals(outputs('IdCode'), 'OK')"
     g["Settings_read"] = sp_http("GET", "_api/web/lists/getbytitle('%s')/items?$select=Title,Value&$top=500" % settings_list,

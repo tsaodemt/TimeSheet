@@ -43,7 +43,7 @@ Legacy display wording is kept in `ActionText`: `Tạo mới`, `Thay đổi`, `X
 | Decision, ResultCode | same | guard result; a later refusal (e.g. `LOCKED`) can only turn `ALLOW` into `DENY`, never the reverse |
 | ScopeKind, ScopeRef | same | requested scope (checked by the guard) |
 | SourceFlow, Environment | same | configuration |
-| TargetLegacyId, OwnerEmployeeItemId, IsOnBehalf, WorkDate, ChangeJson | same | stored record / server-side values |
+| TargetLegacyId, OwnerEmployeeItemId, IsOnBehalf, WorkDate, ChangeJson | same | stored record / server-side values (`TargetLegacyId` = the stored record's `LegacyId`, stamped together with `TargetItemId`; empty when no record was written) |
 | IgnoredInputs, OmittedFields, ClientType | `Detail` | names only |
 
 Result codes reuse the guard vocabulary (`docs/authorization-guard.md`):

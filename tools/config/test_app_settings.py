@@ -323,10 +323,10 @@ class RealRegistry(unittest.TestCase):
         req = ("ProjectAssignmentScoping", "PayPeriodStartDay", "BusinessTimezone")
         self.assertTrue(cfg.readiness(self.reg, self.overlay, "ENGINEERING", req)[0])
         self.assertFalse(cfg.readiness(self.reg, self.overlay, "UAT", req)[0])
-        prod = dict(self.overlay, environment="PRODUCTION")
+        prod = dict(self.overlay, environment="PRODUCTION", external={})  # no production overlay exists yet (ENV-D3 / PROD-01)
         ok, b = cfg.readiness(self.reg, prod, "PRODUCTION", req)
         self.assertFalse(ok)
-        self.assertIn("ServiceAccountUpn", dict(b), "D-3 unresolved: no production service account")
+        self.assertIn("ServiceAccountUpn", dict(b), "no production binding of the operational service identity yet")
 
     def test_business_time_zone(self):
         self.assertEqual(self.s["BusinessTimezone"].value, "Asia/Ho_Chi_Minh")

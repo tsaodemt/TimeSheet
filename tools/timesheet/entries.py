@@ -212,6 +212,9 @@ def save_entry(guard_result, caller: Optional[Caller], request: Mapping, masters
         bd.windows_zone(_setting(settings, "BusinessTimezone"))
     except bd.TimeZoneConfigError:
         return done(False, CONFIG_INVALID)
+    if not caller.discipline_code:
+        # Employees.Discipline and TimesheetEntries.DisciplineCode are both required: master-data configuration error
+        return done(False, CONFIG_INVALID)
 
     item_id = request.get("ItemId") or 0
     try:

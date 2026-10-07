@@ -6,7 +6,8 @@ templates by r1_flows.py), so a flow is only blocked by what it actually uses. E
 
   PUBLISHER_PREFIX_UNRESOLVED           <PFX> still in a schema name / publisher prefix not decided (ENV-D3)
   ENVIRONMENT_UNRESOLVED                an ENV-D3 environment decision or a used environment variable has no value
-  D3_SERVICE_IDENTITY_MISSING           no approved operational service identity configured (or a temporary one)
+  D3_SERVICE_IDENTITY_MISSING           no operational service identity configured (or a temporary one)
+  D3_OPERATIONAL_READINESS_INCOMPLETE   the configured identity does not yet meet a D-3 acceptance criterion (d3_acceptance)
   CONNECTION_REFERENCE_UNBOUND          a used SERVICE-owned reference is gated, unowned or owned by another account;
                                         or a used reference is undeclared / its ownership unknown
   PERMISSION_NOT_VERIFIED               service identity set, but no permission snapshot for a used list
@@ -31,6 +32,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "config"))
 sys.path.insert(0, HERE)
 import app_settings as cfg  # noqa: E402
+import d3_acceptance as d3  # noqa: E402
 import manifest_check as mc  # noqa: E402
 
 R1_FLOWS = ("TS-AppOpen", "TS-ReadOwn", "TS-SaveEntry")
@@ -67,7 +69,7 @@ def _login_matches(a: Mapping, upn: str) -> bool:
 def readiness(purpose: str, flows: Iterable[str] = R1_FLOWS, *, manifest: dict, overlay: Mapping, registry: dict,
               list_state: Mapping, environment: str = "staging", permissions: Optional[Mapping] = None,
               settings_rows: Optional[Iterable[Mapping]] = None, temporary_accounts: Iterable[str] = (),
-              service_key: str = "ServiceAccountUpn") -> Result:
+              service_key: str = "ServiceAccountUpn", identity_acceptance: Optional[Mapping] = None) -> Result:
     if purpose not in cfg.PURPOSES:
         raise ValueError("purpose must be one of %s" % (cfg.PURPOSES,))
     defs = {f["name"]: f for f in manifest.get("flows", [])}
@@ -106,6 +108,9 @@ def readiness(purpose: str, flows: Iterable[str] = R1_FLOWS, *, manifest: dict, 
     elif upn in temp or upn.split("@")[0] in temp:
         b(("D3_SERVICE_IDENTITY_MISSING", "*", "the configured identity is a temporary/test account; it is never a substitute"))
         upn = ""
+    else:  # identity selected: each D-3 acceptance criterion needs recorded evidence (fail closed)
+        for cid, text in d3.unmet(identity_acceptance):
+            b(("D3_OPERATIONAL_READINESS_INCOMPLETE", "*", "%s: %s" % (cid, text)))
     refs = {x["schemaName"]: x for x in manifest.get("connectionReferences", [])}
     for f in fl:
         for used in f["connectionReferences"]:

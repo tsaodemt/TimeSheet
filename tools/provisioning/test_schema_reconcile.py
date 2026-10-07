@@ -299,7 +299,8 @@ class TargetPolicy(unittest.TestCase):
         names = {f["internalName"] for l in self.target["lists"] for f in l["fields"]}
         self.assertNotIn("ApprovalStatus", names)
         es = next(f for f in self._list("TimesheetEntries")["fields"] if f["internalName"] == "EntryStatus")
-        self.assertEqual((es["type"], es["choices"], es["required"], es["indexed"]), ("Choice", ["Draft", "Approved", "Deleted"], True, True))
+        # indexed False: project owner 2026-10-07 (8-index target; EntryStatus revisit after P5 only if needed)
+        self.assertEqual((es["type"], es["choices"], es["required"], es["indexed"]), ("Choice", ["Draft", "Approved", "Deleted"], True, False))
         self.assertNotIn("decision", es)
         self.assertNotIn("Rejected", es["choices"])
 

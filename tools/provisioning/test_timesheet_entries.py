@@ -190,8 +190,15 @@ class TimesheetEntries(unittest.TestCase):
             m = fields()[n]
             self.assertEqual((f["type"], f["required"], f.get("dateOnly"), f.get("lookupList"), f.get("choices"), bool(f.get("gate"))),
                              (m["type"], m["required"], m.get("dateOnly"), m.get("lookupList"), m.get("choices"), bool(m.get("gate"))), n)
-        self.assertEqual(sorted(n for n in tl if bool(tl[n]["indexed"]) != bool(fields()[n]["indexed"])), ["EntryStatus"],
-                         "documented index reconciliation (target 9 -> 8)")
+        self.assertEqual(sorted(n for n in tl if bool(tl[n]["indexed"]) != bool(fields()[n]["indexed"])), [],
+                         "target schema carries the owner-approved 8 indexes (9 -> 8 superseded 2026-10-07)")
+
+    def test_TE22_owner_approved_eight_indexes_entry_status_revisit_after_p5(self):
+        self.assertEqual(sorted(n for n, x in fields().items() if x["indexed"]), sorted(rl.APPROVED_INDEXES[E]))
+        self.assertEqual(len(rl.APPROVED_INDEXES[E]), 8)
+        self.assertFalse(fields()["EntryStatus"]["indexed"])
+        self.assertEqual(rl.INDEX_DECISIONS[E]["EntryStatus"][0], rl.NOT_REQUIRED)
+        self.assertIn("revisit after P5", rl.INDEX_DECISIONS[E]["EntryStatus"][3])
 
 
 if __name__ == "__main__":

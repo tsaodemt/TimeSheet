@@ -198,7 +198,7 @@ def run_flow(upn, request, store, settings, roles=("EMP",), decoys=None, cid="ru
             i, etag = store.create(body)
             return "Succeeded", {"d": {"Id": i, "__metadata": {"etag": etag} if etag else {}}}
         if method == "GET":
-            return "Succeeded", wdl_sim.sharepoint_get(uri, {tg.EMP_LIST: tg.rows(tg.EMPS)})
+            return "Succeeded", wdl_sim.sharepoint_get(uri, {tg.EMP_LIST: tg.lookup_rows(tg.EMPS)})
         if method == "POST":
             row = json.loads(p["parameters/body"])
             if fail_audit and row.get("EventType") == fail_audit:
@@ -496,6 +496,44 @@ class R1SaveEtag(_Both):
             posts = self.ctx["posts"]
             wp = next(p for p in posts if p.get("EventType") == "WriteProxy")
             self.assertEqual((wp["Action"], wp["Decision"]), ("Update", "ALLOW"))
+
+
+
+class FlowGaps(_Both):
+    """2026-10-07 small flow gaps: record link on the save audit row (FG01-FG03), employee without discipline (FG04-FG05)."""
+
+    def wp(self):
+        return [p for p in self.ctx["posts"] if p["EventType"] == "WriteProxy"][-1]
+
+    def test_FG01_create_stamps_the_stored_legacy_id(self):
+        r = self.both(ME, req())
+        new = self.ctx["store"].items[r["itemId"]]
+        self.assertTrue(new["LegacyId"])
+        self.assertEqual((self.wp()["TargetItemId"], self.wp()["TargetLegacyId"]), (str(r["itemId"]), new["LegacyId"]))
+
+    def test_FG02_edit_stamps_the_stored_record_legacy_id(self):
+        items = [dict(entry(1, ME, "2026-10-07"), LegacyId="LEG-0001")] + ITEMS[1:]
+        r = self.both(ME, req(ItemId="1", ETag='"1,1"'), items=items)
+        self.assertEqual(r["code"], "OK")
+        self.assertEqual((self.wp()["TargetItemId"], self.wp()["TargetLegacyId"]), ("1", "LEG-0001"))
+        self.assertEqual(self.ctx["store"].items[1]["LegacyId"], "LEG-0001", "the edit never rewrites LegacyId")
+
+    def test_FG03_refused_save_stamps_no_record_link(self):
+        for request in (req(Hours="0"), req(ItemId="3", ETag='"3,1"')):
+            self.both(ME, request, items=[dict(x, LegacyId="LEG-%d" % x["Id"]) for x in ITEMS])
+            self.assertEqual((self.wp()["TargetItemId"], self.wp()["TargetLegacyId"]), ("", ""), request)
+
+    def test_FG04_employee_without_discipline_is_a_config_error_before_any_write(self):
+        f = self.both(tg.u("nodisc"), req())
+        self.assertEqual((f["ok"], f["code"]), (False, "CONFIG_INVALID"))
+        self.nothing_written()
+        self.assertEqual((self.wp()["Decision"], self.wp()["ResultCode"]), ("DENY", "CONFIG_INVALID"))
+
+    def test_FG05_discipline_comes_from_the_required_lookup(self):
+        flow = json.dumps(FLOW)
+        self.assertIn("$select=Id,LegacyId,IsActive,Discipline/DisciplineCode,AccountUpn", flow)
+        self.assertIn("&$expand=Discipline", flow)
+        self.assertNotIn("IsActive,DisciplineCode,AccountUpn", flow, "Employees has no DisciplineCode column")
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import d3_acceptance as d3  # noqa: E402
 import d3_readiness as dr  # noqa: E402
 
 REG = {"settings": [{"key": "PeriodStartDay", "type": "int", "value": "26", "resolution": "RESOLVED"},
@@ -25,12 +26,21 @@ LISTS = ("AppSettings", "Phases")
 PERMS = {t: {"unique": True, "assignments": [{"principal_id": 7, "login": "c:0-.f|owners", "roles": ["Full Control"]},
                                               {"principal_id": 77, "login": "i:0#.f|membership|" + SVC, "roles": ["Read"]}]} for t in LISTS}
 REFS = ("ts_CR_SharePoint_OpsService", "ts_CR_O365Users_Invoker")
+ACCEPTED = {"criteria": {c: {"met": True, "evidence": "read-only check (synthetic)"} for c in d3.IDS}}
+
+
+def acceptance(**unmet):
+    r = {"criteria": dict(ACCEPTED["criteria"])}
+    for c, ev in unmet.items():
+        r["criteria"][c] = {"met": False, "evidence": ev}
+    return r
 
 
 def check(purpose="ENGINEERING", overlay=OVL, manifest=MAN, perms=PERMS, env="STAGING", **kw):
     return dr.readiness(purpose, environment=env, overlay=overlay, registry=REG, manifest=manifest, permissions=perms,
                         required_lists=LISTS, required_settings=("PeriodStartDay", "Switch"), required_connection_refs=REFS,
-                        temporary_accounts=("temp-test-svc", "spike-svc@tenant-a.invalid"), **kw)
+                        temporary_accounts=("temp-test-svc", "spike-svc@tenant-a.invalid"),
+                        **dict({"identity_acceptance": ACCEPTED}, **kw))
 
 
 def codes(r):
@@ -97,6 +107,23 @@ class D3Readiness(unittest.TestCase):
     def test_DR10_unknown_purpose_refused(self):
         with self.assertRaises(ValueError):
             check("GO-LIVE")
+
+    def test_DR11_selected_identity_blocked_only_by_unmet_acceptance_criteria(self):
+        ok, b = check(identity_acceptance=acceptance(CUSTODIAN_LIFECYCLE_DOCUMENTED="custodian not named"))
+        self.assertFalse(ok)
+        self.assertEqual(b, [("D3_OPERATIONAL_READINESS_INCOMPLETE", "CUSTODIAN_LIFECYCLE_DOCUMENTED: " + dict(d3.CRITERIA)["CUSTODIAN_LIFECYCLE_DOCUMENTED"])])
+        self.assertNotIn("SERVICE_IDENTITY_MISSING", codes((ok, b)))
+        self.assertFalse(any("new service account" in d.lower() for _, d in b))
+        ok, b = check(identity_acceptance=None)  # no evidence recorded: every criterion unmet (fail closed)
+        self.assertEqual([d.split(":")[0] for c, d in b if c == "D3_OPERATIONAL_READINESS_INCOMPLETE"], list(d3.IDS))
+
+    def test_DR12_acceptance_needs_met_and_evidence(self):
+        self.assertEqual(d3.evaluate(ACCEPTED), (d3.DONE, []))
+        r = acceptance(RETAINED="scheduled for deletion")
+        self.assertEqual(d3.evaluate(r), (d3.BLOCKED, [("RETAINED", dict(d3.CRITERIA)["RETAINED"])]))
+        r = {"criteria": dict(ACCEPTED["criteria"], ENABLED={"met": True, "evidence": " "})}
+        self.assertEqual(d3.evaluate(r)[1][0][0], "ENABLED", "met without evidence is unmet")
+        self.assertEqual(len(d3.IDS), 8)
 
 
 if __name__ == "__main__":

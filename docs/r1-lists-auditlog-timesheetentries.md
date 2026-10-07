@@ -48,7 +48,7 @@ Phase 1 readiness:
 | `CorrelationId` | REQUIRED | support lookup by the correlation ID shown with every error |
 | `OwnerEmployeeItemId` | REQUIRED | viewer "By owner"; per-employee history |
 | `TargetLegacyId` | RECOMMENDED | the trail of one record (created before load) |
-| `EventType`, `Action`, `ActorUpn` | NOT REQUIRED | each is used only after `OccurredOn` or not at all. Low-cardinality values match more than 5,000 rows, so an index cannot make them threshold-safe. The target schema had them indexed; this is a reconciliation item to confirm at approval. |
+| `EventType`, `Action`, `ActorUpn` | NOT REQUIRED | each is used only after `OccurredOn` or not at all. Low-cardinality values match more than 5,000 rows, so an index cannot make them threshold-safe. Not indexed for consistency (project owner 2026-10-07). |
 
 **Append-only:**
 - The flows only `POST /items` to AuditLog: no MERGE, no item URL, no delete (AL08–AL10).
@@ -108,6 +108,8 @@ Phase 1 readiness:
 
 ## Open decisions found
 
+Options and recommendations for AUD-F1, AUD-P1 and the unbounded read: `docs/auditlog-open-decisions.md`.
+
 - **AUD-F1 (critical before R1 live) — audit append failure.** Today the flows fail closed (AL17):
   - if the decision append fails, the run stops before any write;
   - if the WriteProxy append fails *after* a persisted write, the caller gets no response. A retry can then duplicate a create, because R1-Q3 is open.
@@ -117,13 +119,13 @@ Phase 1 readiness:
   - respond OK with a warning and alert operations;
   - retry the append.
 - **AUD-P1 — append-only service level.** `TS Service` can edit audit rows. A stricter level (View + Add, no Edit) would enforce append-only in SharePoint itself. Today it is enforced by the flow design plus version history.
-- **Index reconciliation.** Confirm at the live approval:
-  - AuditLog: 7 → 4 indexes;
-  - TimesheetEntries: `EntryStatus` not indexed (9 → 8).
-- **Findings for the flows:**
-  - the WriteProxy row does not stamp `TargetLegacyId` yet;
-  - a caller whose employee row has no discipline would fail on the required `DisciplineCode`;
-  - a no-date `TS-ReadOwn` for an owner with more than 5,000 entries would hit the threshold. That is years away (about 40–60 entries per period), but the app should always send a range.
+- **Index targets — approved by the project owner 2026-10-07** (supersede the earlier 7 / 9):
+  - AuditLog: exactly 4 indexes (`OccurredOn`, `CorrelationId`, `OwnerEmployeeItemId`, `TargetLegacyId`);
+  - TimesheetEntries: 8 indexes; `EntryStatus` NOT REQUIRED FOR CURRENT R1 TARGET / REVISIT AFTER P5 IF NEEDED (P5 not run).
+- **Findings for the flows (2026-10-07):**
+  - the WriteProxy row now stamps `TargetLegacyId` (the stored record's `LegacyId`) — fixed;
+  - the discipline is read through the required `Discipline` lookup; an employee without one gets `CONFIG_INVALID` before any write — fixed;
+  - a no-date `TS-ReadOwn` for an owner with more than 5,000 entries would hit the threshold. Recommendation: the app always sends a range; the API decision stays open.
 
 ## Phased live plans (not executed)
 
@@ -131,10 +133,10 @@ Phase 1 readiness:
 |---|---|---|
 | AuditLog Phase 1 schema | 46 POST: create list 1, Title 2, 21 columns × 2, versioning 1 | 0 |
 | AuditLog Phase 1 lockdown | 2 POST (break inheritance without copy; Owners Full Control) | 0 |
-| AuditLog Phase 2 (after D-3) | 1 POST (TS Service for the approved identity) | 0 |
+| AuditLog Phase 2 (after AUD-P1) | 1 POST (the AUD-P1 level for the configured operational identity) | 0 |
 | TimesheetEntries Phase 1 schema (when S04.6 / S05.4 allow) | 49 POST + 6 GET (lookup list IDs) | 0 |
 | TimesheetEntries Phase 1 lockdown | 2 POST | 0 |
-| TimesheetEntries Phase 2 (after D-3) | 1 POST | 0 |
+| TimesheetEntries Phase 2 (after Phase 1) | 1 POST (TS Service for the configured operational identity) | 0 |
 
 Rollback categories (`schema_reconcile.ROLLBACK`):
 - an empty list is reversible;

@@ -70,7 +70,8 @@ def read_own_actions(*, scope_config, role_groups, site, domain, emp_list, audit
                      registry, overlay, settings_list="AppSettings", source_flow="TS-ReadOwn", refs=None) -> dict:
     """Trigger: text FromDate, text_1 ToDate, text_2 AfterId, text_3 PageSize, text_4 RequestedOwner, text_5..9 decoys."""
     g = gt.guard_actions(scope_config, role_groups, site=site, domain=domain, emp_list=emp_list, audit_list=audit_list,
-                         action_expr="'TS.ViewOwn'", kind_expr="'self'", ref_expr=EMPTY, untrusted_inputs=DECOYS, legacy_audit=False)
+                         action_expr="'TS.ViewOwn'", kind_expr="'self'", ref_expr=EMPTY, untrusted_inputs=DECOYS, legacy_audit=False,
+                         fields=gt.EMPLOYEES_FIELDS)
     g.update(at.authorization_event_actions(audit_list=audit_list, environment=environment, source_flow=source_flow,
                                             after="Guard_result", name="Authz_audit"))
     g["From"] = c("@" + _tb("text"), S("Write_Authz_audit"))
@@ -220,7 +221,7 @@ def save_draft_actions(*, scope_config, role_groups, site, domain, emp_list, aud
             raise ValueError("not ready for %s: %s" % (purpose, blockers))
     g = gt.guard_actions(scope_config, role_groups, site=site, domain=domain, emp_list=emp_list, audit_list=audit_list,
                          action_expr="'TS.EditOwnDraft'", kind_expr="'self'", ref_expr=EMPTY, untrusted_inputs=SAVE_DECOYS,
-                         legacy_audit=False)
+                         legacy_audit=False, fields=gt.EMPLOYEES_FIELDS)
     g.update(at.authorization_event_actions(audit_list=audit_list, environment=environment, source_flow=source_flow,
                                             after="Guard_result", name="Authz_audit"))
     prev = "Write_Authz_audit"
@@ -244,13 +245,16 @@ def save_draft_actions(*, scope_config, role_groups, site, domain, emp_list, aud
     bad_cfg = "or(%s)" % ", ".join("not(equals(%s, 'OK'))" % status[k] for k in SAVE_SETTINGS)
     any_invalid = "or(%s)" % ", ".join("equals(%s, 'INVALID')" % status[k] for k in SAVE_SETTINGS)
     g["Pre"] = c("@if(not(equals(outputs('Guard_result')?['ResultCode'], 'ALLOW')), outputs('Guard_result')?['ResultCode'], "
-                 "if(%s, if(%s, 'CONFIG_INVALID', 'CONFIG_UNRESOLVED'), if(less(%s, 0), 'NOT_FOUND', 'OK')))" % (bad_cfg, any_invalid, ITEM), S("ItemId"))
+                 "if(%s, if(%s, 'CONFIG_INVALID', 'CONFIG_UNRESOLVED'), "
+                 # Employees.Discipline is required (target schema) and TimesheetEntries.DisciplineCode is required: an
+                 # employee row without it is a master-data configuration error, refused before any write (never guessed)
+                 "if(empty(outputs('CallerDisc')), 'CONFIG_INVALID', if(less(%s, 0), 'NOT_FOUND', 'OK'))))" % (bad_cfg, any_invalid, ITEM), S("ItemId"))
     pre_ok = "equals(outputs('Pre'), 'OK')"
 
     # edit checks: the stored item (owner, status, ETag), read by the service connection
     g["If_edit"] = {"type": "If", "runAfter": S("Pre"),
                     "expression": {"and": [{"equals": ["@outputs('Pre')", "OK"]}, {"equals": ["@%s" % is_edit, True]}]},
-                    "actions": {"Get_item": _sp({}, "GET", "_api/web/lists/getbytitle('%s')/items(@{%s})?$select=Id,OwnerUpn,EntryStatus" % (ENTRIES, ITEM))},
+                    "actions": {"Get_item": _sp({}, "GET", "_api/web/lists/getbytitle('%s')/items(@{%s})?$select=Id,OwnerUpn,EntryStatus,LegacyId" % (ENTRIES, ITEM))},
                     "else": {"actions": {}}}
     it = _ab("Get_item")
     stored_etag = "%s?['odata.etag']" % it
@@ -354,6 +358,10 @@ def save_draft_actions(*, scope_config, role_groups, site, domain, emp_list, aud
     g.update(at.operation_event_actions("WriteProxy", "Create", target_entity=ENTRIES, audit_list=audit_list, conf_audit_list=conf_audit_list,
                                         environment=environment, source_flow=source_flow,
                                         target_id_expr="if(greater(outputs('Out_id'), 0), string(outputs('Out_id')), %s)" % EMPTY,
+                                        # TargetLegacyId = the stored record's LegacyId (audit model), stamped with TargetItemId:
+                                        # create -> the value this run wrote; edit -> the value read from the stored item
+                                        target_legacy_id_expr="if(greater(outputs('Out_id'), 0), if(%s, %s, %s), %s)"
+                                        % (is_edit, nz("%s?['LegacyId']" % it), nz("actions('Payload_create')?['outputs']?['LegacyId']"), EMPTY),
                                         outcome_code_expr="if(%s, 'ALLOW', outputs('Final_code'))" % ok, owner_employee_id_expr=G("EmployeeId"),
                                         is_on_behalf_expr="false", work_date_expr="if(%s, %s, %s)" % (ok, WD, EMPTY),
                                         after="Warnings", name="Write_proxy"))

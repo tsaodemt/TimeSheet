@@ -42,6 +42,7 @@ The INVOKER reference is never reported as missing service ownership. SERVICE re
 | `PUBLISHER_PREFIX_UNRESOLVED` | `<PFX>` is still in a schema name; the publisher prefix is not decided (ENV-D3) |
 | `ENVIRONMENT_UNRESOLVED` | an ENV-D3 environment decision (type, region, admins/makers, DLP, publisher, prefix, hosting) or a used environment variable has no value |
 | `D3_SERVICE_IDENTITY_MISSING` | no approved operational service identity is configured, or a temporary one is (never a substitute) |
+| `D3_OPERATIONAL_READINESS_INCOMPLETE` | the configured identity does not yet meet a D-3 acceptance criterion (`tools/alm/d3_acceptance.py`: exists, enabled, licensed, no admin role, can authenticate, custodian/lifecycle documented, retained, connection ownership possible); each criterion needs recorded evidence, and the blocker names the exact one |
 | `CONNECTION_REFERENCE_UNBOUND` | a used SERVICE reference is gated, unowned or owned by another account; or a used reference is undeclared |
 | `PERMISSION_NOT_VERIFIED`, `READ_PERMISSION_MISSING`, `WRITE_PERMISSION_MISSING`, `SECURITY_DRIFT` | exact service rights per list: Read on read lists; `TS Service` (no delete) on written lists; nothing broader |
 | `TARGET_LIST_MISSING` | an operational list a flow uses does not exist |

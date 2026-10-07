@@ -50,7 +50,7 @@ FLOW = flow_for()
 
 def run_flow(upn, rows=ROWS, cid="run-ao", ovl=None, decoys=None, settings_fail=False):
     posts = {}
-    lists = {tg.EMP_LIST: tg.rows(tg.EMPS)}
+    lists = {tg.EMP_LIST: tg.lookup_rows(tg.EMPS)}
 
     def mocks(name, a, p):
         opid = a["inputs"]["host"]["operationId"]

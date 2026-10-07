@@ -64,17 +64,30 @@ def action_map(scope_config: dict) -> dict:
 
 
 FIELDS = ("Id", "LegacyId", "IsActive", "DisciplineCode", "AccountUpn")
+# Operational `Employees` (target schema / as-built): the discipline is the required `Discipline` lookup to `Disciplines`;
+# there is no `DisciplineCode` column, so the code is projected through the lookup ($expand). Used by the R1 flows.
+EMPLOYEES_FIELDS = ("Id", "LegacyId", "IsActive", "Discipline/DisciplineCode", "AccountUpn")
+
+
+def _acc(base_expr: str, field: str) -> str:
+    """Accessor for a selected field; 'Lookup/Field' reads the projected lookup value (null-safe)."""
+    return base_expr + "".join("?['%s']" % p for p in field.split("/"))
+
+
+def _select(fields) -> str:
+    exp = sorted({f.split("/")[0] for f in fields if "/" in f})
+    return ",".join(fields), ("&$expand=" + ",".join(exp)) if exp else ""
 
 
 def caller_actions(*, site: str, emp_list: str, fields=FIELDS) -> dict:
     """Trusted caller (invoker's own Users connection) -> employee rows by AccountUpn ($top=2)."""
-    sel, f_upn, T = ",".join(fields), fields[4], o("Trusted")
+    (sel, expand), f_upn, T = _select(fields), fields[4], o("Trusted")
     return {
         "SiteUrl": c(site, {}),
         "Get_caller_profile": op(USERS, "MyProfile_V2", {"$select": "userPrincipalName,id"}, S("SiteUrl")),
         "Trusted": c("@toLower(trim(%s))" % nz("body('Get_caller_profile')?['userPrincipalName']"), S("Get_caller_profile")),
-        "Caller_lookup": sp_http("GET", "_api/web/lists/getbytitle('%s')/items?$select=%s&$filter=%s eq '@{%s}'&$top=2"
-                                 % (emp_list, sel, f_upn, esc(T)), S("Trusted")),
+        "Caller_lookup": sp_http("GET", "_api/web/lists/getbytitle('%s')/items?$select=%s&$filter=%s eq '@{%s}'&$top=2%s"
+                                 % (emp_list, sel, f_upn, esc(T), expand), S("Trusted")),
         "Caller_rows": {"type": "Query", "runAfter": {"Caller_lookup": ["Succeeded", "Failed"]},
                         "inputs": {"from": "@if(equals(actions('Caller_lookup')?['status'], 'Succeeded'), body('Caller_lookup')?['value'], createArray())",
                                    "where": "@equals(toLower(trim(%s)), %s)" % (nz("item()?['%s']" % f_upn), T)}},
@@ -94,7 +107,7 @@ def identity_code_actions(*, domain: str, after: str, fields=FIELDS) -> dict:
     ok = "equals(%s, 'OK')" % o("IdCode")
     g["Emp"] = c("@if(%s, first(%s), json('{}'))" % (ok, rows), S("IdCode"))
     g["CallerCode"] = c("@%s" % nz("outputs('Emp')?['%s']" % f_code), S("Emp"))
-    g["CallerDisc"] = c("@%s" % nz("outputs('Emp')?['%s']" % f_disc), S("CallerCode"))
+    g["CallerDisc"] = c("@%s" % nz(_acc("outputs('Emp')", f_disc)), S("CallerCode"))
     return g
 
 
@@ -104,7 +117,7 @@ def guard_actions(scope_config: dict, role_groups, *, site: str, domain: str, em
     """Actions for the `Guard` scope. *_expr are expressions (without '@') yielding the request's raw
     action name, scope kind and scope reference. role_groups = [(roleKey, groupObjectId), ...] (configuration)."""
     f_id, f_code, f_active, f_disc, f_upn = fields
-    sel = ",".join(fields)
+    sel, expand = _select(fields)
     T = o("Trusted")
     g = caller_actions(site=site, emp_list=emp_list, fields=fields)
     prev = "Caller_rows"
@@ -126,8 +139,8 @@ def guard_actions(scope_config: dict, role_groups, *, site: str, domain: str, em
     K, A, REF = o("Kind"), o("Action"), o("Ref")
     g["KindOk"] = c("@and(contains(createArray(%s), %s), or(not(or(equals(%s, 'employee'), equals(%s, 'discipline'))), not(empty(%s))))"
                     % (", ".join("'%s'" % k for k in KINDS), K, K, K, REF), S("Ref"))
-    g["Target_lookup"] = sp_http("GET", "_api/web/lists/getbytitle('%s')/items?$select=%s&$filter=%s eq '@{%s}'&$top=2"
-                                 % (emp_list, sel, f_code, esc(REF)), S("KindOk"))
+    g["Target_lookup"] = sp_http("GET", "_api/web/lists/getbytitle('%s')/items?$select=%s&$filter=%s eq '@{%s}'&$top=2%s"
+                                 % (emp_list, sel, f_code, esc(REF), expand), S("KindOk"))
     g["Target_rows"] = c("@if(equals(actions('Target_lookup')?['status'], 'Succeeded'), body('Target_lookup')?['value'], createArray())",
                          {"Target_lookup": ["Succeeded", "Failed"]})
     keys = [k for k, _ in role_groups]
@@ -147,7 +160,7 @@ def guard_actions(scope_config: dict, role_groups, *, site: str, domain: str, em
                 "and(equals({K}, 'employee'), equals(length({TR}), 1), or(equals({R}, 3), "
                 "and(equals({R}, 2), not(empty({CD})), equals({TD}, {CD})), "
                 "and(equals({R}, 1), equals({TC}, outputs('CallerCode'))))))").format(
-        K=K, R=R, CD=CD, REF=REF, TR=TR, TD=nz("%s?['%s']" % (tgt, f_disc)), TC=nz("%s?['%s']" % (tgt, f_code)))
+        K=K, R=R, CD=CD, REF=REF, TR=TR, TD=nz(_acc(tgt, f_disc)), TC=nz("%s?['%s']" % (tgt, f_code)))
     g["InScope"] = c(in_scope, S("HasUnknown"))
     g["ResultCode"] = c("@if(not(%(ok)s), outputs('IdCode'), if(empty(%(A)s), 'UNKNOWN_ACTION', if(not(outputs('KindOk')), 'UNKNOWN_SCOPE', "
                         "if(equals(%(R)s, 0), if(outputs('HasPending'), 'DECISION_PENDING', if(outputs('HasTemp'), 'TEMP_ROLE_INACTIVE', "

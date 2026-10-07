@@ -75,6 +75,12 @@ def rows(emps):
              "AccountUpn": e.account_upn} for e in emps]
 
 
+def lookup_rows(emps):
+    """Operational `Employees` shape: the discipline code arrives through the expanded `Discipline` lookup (null when unset)."""
+    return [{"Id": e.item_id, "LegacyId": e.legacy_id, "IsActive": e.is_active, "AccountUpn": e.account_upn,
+             "Discipline": {"DisciplineCode": e.discipline_id} if e.discipline_id else None} for e in emps]
+
+
 class Case:
     seq = 0
 

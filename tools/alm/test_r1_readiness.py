@@ -9,6 +9,7 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import d3_acceptance as d3  # noqa: E402
 import manifest_check as mc  # noqa: E402
 import r1_flows as rf  # noqa: E402
 import r1_readiness as rr  # noqa: E402
@@ -26,6 +27,7 @@ LISTS_ALL = ("Employees", "AppSettings", "TimesheetEntries", "AuditLog", "Projec
 STATE_NOW = {"Employees": {"exists": True, "canonicalRows": 100}, "AppSettings": {"exists": True, "canonicalRows": 15},
              **{t: {"exists": True, "canonicalRows": 0} for t in ("Phases", "WorkTypes", "Shifts", "HourTypes")}}
 STATE_OK = {t: {"exists": True, "canonicalRows": 5, "live": True} for t in LISTS_ALL}
+ACCEPTED = {"criteria": {c: {"met": True, "evidence": "read-only check (synthetic)"} for c in d3.IDS}}
 
 
 def resolved_manifest(owner=SVC):
@@ -54,7 +56,7 @@ def perms(upn=SVC, write_role=rr.WRITE_LEVEL):
 def check(purpose="ENGINEERING", flows=rr.R1_FLOWS, manifest=None, overlay=OVL_D3, state=None, permissions=None, **kw):
     return rr.readiness(purpose, flows, manifest=manifest or resolved_manifest(), overlay=overlay, registry=REG,
                         list_state=STATE_OK if state is None else state, permissions=perms() if permissions is None else permissions,
-                        temporary_accounts=("temp-test-svc",), **kw)
+                        **dict({"identity_acceptance": ACCEPTED, "temporary_accounts": ("temp-test-svc",)}, **kw))
 
 
 class R1Alm(unittest.TestCase):
@@ -222,13 +224,36 @@ class R1Alm(unittest.TestCase):
         m, st = load("TS_SOLUTION_MANIFEST"), load("TS_R1_STATE")
         reg = load("TS_R1_REGISTRY") if os.environ.get("TS_R1_REGISTRY") else REG
         ovl = load("TS_R1_OVERLAY") if os.environ.get("TS_R1_OVERLAY") else OVL_NOW
+        acc = load("TS_D3_ACCEPTANCE") if os.environ.get("TS_D3_ACCEPTANCE") else None
         self.assertEqual(mc.lint(m), [])
         for purpose in rr.cfg.PURPOSES:
-            r = rr.readiness(purpose, manifest=m, overlay=ovl, registry=reg, list_state=st, permissions={})
+            r = rr.readiness(purpose, manifest=m, overlay=ovl, registry=reg, list_state=st, permissions={}, identity_acceptance=acc)
             self.assertFalse(r.ready, purpose)
             print("\n%s: %s" % (purpose, ", ".join(r.categories())))
             for c, f, d in r.blockers:
                 print("  %-36s %-13s %s" % (c, f, d))
+
+    def test_RA16_promoted_identity_clears_only_the_identity_blocker(self):
+        """An existing (formerly temporary) account selected as the operational identity: once it is configured and no
+        longer listed as temporary, D3_SERVICE_IDENTITY_MISSING disappears; every other open category stays."""
+        promoted = "former-spike-svc@tenant-a.invalid"
+        ovl = dict(OVL_NOW, external={"ServiceAccountUpn": promoted})
+        before = check(overlay=ovl, manifest=SAMPLE, state=STATE_NOW, permissions={}, temporary_accounts=("temp-test-svc", promoted))
+        after = check(overlay=ovl, manifest=SAMPLE, state=STATE_NOW, permissions={}, temporary_accounts=("temp-test-svc",))
+        self.assertIn("D3_SERVICE_IDENTITY_MISSING", before.categories())
+        self.assertNotIn("D3_SERVICE_IDENTITY_MISSING", after.categories())
+        self.assertNotIn("D3_OPERATIONAL_READINESS_INCOMPLETE", after.categories())
+        for c in ("CONNECTION_REFERENCE_UNBOUND", "ENVIRONMENT_UNRESOLVED", "PUBLISHER_PREFIX_UNRESOLVED", "REFERENCE_DATA_MISSING",
+                  "TARGET_LIST_MISSING"):
+            self.assertIn(c, after.categories(), c)
+        self.assertFalse(any("new service account" in d.lower() for _, _, d in after.blockers))
+
+    def test_RA17_unmet_acceptance_criterion_is_named_exactly(self):
+        acc = {"criteria": dict(ACCEPTED["criteria"], CUSTODIAN_LIFECYCLE_DOCUMENTED={"met": False, "evidence": "custodian not named"})}
+        r = check(identity_acceptance=acc)
+        self.assertEqual([(c, d) for c, _, d in r.blockers if c.startswith("D3_")],
+                         [("D3_OPERATIONAL_READINESS_INCOMPLETE", "CUSTODIAN_LIFECYCLE_DOCUMENTED: " + dict(d3.CRITERIA)["CUSTODIAN_LIFECYCLE_DOCUMENTED"])])
+        self.assertTrue(check().ready, "all criteria met + everything else resolved -> ready")
 
 
 if __name__ == "__main__":

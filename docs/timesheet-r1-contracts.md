@@ -130,7 +130,7 @@ Customer-facing wording is not decided yet. The app maps each code to a message;
 | `OK` | flow | – |
 | identity codes (`UNMAPPED_IDENTITY`, `INACTIVE_EMPLOYEE`, `DUPLICATE_IDENTITY`, `INVALID_IDENTITY`, `ACCOUNT_NOT_ALLOWED`, `DIRECTORY_ERROR`) | guard | yes |
 | authorization codes (`ROLE_NOT_ALLOWED`, `SCOPE_NOT_ALLOWED`, `UNKNOWN_ACTION`, `UNKNOWN_SCOPE`, `DECISION_PENDING`, `TEMP_ROLE_INACTIVE`) | guard | yes |
-| `CONFIG_UNRESOLVED` / `CONFIG_INVALID` | a required setting is not configured (`app-settings.md`) | yes |
+| `CONFIG_UNRESOLVED` / `CONFIG_INVALID` | a required setting is not configured (`app-settings.md`); save only: `CONFIG_INVALID` also when the caller's employee row has no `Discipline` (required master data) | yes |
 | `NOT_FOUND`, `FORBIDDEN`, `LOCKED`, `CONFLICT` | edit checks | yes |
 | `VALIDATION_LOOKUP`, `VALIDATION_HOURS`, `VALIDATION_DATE` | validation | yes |
 | `WARN_HOURS_ENTRY`, `WARN_HOURS_DAY`, `WARN_DUPLICATE` | warnings (in `warnings[]`) | no |

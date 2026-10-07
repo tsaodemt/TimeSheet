@@ -66,6 +66,13 @@ class AuditLog(unittest.TestCase):
             self.assertTrue(query and scale and why, n)
         self.assertEqual(rl.INDEX_DECISIONS[A]["EventType"][0], rl.NOT_REQUIRED)
 
+    def test_AL19_owner_approved_four_indexes(self):
+        self.assertEqual(sorted(n for n, x in fields().items() if x["indexed"]), sorted(rl.APPROVED_INDEXES[A]))
+        self.assertEqual(len(rl.APPROVED_INDEXES[A]), 4)
+        for n in ("EventType", "Action", "ActorUpn"):
+            self.assertEqual(rl.INDEX_DECISIONS[A][n][0], rl.NOT_REQUIRED, n)
+            self.assertFalse(fields()[n]["indexed"], n)
+
     def test_AL04_no_confidential_only_fields(self):
         names = set(fields())
         self.assertFalse(names & set(ae.CONF_FIELDS))
@@ -195,6 +202,40 @@ class AuditLog(unittest.TestCase):
         self.assertNotEqual(resp, "Succeeded", "no response after a failed post-write append")
         self.assertEqual(len(store.items), len(rs.ITEMS) + 1, "the entry was persisted (AUD-F1)")
 
+    def test_AL20_aud_p1_options_least_privilege(self):
+        o = rl.aud_p1_options()
+        a, b = o["A"], o["B"]
+        self.assertEqual((a["canAdd"], a["canEditExisting"], a["canDelete"], a["newRoleDefinition"]), (True, True, False, False))
+        self.assertEqual((b["canAdd"], b["canEditExisting"], b["canDelete"], b["canOverrideListBehaviors"], b["newRoleDefinition"]),
+                         (True, False, False, False, True))
+        self.assertTrue(a["readsRows"] and b["readsRows"], "Add Items depends on View Items in SharePoint")
+        self.assertEqual((a["forbiddenPresent"], b["forbiddenPresent"], b["beyondAppend"]), ([], [], []))
+        self.assertEqual(b["mask"], (196611, 32))
+        self.assertTrue(set(b["rights"]) < set(a["rights"]))
+        self.assertEqual(o["recommended"], "B")
+        # the proven TS Service mask also carries CreateSSCSite (not in the documented right list): an observation for AUD-P1
+        self.assertEqual(rl.rights_from_mask(1011028839, 432) - rl.TS_SERVICE_RIGHTS, {"CreateSSCSite"})
+
+    def test_AL21_post_live_reconciliation_is_zero_and_locked_down(self):
+        """Phase 1 as applied live: schema then lockdown; the post-live inventory plans 0 schema and 0 permission ops and
+        leaves only the site administrator and Owners (Members, Visitors, the employees group, a test user: no access)."""
+        site = FakeSite(empty_site())
+        sr.apply({"lists": [rl.target(A)]}, site.actual, site, ALLOWED, allowed_url=ALLOWED, dry_run=False)
+        self.assertEqual(rl.schema_plan(A, site.actual, ALLOWED, ALLOWED), [])
+        EMP, USER = 15, 12
+        web = [pp.Assignment(OWNERS, "Owners", ("Full Control", "Limited Access")), pp.Assignment(MEMBERS, "Members", ("Edit",)),
+               pp.Assignment(4, "Visitors", ("Read",)), pp.Assignment(EMP, "SG-TS-STG-Employees", ("Limited Access",)),
+               pp.Assignment(USER, "test user", ("Limited Access",)), pp.Assignment(ADMIN, "admin", ("Full Control",))]
+        p1 = rl.permission_plan(A, 1, False, web, owners_id=OWNERS, admin_id=ADMIN)
+        self.assertEqual([op for op, _ in p1["ops"]], ["break", "add"])
+        uniq, after = pp.simulate(False, web, p1["ops"], admin_id=ADMIN)
+        self.assertTrue(uniq)
+        self.assertEqual({a.principal_id: a.effective for a in after}, {ADMIN: {"Full Control"}, OWNERS: {"Full Control"}})
+        for pid in (MEMBERS, 4, EMP, USER, SVC):
+            self.assertNotIn(pid, {a.principal_id for a in after})
+        again = rl.permission_plan(A, 1, True, after, owners_id=OWNERS, admin_id=ADMIN)
+        self.assertEqual((again["ops"], [g["status"] for g in again["gated"]]), ([], ["GATED"]), "no service grant in Phase 1")
+
     @unittest.skipUnless(os.environ.get("TS_TARGET_SCHEMA"), "set TS_TARGET_SCHEMA to reconcile with the local target")
     def test_AL18_reconciles_with_the_target_schema(self):
         t = json.load(open(os.environ["TS_TARGET_SCHEMA"], encoding="utf-8"))
@@ -204,7 +245,7 @@ class AuditLog(unittest.TestCase):
             mine = fields()[f["internalName"]]
             self.assertEqual((f["type"], f["required"], f.get("dateOnly")), (mine["type"], mine["required"], mine.get("dateOnly")), f["internalName"])
         diff = sorted(n for n in fields() if bool(fields()[n]["indexed"]) != bool(next(f for f in tl["fields"] if f["internalName"] == n)["indexed"]))
-        self.assertEqual(diff, ["Action", "ActorUpn", "EventType"], "documented index reconciliation (target 7 -> 4)")
+        self.assertEqual(diff, [], "target schema carries the owner-approved 4 indexes (7 -> 4 superseded 2026-10-07)")
 
 
 if __name__ == "__main__":

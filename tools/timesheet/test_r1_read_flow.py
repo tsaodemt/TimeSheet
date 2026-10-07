@@ -70,7 +70,7 @@ def run_flow(upn, req, items=ITEMS, settings=SETTINGS, roles=("EMP",), decoys=No
             rows = sp_query(uri, items)
             return "Succeeded", {"value": rows + ([item(99, OTHER, "2026-10-01")] if leak else [])}
         if p.get("parameters/method") == "GET":
-            return "Succeeded", wdl_sim.sharepoint_get(uri, {tg.EMP_LIST: tg.rows(tg.EMPS)})
+            return "Succeeded", wdl_sim.sharepoint_get(uri, {tg.EMP_LIST: tg.lookup_rows(tg.EMPS)})
         if p.get("parameters/method") == "POST":
             posts.append(json.loads(p["parameters/body"]))
             return "Succeeded", {"Id": 1}
@@ -195,6 +195,11 @@ class R1Read(unittest.TestCase):
             f, posts, _ = self.both(upn, {})
             self.assertEqual((f["ok"], f["code"], f["rows"]), (False, code, []))
             self.assertEqual(next(p for p in posts if p.get("EventType"))["Decision"], "DENY")
+
+    def test_RR23_employee_without_discipline_can_still_read_own(self):
+        """Discipline is only needed to stamp a new entry (save refuses CONFIG_INVALID); reading own rows does not use it."""
+        f, posts, _ = self.both(tg.u("nodisc"), {})
+        self.assertEqual((f["ok"], f["code"]), (True, "OK"))
 
     def test_RR21_leak_returns_no_rows(self):
         f, _, _ = self.both(ME, {}, leak=True)
