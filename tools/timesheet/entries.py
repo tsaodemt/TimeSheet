@@ -26,6 +26,9 @@ OK, OK_REPLAY = "OK", "OK_REPLAY"
 NOT_FOUND, FORBIDDEN, LOCKED, CONFLICT = "NOT_FOUND", "FORBIDDEN", "LOCKED", "CONFLICT"
 VALIDATION_LOOKUP, VALIDATION_HOURS, VALIDATION_DATE = "VALIDATION_LOOKUP", "VALIDATION_HOURS", "VALIDATION_DATE"
 WARN_HOURS_ENTRY, WARN_HOURS_DAY, WARN_DUPLICATE = "WARN_HOURS_ENTRY", "WARN_HOURS_DAY", "WARN_DUPLICATE"
+# The write succeeded but its new ETag could not be read back: etag is "" and the client must re-read the item
+# before another edit (it never keeps using the ETag it sent).
+WARN_RELOAD_REQUIRED = "WARN_RELOAD_REQUIRED"
 CONFIG_UNRESOLVED, CONFIG_INVALID = "CONFIG_UNRESOLVED", "CONFIG_INVALID"
 ERROR_LEAK, IDEMPOTENCY_KEY_REUSED = "ERROR_LEAK", "IDEMPOTENCY_KEY_REUSED"
 ERROR = "ERROR"  # technical failure, e.g. reference data unreadable (fail closed)
@@ -79,8 +82,8 @@ class Response:
 
 class Store(Protocol):
     def get(self, item_id: int) -> Optional[tuple]: ...                       # (fields, etag) or None
-    def create(self, fields: dict) -> tuple: ...                              # (item_id, etag)
-    def update(self, item_id: int, fields: dict, if_match: str) -> str: ...  # new etag; raises ConflictError
+    def create(self, fields: dict) -> tuple: ...                              # (item_id, etag or None if not read back)
+    def update(self, item_id: int, fields: dict, if_match: str) -> Optional[str]: ...  # new etag (None if not read back); raises ConflictError
     def query(self, flt: "ReadFilter") -> list: ...                          # [(item_id, fields, etag)] ordered by id
     def find(self, **equals) -> list: ...                                    # [(item_id, fields, etag)]
 
@@ -283,6 +286,7 @@ def save_entry(guard_result, caller: Optional[Caller], request: Mapping, masters
             return done(replay.ok, replay.code, itemId=replay.itemId, etag=replay.etag, warnings=warnings if replay.ok else [])
         fields = idem.stamp(dict(payload, **trusted, LegacyId=str(uuid.uuid4()), LegacyOrigin="New", EntryStatus=DRAFT), request)
         new_id, new_etag = store.create(fields)
+        new_etag, warnings = _readback(new_etag, None, warnings)
         return done(True, OK, itemId=new_id, etag=new_etag, warnings=warnings, _action="Create")
     fields = dict(payload, **{k: v for k, v in trusted.items() if k not in ("OwnerUpn", "EmployeeId", "EmployeeItemId")})
     # the owner (OwnerUpn, Employee lookup, EmployeeItemId) is never rewritten by an edit
@@ -290,7 +294,16 @@ def save_entry(guard_result, caller: Optional[Caller], request: Mapping, masters
         new_etag = store.update(item_id, fields, etag)
     except ConflictError:
         return done(False, CONFLICT, itemId=item_id)
+    new_etag, warnings = _readback(new_etag, etag, warnings)
     return done(True, OK, itemId=item_id, etag=new_etag, warnings=warnings, _action="Update")
+
+
+def _readback(new_etag, sent_etag, warnings):
+    """A persisted write stays a success. Without a usable new ETag (not read back, or equal to the one sent) the
+    response carries no ETag and WARN_RELOAD_REQUIRED: the client re-reads the item before another edit."""
+    if not new_etag or new_etag == sent_etag:
+        return "", warnings + [WARN_RELOAD_REQUIRED]
+    return new_etag, warnings
 
 
 # ---------------------------------------------------------------- read

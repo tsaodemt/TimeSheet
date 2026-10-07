@@ -11,8 +11,8 @@ Trigger inputs: text = Operation (Create|Update|SoftDelete), text_1 = Key (item 
 Where WDL cannot express a reference rule the template refuses instead (stricter, never looser):
 - decision-dependent fields: refused when present (the reference allows an unchanged value);
 - invariant fields: refused when present (custom invariants are not evaluated in the flow);
-- configuration values: only enum and int keys are maintainable through the template; an unparsable int fails the
-  run (ERROR) instead of returning VALIDATION.
+- configuration values: only enum and int keys are maintainable through the template (an unparsable int returns
+  VALIDATION; no expression depends on lazy branch evaluation).
 The configuration action (CFG.Maintain) is proposed and unmapped: the guard denies it until it is approved.
 """
 from __future__ import annotations
@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 
 import audit_template as at
+import build_appstart_flow as baf
 import build_read_flow as base
 import guard_template as gt
 
@@ -120,13 +121,16 @@ def maintenance_actions(target: str, pol: dict, *, scope_config: dict, role_grou
         rule = "outputs('Config_rules')?[%s]" % KEY
         checks.append(("not(equals(outputs('Config_codes')?[%s], null))" % KEY, "outputs('Config_codes')?[%s]" % KEY))
         checks.append(("equals(%s, null)" % rule, "'NOT_FOUND'"))
-        checks.append(("and(not(equals(%s?['enum'], null)), not(contains(%s?['enum'], %s)))" % (rule, rule, val), "'VALIDATION'"))
-        checks.append(("and(equals(%s?['enum'], null), not(equals(string(int(%s)), %s)))" % (rule, "if(equals(%s?['enum'], null), %s, '0')" % (rule, val), val),
-                       "'VALIDATION'"))
-        checks.append(("and(equals(%s?['enum'], null), not(equals(%s?['min'], null)), less(int(%s), %s?['min']))"
-                       % (rule, rule, "if(equals(%s?['enum'], null), %s, '0')" % (rule, val), rule), "'VALIDATION'"))
-        checks.append(("and(equals(%s?['enum'], null), not(equals(%s?['max'], null)), greater(int(%s), %s?['max']))"
-                       % (rule, rule, "if(equals(%s?['enum'], null), %s, '0')" % (rule, val), rule), "'VALIDATION'"))
+        # every function sees a sanitised argument, so no check depends on lazy if()/and() evaluation (lazy_if_audit.py)
+        enum = "if(equals(%s?['enum'], null), createArray(), %s?['enum'])" % (rule, rule)
+        core = "if(startsWith(%s, '-'), substring(%s, 1), %s)" % (val, val, val)
+        int_ok = "and(not(empty(%s)), empty(%s))" % (core, baf._digits_removed(core))
+        num = "int(if(and(equals(%s?['enum'], null), %s), %s, '0'))" % (rule, int_ok, val)
+        bound = lambda b: "if(equals(%s?['%s'], null), %s, %s?['%s'])" % (rule, b, num, rule, b)  # noqa: E731
+        checks.append(("and(not(equals(%s?['enum'], null)), not(contains(%s, %s)))" % (rule, enum, val), "'VALIDATION'"))
+        checks.append(("and(equals(%s?['enum'], null), not(%s))" % (rule, int_ok), "'VALIDATION'"))
+        checks.append(("and(equals(%s?['enum'], null), not(equals(%s?['min'], null)), less(%s, %s))" % (rule, rule, num, bound("min")), "'VALIDATION'"))
+        checks.append(("and(equals(%s?['enum'], null), not(equals(%s?['max'], null)), greater(%s, %s))" % (rule, rule, num, bound("max")), "'VALIDATION'"))
     expr = "'OK'"
     for cond, code in reversed(checks):
         expr = "if(%s, %s, %s)" % (cond, code, expr)
@@ -158,7 +162,7 @@ def maintenance_actions(target: str, pol: dict, *, scope_config: dict, role_grou
     g.update(at.operation_event_actions(
         "AdminMaintenance", pol.get("auditAction", "MasterDataChange"), target_entity=target, audit_list=audit_list,
         conf_audit_list=conf_audit_list, environment=environment, source_flow=source_flow,
-        target_id_expr="if(equals(length(%s), 1), string(first(%s)?['Id']), %s)" % (ROWS, ROWS, EMPTY),
+        target_id_expr="if(equals(length(%s), 1), %s, %s)" % (ROWS, nz("first(%s)?['Id']" % ROWS), EMPTY),
         outcome_code_expr="if(equals(outputs('Final_code'), 'OK'), 'ALLOW', outputs('Final_code'))",
         target_legacy_id_expr=KEY, change_fields={"new": redacted, "old": "if(equals(length(%s), 1), first(%s), null)" % (ROWS, ROWS),
                                                  "operation": OP, "ignored": "join(body('Ignored_fields'), ',')"},

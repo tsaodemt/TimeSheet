@@ -56,6 +56,23 @@ def lint(manifest: dict, publishable: bool = True) -> list:
                         continue
                     if _URL.search(s) or _GUID.search(s) or _MAIL.search(s):
                         p.append("%s: tenant-specific value in a publishable manifest" % n)
+    refs = {x.get("schemaName"): x for x in manifest.get("connectionReferences", [])}
+    names = {x.get("schemaName") for x in manifest.get("environmentVariables", [])}
+    for f in manifest.get("flows", []):
+        fn = f.get("name", "?")
+        for r in f.get("connectionReferences", []):
+            d = refs.get(r["schemaName"])
+            if d is None:
+                p.append("%s: connection reference %s not declared" % (fn, r["schemaName"]))
+            elif r.get("ownership") not in ("INVOKER", "SERVICE", "APP_USER"):
+                p.append("%s: %s ownership must be INVOKER, SERVICE or APP_USER" % (fn, r["schemaName"]))
+            elif (d.get("ownership") or ("INVOKER" if d.get("invokerOwned") else None)) != r["ownership"]:
+                p.append("%s: %s declared ownership differs from the flow's %s" % (fn, r["schemaName"], r["ownership"]))
+        for v in f.get("environmentVariables", []):
+            if v not in names:
+                p.append("%s: environment variable %s not declared" % (fn, v))
+        if publishable and (_URL.search(str(f)) or _GUID.search(str(f)) or _MAIL.search(str(f))):
+            p.append("%s: tenant-specific value in a publishable manifest" % fn)
     return p
 
 

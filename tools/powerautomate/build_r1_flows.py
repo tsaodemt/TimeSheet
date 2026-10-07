@@ -83,11 +83,13 @@ def read_own_actions(*, scope_config, role_groups, site, domain, emp_list, audit
     g["Settings_read"]["runAfter"] = {"Date_check": ["Succeeded", "Failed"]}
     trusted = o("Trusted")
     has = "or(not(empty(%s)), not(empty(%s)))" % (F, T)
+    # the reversed-range test only ever sees well-formed dates: invalid input is replaced before any date function runs
+    both_ok = "and(%s, %s, equals(actions('Date_check')?['status'], 'Succeeded'))" % (_date_shape_ok(F), _date_shape_ok(T))
     date_bad = ("or(not(equals(actions('Date_check')?['status'], 'Succeeded')), not(equals(empty(%s), empty(%s))), "
                 "and(not(empty(%s)), not(%s)), and(not(empty(%s)), not(%s)), "
                 "and(not(empty(%s)), not(empty(%s)), %s))"
                 % (F, T, F, _date_shape_ok(F), T, _date_shape_ok(T), F, T,
-                   dr.reversed_range_expr("if(empty(%s), '2000-01-01', %s)" % (F, F), "if(empty(%s), '2000-01-01', %s)" % (T, T))))
+                   dr.reversed_range_expr("if(%s, %s, '2000-01-01')" % (both_ok, F), "if(%s, %s, '2000-01-01')" % (both_ok, T))))
     checks = [
         ("not(equals(outputs('Guard_result')?['ResultCode'], 'ALLOW'))", "outputs('Guard_result')?['ResultCode']"),
         ("and(not(empty(%s)), not(equals(%s, %s)))" % (o("ReqOwner"), o("ReqOwner"), trusted), "'FORBIDDEN'"),
@@ -115,7 +117,7 @@ def read_own_actions(*, scope_config, role_groups, site, domain, emp_list, audit
                 % (ENTRIES, sel))
     g["If_ok"] = {"type": "If", "runAfter": S("Size"), "expression": {"equals": ["@outputs('Validation')", "OK"]},
                   "actions": {"Filter": filt, "Query": query}, "else": {"actions": {}}}
-    rows = "if(equals(actions('Query')?['status'], 'Succeeded'), body('Query')?['value'], createArray())"
+    rows = _rows("Query")
     g["Rows"] = c("@" + rows, {"If_ok": ["Succeeded", "Failed", "Skipped", "TimedOut"]})
     g["Leak"] = {"type": "Query", "runAfter": S("Rows"), "inputs": {"from": "@outputs('Rows')", "where":
                  "@or(not(equals(toLower(%s), %s)), equals(%s, 'Deleted'))" % (nz("item()?['OwnerUpn']"), trusted, nz("item()?['EntryStatus']"))}}
@@ -234,7 +236,7 @@ def save_draft_actions(*, scope_config, role_groups, site, domain, emp_list, aud
     g["Interim"] = {"type": "Query", "runAfter": S("Init_daysum"), "inputs": {
         "from": "@createArray(%s)" % ", ".join("if(%s, '%s', %s)" % (interim[k], k, EMPTY) for k in sorted(interim)),
         "where": "@not(empty(item()))"}}
-    g["ItemId"] = c("@if(empty(%s), 0, if(%s, int(%s), -1))" % (o("ItemRaw"), _int_text_ok(o("ItemRaw")), o("ItemRaw")), S("Interim"))
+    g["ItemId"] = c("@int(if(empty(%s), '0', if(%s, %s, '-1')))" % (o("ItemRaw"), _int_text_ok(o("ItemRaw")), o("ItemRaw")), S("Interim"))
     is_edit = "greater(%s, 0)" % ITEM
     bad_cfg = "or(%s)" % ", ".join("not(equals(%s, 'OK'))" % status[k] for k in SAVE_SETTINGS)
     any_invalid = "or(%s)" % ", ".join("equals(%s, 'INVALID')" % status[k] for k in SAVE_SETTINGS)
@@ -336,10 +338,15 @@ def save_draft_actions(*, scope_config, role_groups, site, domain, emp_list, aud
     ok = "equals(outputs('Final_code'), 'OK')"
     g["Out_id"] = c("@if(%s, if(%s, %s, %s?['d']?['Id']), if(equals(outputs('Final_code'), 'CONFLICT'), %s, 0))"
                     % (ok, is_edit, ITEM, _ab("Create"), ITEM), S("Final_code"))
-    g["Out_etag"] = c("@if(%s, %s, %s)" % (ok, nz("if(%s, %s?['odata.etag'], %s?['d']?['__metadata']?['etag'])" % (is_edit, _ab("Get_new"), _ab("Create"))), EMPTY),
-                      S("Out_id"))
+    # a persisted write stays OK; without a usable new ETag (not read back, or equal to the one sent) the response has
+    # no ETag and WARN_RELOAD_REQUIRED, so the client re-reads before another edit and never reuses the old ETag
+    g["New_etag"] = c("@" + nz("if(%s, %s?['odata.etag'], %s?['d']?['__metadata']?['etag'])" % (is_edit, _ab("Get_new"), _ab("Create"))), S("Out_id"))
+    usable = "and(not(empty(outputs('New_etag'))), not(and(%s, equals(outputs('New_etag'), %s))))" % (is_edit, o("ETagIn"))
+    g["Out_etag"] = c("@if(and(%s, %s), outputs('New_etag'), %s)" % (ok, usable, EMPTY), S("New_etag"))
+    W = "actions('Warn_all')?['outputs']"
     g["Warnings"] = {"type": "Query", "runAfter": S("Out_etag"), "inputs": {
-        "from": "@if(and(%s, not(equals(actions('Warn_all')?['outputs'], null))), actions('Warn_all')?['outputs'], createArray())" % ok,
+        "from": "@createArray(%s, if(and(%s, not(%s)), 'WARN_RELOAD_REQUIRED', %s))"
+                % (", ".join("if(%s, %s, %s)" % (ok, nz("%s?[%d]" % (W, i)), EMPTY) for i in range(3)), ok, usable, EMPTY),
         "where": "@not(empty(item()))"}}
     g.update(at.operation_event_actions("WriteProxy", "Create", target_entity=ENTRIES, audit_list=audit_list, conf_audit_list=conf_audit_list,
                                         environment=environment, source_flow=source_flow,

@@ -120,7 +120,7 @@ def setting_value_actions(g: dict, rules: list, prev: str, read_action: str = "S
         g["X_" + k] = c("@if(equals(outputs('S_%s'), 'OK'), %s, null)" % (k, num), S("S_" + k))
         status[k], value[k] = "outputs('S_%s')" % k, "outputs('X_%s')" % k
         if r["interim"]:
-            interim[k] = "and(equals(outputs('S_%s'), 'OK'), equals(string(outputs('X_%s')), %s))" % (k, k, _lit(r["interim"][0]))
+            interim[k] = "and(equals(outputs('S_%s'), 'OK'), equals(%s, %s))" % (k, nz("outputs('X_%s')" % k), _lit(r["interim"][0]))
         prev = "X_" + k
     return status, value, interim, prev
 

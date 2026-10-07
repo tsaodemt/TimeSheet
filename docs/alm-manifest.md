@@ -15,6 +15,8 @@ The environment-local manifest with real values is never committed.
 
 Tests: `tools/alm/test_manifest_check.py` M01–M07.
 
+A manifest may also carry a `flows` section. `lint` then checks that every connection reference and environment variable a flow uses is declared, and that each reference's ownership (`INVOKER`, `SERVICE`, `APP_USER`) matches. The R1 flow set, its generated dependencies and the categorised R1 readiness check are described in `r1-deployment-readiness.md`.
+
 ## Readiness after the service-identity decision
 
 `tools/alm/d3_readiness.py` refuses a deployment for a purpose (ENGINEERING, UAT, PRODUCTION) when the approved service identity is not configured for the environment (or is a temporary/test account), a required connection reference is missing, gated or owned by another account (references "provided by run-only user" are exempt by design), the service identity lacks Read — or holds more than Read — on a required list, an environment binding is unresolved, or configuration readiness fails (interim values are refused for UAT and PRODUCTION). The identity comes only from environment configuration; no account is hard-coded. Tests: `tools/alm/test_d3_readiness.py` DR01–DR10.

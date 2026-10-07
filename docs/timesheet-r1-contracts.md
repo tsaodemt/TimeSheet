@@ -90,6 +90,7 @@ Template notes (`save_draft_actions`):
 - the create status is always `Draft`; a status, owner, actor, employee, role or scope sent by the caller is ignored and recorded by name only;
 - `WorkDate` is written as `yyyy-MM-dd` through the JSON item API (the path proven by POC P4), never through the locale-dependent validate API;
 - an edit sends `IF-MATCH` with the checked ETag; a change between the check and the write (HTTP 412) returns `CONFLICT`;
+- a write that persisted is never reported as failed. If its new ETag cannot be read back (or equals the one sent), the response has `etag = ""` and `WARN_RELOAD_REQUIRED`. The client then discards the ETag it holds and re-reads the item before another edit; an edit with the old ETag gets `CONFLICT`;
 - an unreadable reference list (project, phase, project-phase, work type, shift, hour type, and assignments when scoping is On) refuses with `ERROR`; nothing is assumed;
 - the same-day sum and the duplicate check use the business day of the entry (half-open UTC interval) and skip `Deleted` entries and the edited entry itself;
 - `interim[]` in the response names settings in effect that are owner-approved engineering interim values (for example the assignment switch while B-03 is open). Builds for UAT or PRODUCTION refuse them.
@@ -133,6 +134,7 @@ Customer-facing wording is not decided yet. The app maps each code to a message;
 | `NOT_FOUND`, `FORBIDDEN`, `LOCKED`, `CONFLICT` | edit checks | yes |
 | `VALIDATION_LOOKUP`, `VALIDATION_HOURS`, `VALIDATION_DATE` | validation | yes |
 | `WARN_HOURS_ENTRY`, `WARN_HOURS_DAY`, `WARN_DUPLICATE` | warnings (in `warnings[]`) | no |
+| `WARN_RELOAD_REQUIRED` | the save persisted but its new ETag is unavailable (`etag` empty): re-read before the next edit | no |
 | `ERROR_LEAK` | read leak check | read returns no rows |
 | `ERROR` | unexpected technical failure in the flow, including unreadable reference data (shown with the correlation ID only) | yes |
 
@@ -142,7 +144,7 @@ The save needs the pay-period start day, the two warning limits, the project-ass
 
 ## Create idempotency (open)
 
-Edits are protected by the ETag. Create idempotency is an open decision. The reference implementation keeps it pluggable:
+Edits are protected by the ETag. Create idempotency is an open decision (R1-Q3): **INTERIM / NOT GUARANTEED**; exactly-once creation is not claimed. The reference implementation keeps it pluggable:
 - default: none — the app disables Save while a call is in flight, and `WARN_DUPLICATE` makes a repeated create visible;
 - option under review: a client-generated request key stored in an indexed, unique column; a repeat of the same key by the same owner with the same values returns the existing entry (`OK_REPLAY`), any other reuse is refused (`IDEMPOTENCY_KEY_REUSED`) without revealing the other entry. This needs a schema change and is not provisioned.
 

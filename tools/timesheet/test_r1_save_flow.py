@@ -66,10 +66,12 @@ ITEMS = [entry(1, ME, "2026-10-07"), entry(2, OTHER, "2026-10-07"), entry(3, ME,
 class Store:
     """One SharePoint-like list. Date-only values are stored as local midnight in UTC (proven by POC P4)."""
 
-    def __init__(self, items, race=False):
+    def __init__(self, items, race=False, readback="ok"):
         self.items = {x["Id"]: copy.deepcopy(x) for x in items}
         self.ver = {i: 1 for i in self.items}
         self.race = race
+        self.readback = readback  # ok | fail (new ETag cannot be read back) | stale (read-back returns the sent ETag)
+        self.read_back = {}
 
     def etag(self, i):
         return '"%d,%d"' % (i, self.ver[i])
@@ -88,7 +90,7 @@ class Store:
         i = max(self.items) + 1
         self.items[i] = dict(self._norm(fields), Id=i)
         self.ver[i] = 1
-        return i, self.etag(i)
+        return i, (None if self.readback == "fail" else self.etag(i))
 
     def update(self, i, fields, if_match):
         if self.race:
@@ -97,7 +99,8 @@ class Store:
             raise E.ConflictError()
         self.items[i].update(self._norm(fields))
         self.ver[i] += 1
-        return self.etag(i)
+        self.read_back[i] = {"ok": self.etag(i), "fail": None, "stale": if_match}[self.readback]
+        return self.read_back[i]
 
     def find(self, OwnerUpn, WorkDate):
         return [(i, copy.deepcopy(f), self.etag(i)) for i, f in sorted(self.items.items())
@@ -174,6 +177,9 @@ def run_flow(upn, request, store, settings, roles=("EMP",), decoys=None, cid="ru
             m = re.search(r"/items\((-?\d+)\)", uri)
             if method == "GET" and uri.endswith("?$select=ListItemEntityTypeFullName"):
                 return "Succeeded", {"ListItemEntityTypeFullName": ENTITY}
+            if method == "GET" and m and uri.endswith(")?$select=Id"):  # read-back of the new ETag after an update
+                v = store.read_back.get(int(m.group(1)))
+                return ("Failed", {"statusCode": 503}) if v is None else ("Succeeded", {"Id": int(m.group(1)), "odata.etag": v})
             if method == "GET" and m:
                 got = store.get(int(m.group(1)))
                 return ("Failed", {"statusCode": 404}) if got is None else ("Succeeded", dict(got[0], **{"odata.etag": got[1]}))
@@ -190,7 +196,7 @@ def run_flow(upn, request, store, settings, roles=("EMP",), decoys=None, cid="ru
                     return "Failed", {"statusCode": 412}
                 return "Succeeded", None
             i, etag = store.create(body)
-            return "Succeeded", {"d": {"Id": i, "__metadata": {"etag": etag}}}
+            return "Succeeded", {"d": {"Id": i, "__metadata": {"etag": etag} if etag else {}}}
         if method == "GET":
             return "Succeeded", wdl_sim.sharepoint_get(uri, {tg.EMP_LIST: tg.rows(tg.EMPS)})
         if method == "POST":
@@ -234,9 +240,9 @@ def ref(upn, request, store, settings, roles=("EMP",), cid="run-rs", fail=(), re
             "warnings": r.warnings, "interim": r.interim}, r
 
 
-class R1Save(unittest.TestCase):
-    def both(self, upn, request, items=ITEMS, settings=SCOPING_OFF + [], decoys=None, race=False, **kw):
-        fs, rs = Store(items, race), Store(items, race)
+class _Both(unittest.TestCase):
+    def both(self, upn, request, items=ITEMS, settings=SCOPING_OFF + [], decoys=None, race=False, readback="ok", **kw):
+        fs, rs = Store(items, race, readback), Store(items, race, readback)
         f, posts, writes, run = run_flow(upn, request, fs, settings, decoys=decoys, **kw)
         r, rr = ref(upn, request, rs, settings, **kw)
         self.assertEqual(f, r, "reference vs flow differ for %s" % request)
@@ -249,6 +255,9 @@ class R1Save(unittest.TestCase):
 
     def nothing_written(self):
         self.assertEqual(self.ctx["writes"], [])
+
+
+class R1Save(_Both):
 
     def test_RS01_create_own_draft(self):
         f = self.both(ME, req())
@@ -428,6 +437,62 @@ class R1Save(unittest.TestCase):
             build(idempotency="request-key")
         self.both(ME, req(Hours="x"))
         self.assertNotIn("_api", json.dumps(self.ctx["run"].results["Respond"]["outputs"]))
+
+
+class R1SaveEtag(_Both):
+    """ET01-ET07: the new ETag after a write. A persisted write is never reported as failed because its ETag could
+    not be read back, and the ETag the client sent is never returned as the new one."""
+    def edit(self, readback="ok", etag='"1,1"', **kw):
+        return self.both(ME, req(ItemId="1", ETag=etag, Hours="3"), readback=readback, **kw)
+
+    def test_ET01_edit_returns_new_etag(self):
+        f = self.edit()
+        self.assertEqual((f["ok"], f["etag"], f["warnings"]), (True, '"1,2"', []))
+
+    def test_ET02_edit_succeeds_when_etag_readback_fails(self):
+        f = self.edit("fail")
+        self.assertEqual((f["ok"], f["code"], f["itemId"], f["etag"]), (True, "OK", 1, ""))
+        self.assertEqual(self.ctx["store"].items[1]["Hours"], 3.0)
+
+    def test_ET03_old_etag_never_returned_as_new(self):
+        for mode in ("fail", "stale"):
+            f = self.edit(mode)
+            self.assertNotEqual(f["etag"], '"1,1"', mode)
+            self.assertEqual(f["etag"], "", mode)
+
+    def test_ET04_contract_says_reload_required(self):
+        for mode in ("fail", "stale"):
+            f = self.edit(mode)
+            self.assertIn("WARN_RELOAD_REQUIRED", f["warnings"], mode)
+        self.assertNotIn("WARN_RELOAD_REQUIRED", self.edit()["warnings"])
+        f = self.both(ME, req(ItemId="1", ETag='"1,1"', Hours="4.5"), readback="fail")
+        self.assertEqual(f["warnings"], ["WARN_HOURS_ENTRY", "WARN_RELOAD_REQUIRED"], "other warnings are kept")
+
+    def test_ET05_next_edit_with_stale_etag_conflicts(self):
+        self.edit("fail")
+        store = self.ctx["store"]
+        f, _, writes, _ = run_flow(ME, req(ItemId="1", ETag='"1,1"', Hours="5"), store, SCOPING_OFF)
+        self.assertEqual((f["ok"], f["code"]), (False, "CONFLICT"))
+        self.assertEqual((writes, store.items[1]["Hours"]), ([], 3.0))
+        current = store.get(1)[1]  # what a re-read returns
+        f, _, _, _ = run_flow(ME, req(ItemId="1", ETag=current, Hours="5"), store, SCOPING_OFF)
+        self.assertEqual(f["code"], "OK")
+
+    def test_ET06_create_returns_usable_etag(self):
+        f = self.both(ME, req())
+        self.assertEqual((f["etag"], f["warnings"]), ('"7,1"', []))
+        g, _, _, _ = run_flow(ME, req(ItemId="7", ETag=f["etag"], Hours="3"), self.ctx["store"], SCOPING_OFF)
+        self.assertEqual(g["code"], "OK", "the returned ETag is usable for the next edit")
+        f = self.both(ME, req(), readback="fail")
+        self.assertEqual((f["ok"], f["itemId"], f["etag"], f["warnings"]), (True, 7, "", ["WARN_RELOAD_REQUIRED"]))
+
+    def test_ET07_persisted_write_not_reported_as_failed(self):
+        for mode in ("fail", "stale"):
+            f = self.edit(mode)
+            self.assertTrue(f["ok"], mode)
+            posts = self.ctx["posts"]
+            wp = next(p for p in posts if p.get("EventType") == "WriteProxy")
+            self.assertEqual((wp["Action"], wp["Decision"]), ("Update", "ALLOW"))
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import os
 import re
 from urllib.parse import quote, unquote
 from zoneinfo import ZoneInfo
@@ -16,6 +17,24 @@ from zoneinfo import ZoneInfo
 
 class WdlError(Exception):
     pass
+
+
+# Branch evaluation of if() / and() / or():
+#   lazy  - only the selected branch / short-circuit (what the generated flows were first written against)
+#   eager - every argument is evaluated; an error in an unused branch fails the expression (the opposite assumption)
+#   audit - lazy result, but every unused branch is also evaluated and its error recorded in LAZY_HITS
+# Flows that pass their parity tests in both lazy and eager mode do not depend on the runtime's choice.
+BRANCH_MODE = os.environ.get("TS_WDL_BRANCHES", "lazy")
+LAZY_HITS = []
+
+
+def unparse(n) -> str:
+    if n[0] == "lit":
+        v = n[1]
+        return "null" if v is None else ("'%s'" % v.replace("'", "''") if isinstance(v, str) else json.dumps(v))
+    if n[0] == "idx":
+        return "%s%s[%s]" % (unparse(n[1]), "?" if n[3] else "", unparse(n[2]))
+    return "%s(%s)" % (n[1], ", ".join(unparse(a) for a in n[2]))
 
 
 def _tokens(s):
@@ -144,7 +163,9 @@ def _fmt(t, fmt):
 
 
 class Run:
-    def __init__(self, trigger_body=None, run_name="run-0", mocks=None, now="2026-01-01T00:00:00Z"):
+    def __init__(self, trigger_body=None, run_name="run-0", mocks=None, now="2026-01-01T00:00:00Z", branches=None):
+        self.branches = branches or BRANCH_MODE
+        self.action = None
         self.now = now  # utcNow() value (fixed so outputs are comparable)
         self.trigger_body = trigger_body or {}
         self.run_name = run_name
@@ -174,17 +195,38 @@ class Run:
                 return self._miss(n[3])
             raise WdlError("index into %r" % type(base))
         name, args = n[1], n[2]
-        if name == "if":
-            return self.ev(args[1]) if self.ev(args[0]) else self.ev(args[2])
-        if name == "and":
-            return all(self.ev(a) for a in args)
-        if name == "or":
-            return any(self.ev(a) for a in args)
+        if name in ("if", "and", "or"):
+            return self._branch(name, n, args)
         v = [self.ev(a) for a in args]
         f = getattr(self, "f_" + name, None)
         if f is None:
             raise WdlError("unsupported function %s" % name)
         return f(*v)
+
+    def _branch(self, name, n, args):
+        if self.branches == "eager":
+            v = [self.ev(a) for a in args]
+            return (v[1] if v[0] else v[2]) if name == "if" else (all(v) if name == "and" else any(v))
+        if name == "if":
+            cond = self.ev(args[0])
+            used, unused = (args[1], args[2]) if cond else (args[2], args[1])
+            out, rest = self.ev(used), [unused]
+        else:
+            out, rest = (name == "or"), []
+            for i, a in enumerate(args):
+                if bool(self.ev(a)) == (name == "or"):
+                    rest = list(args[i + 1:])
+                    break
+            else:
+                out = (name == "and")
+        if self.branches == "audit":
+            for a in rest:
+                try:
+                    self.ev(a)
+                except Exception as e:  # noqa: BLE001 - any evaluation error is what an eager runtime would raise
+                    LAZY_HITS.append({"action": self.action, "function": name, "expression": unparse(n),
+                                      "unused": unparse(a), "error": "%s: %s" % (type(e).__name__, e)})
+        return out
 
     @staticmethod
     def _miss(safe):
@@ -339,6 +381,7 @@ class Run:
 
     def _exec(self, name, a):
         t = a["type"]
+        self.action = name
         if t == "Compose":
             if (a.get("metadata") or {}).get("failOnError"):  # expression errors fail the action, as in Power Automate (only where a flow handles it)
                 try:
