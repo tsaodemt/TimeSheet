@@ -28,4 +28,8 @@ trusted caller → guard (action for this target) → validation → one service
 - Service grants are GATED until their decision is approved. They are refused for temporary/test principals, without an approval record, and for any role other than Read or a no-delete service level.
 - A second run plans nothing. `requests()` returns the SharePoint REST calls.
 
+## Flow template (offline)
+
+`tools/powerautomate/build_maintenance_flow.py` generates the maintenance flow for one target: guard template (the target's action, company scope) → validation → one SharePoint call by the service connection (`MERGE` with `IF-MATCH`, or `POST` for create; never `DELETE`; HTTP 412 → `CONFLICT`) → `AdminMaintenance` audit row → response `{code, correlationId}`. Where the workflow language cannot express a reference rule, the template refuses instead (decision-dependent and invariant fields are refused when present; configuration keys are maintainable only for enum and int types). Configuration rules are baked from the registry and overlay at build time, so a decision change means regenerating the flow. Tests: `tools/maintenance/test_maintenance_flow.py` MF01–MF11 (run in the simulator; the template is never looser than the reference).
+
 Tests: `tools/maintenance/test_maintenance.py` AP01–AP24.

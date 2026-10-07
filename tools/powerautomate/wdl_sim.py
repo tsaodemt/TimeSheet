@@ -202,6 +202,8 @@ class Run:
             return False
         return a == b
     def f_greater(self, a, b): return a > b
+    def f_less(self, a, b): return a < b
+    def f_removeProperty(self, obj, k): return {x: v for x, v in obj.items() if x != k}
     def f_length(self, x): return len(x)
     def f_first(self, x): return x[0] if x else None
     def f_string(self, x): return _str(x)
@@ -237,7 +239,7 @@ class Run:
     def f_workflow(self): return {"run": {"name": self.run_name}}
     def f_triggerBody(self): return self.trigger_body
     def f_item(self): return self.item_stack[-1]
-    def f_actions(self, n): return {"status": self.results[n]["status"]} if n in self.results else None
+    def f_actions(self, n): return {"status": self.results[n]["status"], "outputs": self.results[n]["outputs"]} if n in self.results else None
     def f_body(self, n): return self.results[n]["body"]
     def f_outputs(self, n): return self.results[n]["outputs"]
     def f_parameters(self, n): return {}
@@ -300,6 +302,19 @@ class Run:
                 raise WdlError("dependency cycle or unknown runAfter: %s" % list(pending))
         return self
 
+    def _cond(self, e):
+        """If-action expression object: {"equals": [a, b]} | {"not": {...}} | {"and": [...]} | {"or": [...]}."""
+        (op, arg), = e.items()
+        if op == "equals":
+            return self.f_equals(self.value(arg[0]), self.value(arg[1]))
+        if op == "not":
+            return not self._cond(arg)
+        if op == "and":
+            return all(self._cond(x) for x in arg)
+        if op == "or":
+            return any(self._cond(x) for x in arg)
+        raise WdlError("unsupported condition %s" % op)
+
     def _exec(self, name, a):
         t = a["type"]
         if t == "Compose":
@@ -319,7 +334,15 @@ class Run:
         elif t == "OpenApiConnection":
             params = self.value(a["inputs"]["parameters"])
             status, body = self.mocks(name, a, params)
-            self.results[name] = {"status": status, "outputs": {"body": body}, "body": body}
+            outs = {"body": body}
+            if isinstance(body, dict) and "statusCode" in body:  # mock convention: connector HTTP status
+                outs["statusCode"] = body["statusCode"]
+            self.results[name] = {"status": status, "outputs": outs, "body": body}
+        elif t == "If":
+            cond = self._cond(a["expression"])
+            branch = a["actions"] if cond else a.get("else", {}).get("actions", {})
+            self.run(branch)
+            self.results[name] = {"status": "Succeeded", "outputs": None, "body": None}
         elif t == "Response":
             v = self.value(a["inputs"]["body"])
             self.results[name] = {"status": "Succeeded", "outputs": v, "body": v}

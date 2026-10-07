@@ -59,6 +59,10 @@ So a production deployment cannot pass while a customer decision is only covered
 - Secrets, passwords, tokens, keys, connection strings: refused by key name and by value pattern.
 - Tenant-bound technical bindings (site URLs, list/group IDs, domains, identities): refused in text values or declared as `externalConfig`; they belong in solution environment variables / connection ownership, so a solution moves between environments and tenants by changing those values only.
 
+## Client access
+
+Clients never read the `AppSettings` list; there is no direct human read access. The app-start flow returns the subset of settings the registry marks `exposeToClient` (`tools/config/client_config.py`): only to a resolved, active employee; never derived, environment-specific, external, retention or confidential settings. A required client key that is unresolved or invalid is reported (`CONFIG_UNRESOLVED` / `CONFIG_INVALID`) and left out. An interim value is returned together with its decision reference. Server-side flows re-read the authoritative settings for every protected operation. Tests: `tools/config/test_client_config.py` CC01–CC08.
+
 ## Provisioning and drift
 
 - `seed_rows()` produces one row per non-derived key; unresolved keys get an empty `Value`, so administrators see what is missing and the app still reads them as unresolved.
