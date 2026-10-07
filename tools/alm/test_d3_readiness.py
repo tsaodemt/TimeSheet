@@ -30,7 +30,7 @@ REFS = ("ts_CR_SharePoint_OpsService", "ts_CR_O365Users_Invoker")
 def check(purpose="ENGINEERING", overlay=OVL, manifest=MAN, perms=PERMS, env="STAGING", **kw):
     return dr.readiness(purpose, environment=env, overlay=overlay, registry=REG, manifest=manifest, permissions=perms,
                         required_lists=LISTS, required_settings=("PeriodStartDay", "Switch"), required_connection_refs=REFS,
-                        temporary_accounts=("ts-spike-svc", "spike-svc@tenant-a.invalid"), **kw)
+                        temporary_accounts=("temp-test-svc", "spike-svc@tenant-a.invalid"), **kw)
 
 
 def codes(r):
@@ -48,7 +48,7 @@ class D3Readiness(unittest.TestCase):
 
     def test_DR03_temporary_identity_refused(self):
         o = copy.deepcopy(OVL)
-        o["external"]["ServiceAccountUpn"] = "ts-spike-svc@tenant-a.invalid"
+        o["external"]["ServiceAccountUpn"] = "temp-test-svc@tenant-a.invalid"
         self.assertIn("SERVICE_IDENTITY_TEMPORARY", codes(check(overlay=o)))
 
     def test_DR04_connection_reference_missing_gated_or_foreign_owner(self):
