@@ -23,6 +23,19 @@ PROTECTED = ("Departments", "Disciplines", "Positions", "Employees", "AppSetting
 MASTER = ("Departments", "Disciplines", "Positions", "Employees")
 NO_ACCESS_KEYS = ("visitors", "newVisitor", "employees", "demoUser", "members")
 WRITE_RIGHTS = {"Add", "Edit", "Delete", "ManageLists", "ManagePermissions", "FullMask"}
+_ADMIN = {"owners": ["Full Control"], "siteAdmin": ["Full Control"]}
+
+
+def approved_baseline() -> dict:
+    """Current approved role assignments per protected list (role key -> levels). Service Read on Disciplines approved by
+    the project owner 2026-10-07 (POC-TIMESHEET-01: the R1 guard's Employees.Discipline lookup projection needs it);
+    Read only. A historical evidence record keeps the baseline it carries."""
+    a = {n: dict(_ADMIN, employees=["Read"]) for n in MASTER}
+    a["Disciplines"]["service"] = ["Read"]
+    a["Employees"]["service"] = ["TS Service"]
+    a["AppSettings"] = dict(_ADMIN)
+    a["AuditLog"] = dict(_ADMIN)
+    return a
 
 
 def classify_list(name: str, state: Mapping, approved: Mapping) -> tuple:
@@ -54,7 +67,7 @@ def evaluate(ev: Mapping) -> dict:
     t["PD05"] = (intent in ("INTENDED", "ACCIDENTAL", "UNKNOWN"), "intent = %s" % intent)
     cls["SITE"] = "EXPECTED" if ev.get("webRoleAssignmentsUnchanged") else "PERMISSION_DRIFT"
     cls["VISITORS GROUP"] = {"INTENDED": "INTENDED_SITE_ACCESS_ONLY", "ACCIDENTAL": "PERMISSION_DRIFT"}.get(intent, "UNKNOWN")
-    lists, approved = ev["lists"], ev["approved"]
+    lists, approved = ev["lists"], ev.get("approved") or approved_baseline()
     for name in PROTECTED:
         cls[name.upper()], why = classify_list(name, lists[name], approved[name])
         lists[name]["why"] = why

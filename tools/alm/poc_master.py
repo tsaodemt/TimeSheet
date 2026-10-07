@@ -23,6 +23,11 @@ FORBIDDEN_RIGHTS = {"DeleteListItems", "ManageLists", "ManagePermissions", "Full
 ALLOWED_MUTATIONS = {"DEMO_EMPLOYEE_ROW", "GROUP_MEMBERSHIP"}
 LATER_STAGES = ("POWER_APP_INTEGRATION", "POWER_AUTOMATE_INTEGRATION", "TIMESHEET_CRUD", "UAT", "PRODUCTION")
 DEMO_MARKER = "DEMO_ONLY"
+# Current approved service minimum on the protected lists (decoded rights, as in the evidence record). Disciplines Read
+# approved by the project owner 2026-10-07 (POC-TIMESHEET-01): the R1 guard reads DisciplineCode through the
+# Employees.Discipline lookup projection, which needs Read on the lookup target. Used when the evidence record carries
+# no baseline of its own; a historical record keeps the baseline it was evaluated with.
+SERVICE_BASELINE = {"Employees": ["ViewListItems", "AddListItems", "EditListItems"], "Disciplines": ["ViewListItems"]}
 
 
 def resolve_identity(rows: list) -> tuple:
@@ -85,7 +90,7 @@ def evaluate(ev: Mapping) -> dict:
         t[n] = _all([_denied(ev, l, op) for l in MASTER])
     t["PM15"] = _all([_denied(ev, "Employees", op) for op in ("CREATE", "EDIT", "DELETE")])
     svc = ev.get("serviceRights", {})
-    approved = ev.get("serviceApproved", {})
+    approved = ev.get("serviceApproved", SERVICE_BASELINE)
     svc_ok = all(set(svc.get(l, [])) == set(approved.get(l, [])) for l in PROTECTED) and \
         not any(FORBIDDEN_RIGHTS & set(svc.get(l, [])) for l in PROTECTED)
     user_fc = any(FORBIDDEN_RIGHTS & set(ev.get("userRights", {}).get(l, [])) for l in PROTECTED)

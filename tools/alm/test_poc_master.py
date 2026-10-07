@@ -1,4 +1,4 @@
-"""POC-MASTER-01 evaluator tests PMT01-PMT12 (offline; synthetic evidence)."""
+"""POC-MASTER-01 evaluator tests PMT01-PMT14 (offline; synthetic evidence)."""
 import copy
 import os
 import sys
@@ -113,6 +113,22 @@ class PocMasterTests(unittest.TestCase):
             self.assertEqual(f[s], "NOT DONE")
         self.assertEqual(pm.evaluate(ev(productionMutations=1))["foundation"]["POC-MASTER-01"], "FAIL")
 
+
+    def test_pmt13_current_baseline_expects_service_read_on_disciplines(self):
+        e = copy.deepcopy(GOOD)
+        del e["serviceApproved"]
+        e["serviceRights"] = {"Employees": ["ViewListItems", "AddListItems", "EditListItems"], "Disciplines": ["ViewListItems"]}
+        r = pm.evaluate(e)
+        self.assertEqual((r["tests"]["PM16"][0], r["score"]), ("PASS", "20/20"))
+        e["serviceRights"].pop("Disciplines")
+        self.assertEqual(pm.evaluate(e)["tests"]["PM16"][0], "FAIL", "Read on Disciplines is required, not optional")
+
+    def test_pmt14_service_write_on_disciplines_fails(self):
+        for extra in (["AddListItems"], ["EditListItems"], ["DeleteListItems"], ["ManageLists"], ["ManagePermissions"], ["FullMask"]):
+            e = copy.deepcopy(GOOD)
+            del e["serviceApproved"]
+            e["serviceRights"] = {"Employees": ["ViewListItems", "AddListItems", "EditListItems"], "Disciplines": ["ViewListItems"] + extra}
+            self.assertEqual(pm.evaluate(e)["tests"]["PM16"][0], "FAIL", extra)
 
 if __name__ == "__main__":
     unittest.main()

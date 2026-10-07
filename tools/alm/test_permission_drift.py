@@ -1,4 +1,4 @@
-"""PERMISSION-DRIFT-01 evaluator tests PDT01-PDT09 (offline; synthetic evidence)."""
+"""PERMISSION-DRIFT-01 evaluator tests PDT01-PDT11 (offline; synthetic evidence)."""
 import copy
 import os
 import sys
@@ -97,6 +97,27 @@ class PermissionDriftTests(unittest.TestCase):
         e["lists"]["AppSettings"]["eff"]["service"] = READ
         self.assertEqual(pd.evaluate(e)["tests"]["PD11"][0], "FAIL")
 
+
+    def test_pdt10_current_baseline_expects_service_read_on_disciplines(self):
+        base = pd.approved_baseline()
+        self.assertEqual(base["Disciplines"]["service"], ["Read"])
+        lists = copy.deepcopy(GOOD["lists"])
+        lists["Disciplines"]["ra"]["service"] = ["Read"]
+        lists["Disciplines"]["eff"]["service"] = READ
+        e = ev(lists=lists)
+        del e["approved"]
+        r = pd.evaluate(e)
+        self.assertEqual((r["classification"]["DISCIPLINES"], r["pass"]), ("EXPECTED", True))
+        self.assertEqual(pd.classify_list("Disciplines", lists["Disciplines"], APPROVED)[0], "PERMISSION_DRIFT", "historical baseline unchanged")
+
+    def test_pdt11_service_write_on_disciplines_is_drift(self):
+        for level in ("Contribute", "Edit", "Full Control", "TS Service"):
+            lists = copy.deepcopy(GOOD["lists"])
+            lists["Disciplines"]["ra"]["service"] = [level]
+            e = ev(lists=lists)
+            del e["approved"]
+            r = pd.evaluate(e)
+            self.assertEqual(r["classification"]["DISCIPLINES"], "PERMISSION_DRIFT", level)
 
 if __name__ == "__main__":
     unittest.main()
