@@ -107,7 +107,7 @@ class AuditEvent:
                 "CorrelationId": self.CorrelationId, "ActorUpn": self.ActorUpn,
                 "ActorEmployeeItemId": self.EmployeeId, "TargetList": self.TargetEntity, "TargetItemId": self.TargetId,
                 "TargetLegacyId": self.TargetLegacyId, "OwnerEmployeeItemId": self.OwnerEmployeeId,
-                "IsOnBehalf": self.IsOnBehalf, "WorkDate": self.WorkDate, "ScopeKind": self.ScopeKind,
+                "IsOnBehalf": self.IsOnBehalf, "WorkDate": self.WorkDate or None, "ScopeKind": self.ScopeKind,
                 "ScopeRef": self.ScopeRef, "SourceFlow": self.SourceFlow, "Environment": self.Environment,
                 "ChangeJson": self.ChangeJson, "Detail": detail}
 

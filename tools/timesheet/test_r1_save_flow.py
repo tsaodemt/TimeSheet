@@ -155,7 +155,7 @@ def req(**kw):
     return r
 
 
-def run_flow(upn, request, store, settings, roles=("EMP",), decoys=None, cid="run-rs", fail=(), reg=REG, ovl=OVL):
+def run_flow(upn, request, store, settings, roles=("EMP",), decoys=None, cid="run-rs", fail=(), reg=REG, ovl=OVL, fail_audit=None):
     posts, writes = [], []
     member_of = {"g-" + r.lower() for r in roles}
 
@@ -200,7 +200,10 @@ def run_flow(upn, request, store, settings, roles=("EMP",), decoys=None, cid="ru
         if method == "GET":
             return "Succeeded", wdl_sim.sharepoint_get(uri, {tg.EMP_LIST: tg.rows(tg.EMPS)})
         if method == "POST":
-            posts.append(json.loads(p["parameters/body"]))
+            row = json.loads(p["parameters/body"])
+            if fail_audit and row.get("EventType") == fail_audit:
+                return "Failed", {"statusCode": 400}
+            posts.append(row)
             return "Succeeded", {"Id": 1}
         raise AssertionError(name)
     trig = {"text" + ("" if i == 0 else "_%d" % i): str(request.get(k, "")) for i, k in enumerate(FIELDS)}

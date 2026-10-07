@@ -10,6 +10,12 @@ IMPLEMENTATION-SPEC §11.4 requires choice-column equality to be proven in POC P
 
 Offline simulation is not evidence of SharePoint's choice-filter semantics. P5 compares SharePoint's actual result with the reference.
 
+## Step 0 result (read-only, run)
+
+Step 0 ran read-only on STAGING: 7 GET requests, 0 writes. On the spike list, `EntryStatus` is a single-line **Text** column, not Choice. It is not indexed and has no choices, and its rows hold only Draft and Approved (no Deleted).
+
+A Text column cannot prove Choice-filter semantics. **The choice checks wait for `TimesheetEntries` (S06.1): BLOCKED UNTIL TIMESHEETENTRIES.** P5 stays PROCEDURE READY / NOT EXECUTED.
+
 ## Data
 
 - Reuse the existing synthetic read-proxy list: more than 5,000 rows, with `OwnerUpn` and `WorkDate` indexed. P5 does not create thousands of rows.

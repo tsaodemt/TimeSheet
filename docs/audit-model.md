@@ -90,4 +90,8 @@ Retention comes from `AppSettings`:
 
 Several audit events can live in one flow. Use the `name` parameter to keep action names apart; the default is `Audit_event` / `Write_Audit_event`.
 
-The guard's existing audit row remains as live-validated. Replacing it with `authorization_event_actions()` is part of wiring the audit lists.
+The guard's spike-era audit row (`legacy_audit=True`, the default) remains as live-validated for the spike flows. It does not fit `AuditLog`, because it has unknown columns and lacks the required ones. Flows that write `AuditLog` (the R1 flows) pass `legacy_audit=False` and record the decision with `authorization_event_actions()`.
+
+A row without a work date sends `WorkDate = null`, never `""`, because the column is a date.
+
+What happens when an audit append fails is an open decision (AUD-F1). Today the flows fail closed: nothing runs after a failed append, so a failed append after a persisted write leaves the caller without a response. See `r1-lists-auditlog-timesheetentries.md`.

@@ -56,7 +56,7 @@ def app_open_actions(*, site: str, domain: str, emp_list: str, audit_list: str, 
         "CorrelationId": "@{workflow()?['run']?['name']}", "ActorUpn": "@{outputs('Trusted')}",
         "ActorEmployeeItemId": "@if(%s, outputs('Emp')?['%s'], null)" % (ok, fields[0]),
         "TargetList": "", "TargetItemId": "", "TargetLegacyId": "", "OwnerEmployeeItemId": None, "IsOnBehalf": None,
-        "WorkDate": "", "ScopeKind": "", "ScopeRef": "", "SourceFlow": source_flow, "Environment": environment,
+        "WorkDate": None, "ScopeKind": "", "ScopeRef": "", "SourceFlow": source_flow, "Environment": environment,
         "ChangeJson": "", "Detail": "@{%s}" % _detail(untrusted_inputs, (), "outputs('ClientType')"),
     }, S("ClientType"))
     g["Write_" + name] = _write(audit_list, name)
@@ -88,7 +88,7 @@ def authorization_event_actions(*, audit_list: str, environment: str, source_flo
         "ResultCode": "@{%s}" % gr("ResultCode"), "OccurredOn": "@{utcNow('yyyy-MM-ddTHH:mm:ssZ')}",
         "CorrelationId": "@{%s}" % gr("CorrelationId"), "ActorUpn": "@{%s}" % nz(gr("AuthenticatedUpn")),
         "ActorEmployeeItemId": "@%s" % gr("EmployeeId"), "TargetList": "", "TargetItemId": "", "TargetLegacyId": "",
-        "OwnerEmployeeItemId": None, "IsOnBehalf": None, "WorkDate": "",
+        "OwnerEmployeeItemId": None, "IsOnBehalf": None, "WorkDate": None,
         "ScopeKind": "@{%s}" % kind, "ScopeRef": "@{%s}" % ref, "SourceFlow": source_flow, "Environment": environment,
         "ChangeJson": "", "Detail": "@{concat('ignored=', join(%s, ','), ';omitted=;client=')}" % gr("IgnoredInputs"),
     }, S(after))}
@@ -134,7 +134,8 @@ def operation_event_actions(event_type: str, action: str, *, target_entity: str,
         "ActorUpn": "@{%s}" % nz(gr("AuthenticatedUpn")), "ActorEmployeeItemId": "@%s" % gr("EmployeeId"),
         "TargetList": target_entity, "TargetItemId": txt(target_id_expr), "TargetLegacyId": txt(target_legacy_id_expr),
         "OwnerEmployeeItemId": opt(owner_employee_id_expr), "IsOnBehalf": opt(is_on_behalf_expr),
-        "WorkDate": txt(work_date_expr), "ScopeKind": "@{%s}" % kind, "ScopeRef": "@{%s}" % ref,
+        # WorkDate is a date-only DateTime column: null when there is no date, never "" (rejected by SharePoint)
+        "WorkDate": ("@if(empty(%s), null, %s)" % (wd, wd)) if work_date_expr else None, "ScopeKind": "@{%s}" % kind, "ScopeRef": "@{%s}" % ref,
         "SourceFlow": source_flow, "Environment": environment,
         "ChangeJson": "@{string(outputs('%s_change'))}" % name if keep else "",
         "Detail": "@{concat('ignored=', join(%s, ','), ';omitted=%s;client=')}" % (gr("IgnoredInputs"), ",".join(omitted)),

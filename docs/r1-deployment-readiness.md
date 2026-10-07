@@ -29,7 +29,7 @@ The INVOKER reference is never reported as missing service ownership. SERVICE re
 | Lists read | Employees, AppSettings | Employees, AppSettings, TimesheetEntries | Employees, AppSettings, TimesheetEntries, Projects, ProjectPhases, Phases, WorkTypes, Shifts, HourTypes; ProjectAssignments only when `ProjectAssignmentScoping = On` |
 | Lists written | AuditLog | AuditLog | TimesheetEntries (create / MERGE, no delete), AuditLog |
 | AppSettings | keys with `exposeToClient` (client subset only) | `BusinessTimezone` (no fixed UTC offset) | `PayPeriodStartDay`, `MaxHoursPerEntryWarn`, `MaxHoursPerDayWarn`, `ProjectAssignmentScoping`, `BusinessTimezone` |
-| Audit events | AppOpen / IdentityRejected | guard decision row + ReadProxy | guard decision row + AuthorizationAllow / AuthorizationDeny + WriteProxy |
+| Audit events | AppOpen / IdentityRejected | AuthorizationAllow / AuthorizationDeny + ReadProxy | AuthorizationAllow / AuthorizationDeny + WriteProxy |
 | Environment variables | `OpsSiteUrl`, `AllowedDomains`, `EnvironmentLabel`, list bindings | + `RoleGroupMap` | + `RoleGroupMap`, master-list bindings |
 | Date semantics | — | half-open UTC interval from `BusinessTimezone` (proven live by POC P4) | same-day sum on the business day |
 

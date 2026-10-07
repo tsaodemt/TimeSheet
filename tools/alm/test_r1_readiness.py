@@ -193,6 +193,18 @@ class R1Alm(unittest.TestCase):
         self.assertIn("INTERIM_CONFIG_NOT_UAT_READY", u.categories())
         self.assertFalse(r.ready or u.ready)
 
+    def test_RA15_phase1_lists_remove_only_their_own_blockers(self):
+        now = check(manifest=SAMPLE, overlay=OVL_NOW, state=STATE_NOW, permissions={}).categories()
+        audit = dict(STATE_NOW, AuditLog={"exists": True, "canonicalRows": 0, "live": True})
+        after = check(manifest=SAMPLE, overlay=OVL_NOW, state=audit, permissions={}).categories()
+        self.assertEqual(sorted(set(now) - set(after)), ["AUDIT_DEPENDENCY_UNAVAILABLE"])
+        both = dict(audit, TimesheetEntries={"exists": True, "canonicalRows": 0})
+        after2 = check(manifest=SAMPLE, overlay=OVL_NOW, state=both, permissions={}).categories()
+        self.assertEqual(sorted(set(now) - set(after2)), ["AUDIT_DEPENDENCY_UNAVAILABLE", "TARGET_LIST_MISSING"])
+        for c in ("D3_SERVICE_IDENTITY_MISSING", "CONNECTION_REFERENCE_UNBOUND", "PUBLISHER_PREFIX_UNRESOLVED", "ENVIRONMENT_UNRESOLVED",
+                  "REFERENCE_DATA_MISSING"):
+            self.assertIn(c, after2, "a list existing never removes D-3 / ENV-D3 / reference-data blockers")
+
     def test_RA12_unknown_purpose_or_flow(self):
         with self.assertRaises(ValueError):
             check("GO-LIVE")

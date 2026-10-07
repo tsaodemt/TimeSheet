@@ -57,6 +57,11 @@ P5 = {
                 "precondition": "read-only check: EntryStatus is a Choice column with Draft / Approved / Deleted; row counts per status "
                                 "for the synthetic owners",
                 "fallback": "if EntryStatus is not a Choice column there, run P5 on TimesheetEntries after S06.1 instead"},
+    # STEP 0 (read-only, run 2026-10-07 on STAGING, 7 GET requests, 0 writes): the spike list's EntryStatus is a
+    # single-line TEXT column (not Choice), not indexed, no choices; rows hold only Draft / Approved (no Deleted).
+    # A Text column cannot prove Choice-filter semantics, so the choice checks wait for TimesheetEntries (S06.1).
+    "stepZero": {"executed": True, "readOnly": True, "writes": 0, "fieldExists": True, "fieldType": "Text", "indexed": False,
+                 "choices": None, "statusesPresent": ["Approved", "Draft"], "conclusion": "BLOCKED UNTIL TIMESHEETENTRIES"},
     "newRows": {"count": 6, "only_if": "the dataset has no Deleted (or no Draft/Approved) rows for a synthetic owner",
                 "shape": "2 Draft, 2 Approved, 2 Deleted for one synthetic owner on 3 business dates"},
     "syntheticTag": "SYNTH-POC-P5-<yyyymmdd>",
@@ -123,6 +128,11 @@ def validate(spec: dict) -> list:
             p.append("P3 warm create/edit need >= 20 runs for a p95")
         if not spec.get("blockedBy"):
             p.append("P3 stays blocked until the R1 flow path is deployed legitimately")
+    z = spec.get("stepZero")
+    if z and z.get("executed") and (not z.get("readOnly") or z.get("writes")):
+        p.append("step 0 is read-only")
+    if z and z.get("fieldType") not in (None, "Choice") and z.get("conclusion") != "BLOCKED UNTIL TIMESHEETENTRIES":
+        p.append("a non-Choice field cannot prove Choice semantics: P5 waits for TimesheetEntries")
     if spec.get("id") == "P5":
         if P5_REQUIRED - {x["verifies"] for x in spec["checks"]}:
             p.append("P5 checks missing: %s" % sorted(P5_REQUIRED - {x["verifies"] for x in spec["checks"]}))

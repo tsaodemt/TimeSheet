@@ -188,7 +188,7 @@ class R1Read(unittest.TestCase):
         f, posts, _ = self.both(ME, {}, cid="run-corr-9")
         self.assertEqual(f["correlationId"], "run-corr-9")
         self.assertTrue(posts and all(p.get("CorrelationId") == "run-corr-9" for p in posts))
-        self.assertEqual([p["EventType"] for p in posts if p.get("EventType")], ["ReadProxy"])
+        self.assertEqual([p["EventType"] for p in posts], ["AuthorizationAllow", "ReadProxy"])
 
     def test_RR20_denied_identity_gets_no_rows(self):
         for upn, code in ((tg.u("stranger"), "UNMAPPED_IDENTITY"), (tg.u("gone"), "INACTIVE_EMPLOYEE")):

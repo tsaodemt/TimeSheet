@@ -291,6 +291,8 @@ def field_schema_xml(spec: dict, lookup_list_id: Optional[str] = None) -> str:
     inner = ""
     if t == "Choice":
         inner = "<CHOICES>%s</CHOICES>" % "".join("<CHOICE>%s</CHOICE>" % _esc(c) for c in spec.get("choices", []))
+    if spec.get("default") is not None:
+        inner += "<Default>%s</Default>" % _esc(spec["default"])
     if spec.get("validationFormula"):
         inner += "<Validation>%s</Validation>" % _esc(spec["validationFormula"])
     return "<Field %s>%s</Field>" % (" ".join('%s="%s"' % (k, _esc(v)) for k, v in attrs.items()), inner)

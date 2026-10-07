@@ -100,7 +100,7 @@ def identity_code_actions(*, domain: str, after: str, fields=FIELDS) -> dict:
 
 def guard_actions(scope_config: dict, role_groups, *, site: str, domain: str, emp_list: str, audit_list: str,
                   action_expr: str, kind_expr: str, ref_expr: str, untrusted_inputs=(),
-                  fields=FIELDS, temporary_roles=("MIGO",)) -> dict:
+                  fields=FIELDS, temporary_roles=("MIGO",), legacy_audit: bool = True) -> dict:
     """Actions for the `Guard` scope. *_expr are expressions (without '@') yielding the request's raw
     action name, scope kind and scope reference. role_groups = [(roleKey, groupObjectId), ...] (configuration)."""
     f_id, f_code, f_active, f_disc, f_upn = fields
@@ -189,4 +189,8 @@ def guard_actions(scope_config: dict, role_groups, *, site: str, domain: str, em
                          "Detail": "@{%s}" % detail}, S("Guard_result"))
     g["Write_audit"] = sp_http("POST", "_api/web/lists/getbytitle('%s')/items" % audit_list, S("Audit_body"),
                                "@{string(outputs('Audit_body'))}")
+    if not legacy_audit:
+        # the live-validated spike row (CallerUpnTrusted, ALLOWED/DENIED) does not fit the AuditLog schema; flows that
+        # write AuditLog record the decision with audit_template.authorization_event_actions() instead
+        del g["Audit_body"], g["Write_audit"]
     return base._fix(g)

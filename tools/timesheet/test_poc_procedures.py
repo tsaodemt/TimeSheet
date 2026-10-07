@@ -63,6 +63,18 @@ class PocProcedures(unittest.TestCase):
         s["checks"] = s["checks"][1:]
         self.assertTrue(pp.validate(s))
 
+    def test_PP07_p5_step0_recorded_and_blocks_choice_checks(self):
+        z = pp.P5["stepZero"]
+        self.assertEqual((z["readOnly"], z["writes"], z["fieldType"], z["indexed"], z["conclusion"]),
+                         (True, 0, "Text", False, "BLOCKED UNTIL TIMESHEETENTRIES"))
+        self.assertEqual((pp.P5["status"], pp.P5["executed"]), ("PROCEDURE READY / NOT EXECUTED", False))
+        s = copy.deepcopy(pp.P5)
+        s["stepZero"]["conclusion"] = "USE SPIKE LIST"
+        self.assertTrue(pp.validate(s), "a Text column is never generalised to Choice behaviour")
+        s = copy.deepcopy(pp.P5)
+        s["stepZero"]["writes"] = 1
+        self.assertTrue(pp.validate(s))
+
     def test_PP06_p5_filter_is_the_generated_one(self):
         """P5-05/P5-08 compare SharePoint with the exact filter TS-ReadOwn emits; this is that filter's shape."""
         _, _, run = rf.run_flow(rf.ME, {"FromDate": "2026-10-03", "ToDate": "2026-10-05"})

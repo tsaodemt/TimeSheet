@@ -70,8 +70,10 @@ def read_own_actions(*, scope_config, role_groups, site, domain, emp_list, audit
                      registry, overlay, settings_list="AppSettings", source_flow="TS-ReadOwn", refs=None) -> dict:
     """Trigger: text FromDate, text_1 ToDate, text_2 AfterId, text_3 PageSize, text_4 RequestedOwner, text_5..9 decoys."""
     g = gt.guard_actions(scope_config, role_groups, site=site, domain=domain, emp_list=emp_list, audit_list=audit_list,
-                         action_expr="'TS.ViewOwn'", kind_expr="'self'", ref_expr=EMPTY, untrusted_inputs=DECOYS)
-    g["From"] = c("@" + _tb("text"), S("Write_audit"))
+                         action_expr="'TS.ViewOwn'", kind_expr="'self'", ref_expr=EMPTY, untrusted_inputs=DECOYS, legacy_audit=False)
+    g.update(at.authorization_event_actions(audit_list=audit_list, environment=environment, source_flow=source_flow,
+                                            after="Guard_result", name="Authz_audit"))
+    g["From"] = c("@" + _tb("text"), S("Write_Authz_audit"))
     g["To"] = c("@" + _tb("text_1"), S("From"))
     g["AfterRaw"] = c("@" + _tb("text_2"), S("To"))
     g["SizeRaw"] = c("@" + _tb("text_3"), S("AfterRaw"))
@@ -217,9 +219,10 @@ def save_draft_actions(*, scope_config, role_groups, site, domain, emp_list, aud
         if not ready:
             raise ValueError("not ready for %s: %s" % (purpose, blockers))
     g = gt.guard_actions(scope_config, role_groups, site=site, domain=domain, emp_list=emp_list, audit_list=audit_list,
-                         action_expr="'TS.EditOwnDraft'", kind_expr="'self'", ref_expr=EMPTY, untrusted_inputs=SAVE_DECOYS)
+                         action_expr="'TS.EditOwnDraft'", kind_expr="'self'", ref_expr=EMPTY, untrusted_inputs=SAVE_DECOYS,
+                         legacy_audit=False)
     g.update(at.authorization_event_actions(audit_list=audit_list, environment=environment, source_flow=source_flow,
-                                            after="Write_audit", name="Authz_audit"))
+                                            after="Guard_result", name="Authz_audit"))
     prev = "Write_Authz_audit"
     for name, expr in (("ItemRaw", _tb("text")), ("ETagIn", _raw("text_1")), ("WD", _tb("text_2")), ("PC", _tb("text_3")),
                        ("PH", _tb("text_4")), ("WT", _tb("text_5")), ("SH", _tb("text_6")), ("HT", _tb("text_7")),
