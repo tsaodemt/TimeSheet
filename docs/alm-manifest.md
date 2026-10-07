@@ -20,3 +20,15 @@ A manifest may also carry a `flows` section. `lint` then checks that every conne
 ## Readiness after the service-identity decision
 
 `tools/alm/d3_readiness.py` refuses a deployment for a purpose (ENGINEERING, UAT, PRODUCTION) when the approved service identity is not configured for the environment (or is a temporary/test account), a required connection reference is missing, gated or owned by another account (references "provided by run-only user" are exempt by design), the service identity lacks Read — or holds more than Read — on a required list, an environment binding is unresolved, or configuration readiness fails (interim values are refused for UAT and PRODUCTION). It also refuses while the configured identity misses a D-3 acceptance criterion (`tools/alm/d3_acceptance.py`; each criterion needs recorded evidence, and the blocker names it). The identity comes only from environment configuration; no account is hard-coded. Tests: `tools/alm/test_d3_readiness.py` DR01–DR12.
+
+## Deployment target guard (staging / demo)
+
+`tools/alm/deployment_target_guard.py` refuses a deployment or readiness claim unless the selected Power Platform
+environment is exactly the approved dedicated staging environment (type Sandbox; never Default, Production, Developer,
+Teams or Trial), the publisher prefix is the approved staging prefix, the environment label variable equals the approved
+label (never PRODUCTION), every site-URL variable equals the approved staging site URL by exact string equality, and no
+variable value is a GUID. The approved values live in private configuration. Tests: `test_manifest_check.py` DG01–DG05.
+
+Creating a Sandbox with Dataverse needs available Dataverse database capacity (at least 1 GB) or a pay-as-you-go
+billing plan. A tenant with only Microsoft 365 licences has none; that is a capacity/billing decision, not something
+to work around with the Default environment.

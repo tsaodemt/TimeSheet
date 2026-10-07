@@ -75,5 +75,47 @@ class Manifest(unittest.TestCase):
             print("  %-40s %s" % (n, why))
 
 
+
+class DeploymentTargetGuard(unittest.TestCase):
+    """DG01-DG05: staging / demo deployment target guard (synthetic values)."""
+    SITE = "https://tenant-a.invalid/sites/app-staging"
+    APPROVED = {"environmentName": "App-Staging", "environmentType": "Sandbox", "siteUrl": SITE, "environmentLabel": "STAGING",
+                "prefix": "appstg"}
+    ENV = {"displayName": "App-Staging", "type": "Sandbox", "isDefault": False}
+
+    def man(self, site=SITE, label="STAGING", prefix="appstg"):
+        return {"solution": {"publisher": {"customizationPrefix": prefix}},
+                "environmentVariables": [{"schemaName": prefix + "_OpsSiteUrl", "values": {"staging": site}},
+                                         {"schemaName": prefix + "_EnvironmentLabel", "values": {"staging": label}},
+                                         {"schemaName": prefix + "_List_AuditLog", "values": {"staging": "AuditLog"}}]}
+
+    def g(self, man=None, env=None):
+        import deployment_target_guard as dg
+        return dg.check(man or self.man(), "staging", self.APPROVED, env or self.ENV)
+
+    def test_DG01_exact_staging_target_passes(self):
+        self.assertEqual(self.g(), [])
+
+    def test_DG02_default_production_or_other_environment_refused(self):
+        for env in ({"displayName": "Contoso (default)", "type": "Default", "isDefault": True},
+                    {"displayName": "App-Staging", "type": "Production", "isDefault": False},
+                    {"displayName": "App-Staging", "type": "Developer", "isDefault": False},
+                    {"displayName": "Other", "type": "Sandbox", "isDefault": False}):
+            self.assertTrue(self.g(env=env), env)
+
+    def test_DG03_site_url_must_match_exactly(self):
+        for site in ("https://tenant-a.invalid/", "https://tenant-a.invalid/sites/app", self.SITE + "/", self.SITE.upper()):
+            self.assertTrue(self.g(man=self.man(site=site)), site)
+
+    def test_DG04_environment_label_production_refused(self):
+        self.assertTrue(self.g(man=self.man(label="PRODUCTION")))
+
+    def test_DG05_prefix_and_guid_values_refused(self):
+        self.assertTrue(self.g(man=self.man(prefix="other")))
+        m = self.man()
+        m["environmentVariables"][2]["values"]["staging"] = "1b2c3d4e-0000-4000-8000-000000000000"
+        self.assertTrue(any("GUID" in x for x in self.g(man=m)))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
