@@ -75,6 +75,8 @@ def readiness(manifest: dict, env: str, scope: Optional[str] = "r1") -> tuple:
             continue
         if x.get("gated"):
             blockers.append((x["schemaName"], "gated: " + str(x.get("gatedBy"))))
+        elif x.get("invokerOwned"):
+            continue  # "provided by run-only user": the caller's own connection, deliberately not a service owner
         elif is_placeholder(str(x.get("connectionOwner") or "")) or not x.get("connectionOwner"):
             blockers.append((x["schemaName"], "connection owner not assigned"))
     if "<PFX>" in str([x.get("schemaName") for k in ("environmentVariables", "connectionReferences") for x in manifest.get(k, [])]):

@@ -125,6 +125,52 @@ def simulate(unique: bool, current: Iterable[Assignment], ops: list, admin_id: O
     return unique, list(cur.values())
 
 
+PHASE2_ROLES = {"Read"}
+
+
+def service_read_plan(site_url: str, allowed_url: str, lists: dict, *, owners_id: int, admin_id: int,
+                      service: Optional[dict], temporary_principals: Iterable = (), allowed_readers: dict = None) -> dict:
+    """Phase 2: grant the APPROVED operational service identity Read on already-hardened lists, nothing else.
+
+    lists: {title: (unique, [Assignment])} from a read-only snapshot. service: {"principal_id", "title", "approval"} from
+    environment configuration (None while D-3 is open -> GATED). allowed_readers: {title: {principal_id: role}} that may
+    legitimately exist (e.g. staff Read on master lists). Findings are reported, never auto-fixed:
+    NOT_HARDENED, OWNERS_MISSING, SECURITY_DRIFT (service holds more than Read), UNEXPECTED_PRINCIPAL.
+    Never removes anything, never touches Owners, never grants anything but Read."""
+    import schema_reconcile as sr  # site guard: exact allowed site, never a root site
+    sr.guard_site(site_url, allowed_url)
+    temp = {str(t).lower() for t in temporary_principals}
+    if service is not None:
+        if not service.get("principal_id") or not service.get("approval"):
+            raise PlanRefused("service grant without a resolved principal and an approval record")
+        if str(service["principal_id"]).lower() in temp or str(service.get("title", "")).lower() in temp:
+            raise PlanRefused("a temporary/test principal is never the approved service identity")
+    out = {"gated": service is None, "lists": {}}
+    for title, (unique, current) in lists.items():
+        ops, findings = [], []
+        have = {a.principal_id: a for a in current}
+        readers = (allowed_readers or {}).get(title, {})
+        if not unique:
+            findings.append(("NOT_HARDENED", "list still inherits site permissions"))
+        if "Full Control" not in (have.get(owners_id).effective if owners_id in have else set()):
+            findings.append(("OWNERS_MISSING", "Owners do not hold Full Control"))
+        known = {owners_id, admin_id} | set(readers) | ({service["principal_id"]} if service else set())
+        for pid, a in have.items():
+            if pid not in known and a.effective:
+                findings.append(("UNEXPECTED_PRINCIPAL", "%s holds %s" % (a.title, "+".join(sorted(a.effective)))))
+            elif pid in readers and a.effective - {readers[pid]}:
+                findings.append(("SECURITY_DRIFT", "%s holds %s (expected %s)" % (a.title, "+".join(sorted(a.effective)), readers[pid])))
+        if service is not None and unique:
+            cur = have.get(service["principal_id"])
+            eff = cur.effective if cur else set()
+            if eff - PHASE2_ROLES:
+                findings.append(("SECURITY_DRIFT", "service holds %s (expected Read only)" % "+".join(sorted(eff))))
+            elif "Read" not in eff:
+                ops.append(("add", {"principal_id": service["principal_id"], "role": "Read", "gate": "D-3"}))
+        out["lists"][title] = {"ops": ops, "findings": findings}
+    return out
+
+
 def requests(list_title: str, ops: list, role_ids: Optional[dict] = None) -> list:
     """SharePoint REST calls (site-relative) for the plan. Role definition ids are resolved at run time for custom levels."""
     ids = dict(ROLE_IDS, **(role_ids or {}))

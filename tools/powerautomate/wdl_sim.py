@@ -203,6 +203,9 @@ class Run:
         return a == b
     def f_greater(self, a, b): return a > b
     def f_less(self, a, b): return a < b
+    def f_setProperty(self, obj, k, v): return dict(obj, **{k: v})
+    def f_startsWith(self, s, t): return _str(s).lower().startswith(_str(t).lower())
+    def f_float(self, x): return float(x)
     def f_removeProperty(self, obj, k): return {x: v for x, v in obj.items() if x != k}
     def f_length(self, x): return len(x)
     def f_first(self, x): return x[0] if x else None

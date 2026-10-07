@@ -14,3 +14,7 @@ The Power Platform solution moves between environments (and tenants) by changing
 The environment-local manifest with real values is never committed.
 
 Tests: `tools/alm/test_manifest_check.py` M01–M07.
+
+## Readiness after the service-identity decision
+
+`tools/alm/d3_readiness.py` refuses a deployment for a purpose (ENGINEERING, UAT, PRODUCTION) when the approved service identity is not configured for the environment (or is a temporary/test account), a required connection reference is missing, gated or owned by another account (references "provided by run-only user" are exempt by design), the service identity lacks Read — or holds more than Read — on a required list, an environment binding is unresolved, or configuration readiness fails (interim values are refused for UAT and PRODUCTION). The identity comes only from environment configuration; no account is hard-coded. Tests: `tools/alm/test_d3_readiness.py` DR01–DR10.

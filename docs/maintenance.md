@@ -27,6 +27,7 @@ trusted caller → guard (action for this target) → validation → one service
 - `plan()` stops inheritance without copying, keeps the approved administrators, and removes stray writers on a list that already has unique permissions.
 - Service grants are GATED until their decision is approved. They are refused for temporary/test principals, without an approval record, and for any role other than Read or a no-delete service level.
 - A second run plans nothing. `requests()` returns the SharePoint REST calls.
+- `service_read_plan()` (phase 2): grants the approved service identity Read on already-hardened lists and nothing else; reports, never fixes, `SECURITY_DRIFT` (service holds more than Read, or an approved reader holds more than its role), `UNEXPECTED_PRINCIPAL`, `OWNERS_MISSING` and `NOT_HARDENED`; refuses temporary principals and grants without an approval record; exact-site guard. Tests: `tools/provisioning/test_permission_phase2.py` P201–P213.
 
 ## Flow template (offline)
 
