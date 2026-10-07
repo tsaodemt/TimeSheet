@@ -3,11 +3,13 @@
 Set TS_TARGET_SCHEMA=<target-schema.json> to also check the real (confidential) target definition (P12/P13 extras).
 """
 import copy
+import datetime
 import json
 import os
 import re
 import sys
 import unittest
+from zoneinfo import ZoneInfo
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -16,7 +18,7 @@ import schema_reconcile as sr  # noqa: E402
 ALLOWED = "https://tenant-a.invalid/sites/app-staging"
 MAIN = "https://tenant-a.invalid"
 F = lambda n, t, req=False, idx=False, uq=False, **k: dict(internalName=n, displayName=n, type=t, required=req, indexed=idx, unique=uq, **k)
-TARGET = {"businessTimeZone": {"iana": "Asia/Ho_Chi_Minh", "utcOffsetMinutes": 420, "dst": False}, "lists": [
+TARGET = {"businessTimeZone": {"iana": "Asia/Ho_Chi_Minh"}, "lists": [
     {"title": "Units", "template": 100, "fields": [F("Title", "Text", True), F("LegacyId", "Text", True, True, True),
                                                    F("UnitCode", "Text", True, True, True), F("IsActive", "Boolean", True, True)]},
     {"title": "Entries", "template": 100, "fields": [
@@ -188,7 +190,9 @@ class Provisioning(unittest.TestCase):
         wd = next(x for x in TARGET["lists"][1]["fields"] if x["internalName"] == "WorkDate")
         self.assertEqual((wd["type"], wd["dateOnly"], wd["required"], wd["indexed"]), ("DateTime", True, True, True))
         self.assertIn('Format="DateOnly"', sr.field_schema_xml(wd))
-        off = TARGET["businessTimeZone"]["utcOffsetMinutes"]
+        # the offset is DERIVED from the zone name (S04.7-Q1); it is never a separate setting
+        off = int(datetime.datetime(2026, 10, 6, tzinfo=ZoneInfo(TARGET["businessTimeZone"]["iana"])).utcoffset().total_seconds() // 60)
+        self.assertEqual(off, 420)
         self.assertEqual(sr.business_date("2026-10-06T18:30:00Z", off), "2026-10-07")
         self.assertEqual(sr.business_date("2026-10-06T16:59:59Z", off), "2026-10-06")
         self.assertEqual(sr.business_date("2026-10-06T17:00:00Z", off), "2026-10-07")
@@ -198,8 +202,8 @@ class Provisioning(unittest.TestCase):
         if os.environ.get("TS_TARGET_SCHEMA"):
             with open(os.environ["TS_TARGET_SCHEMA"], encoding="utf-8") as fh:
                 real = json.load(fh)
-            self.assertEqual((real["businessTimeZone"]["iana"], real["businessTimeZone"]["utcOffsetMinutes"], real["businessTimeZone"]["dst"]),
-                             ("Asia/Ho_Chi_Minh", 420, False))
+            self.assertEqual(real["businessTimeZone"]["iana"], "Asia/Ho_Chi_Minh")
+            self.assertFalse({"utcOffsetMinutes", "offset", "dst"} & set(real["businessTimeZone"]), "no independent offset setting")
             for l in real["lists"]:
                 for f in l["fields"]:
                     if f["internalName"] == "WorkDate":

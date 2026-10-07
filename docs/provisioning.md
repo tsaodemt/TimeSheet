@@ -44,6 +44,21 @@ SharePoint has no transactional schema rollback.
 
 Date-only business columns hold a business calendar date in the configured business time zone (`businessTimeZone` in the target schema). To derive a business date from an instant: convert the UTC instant to the business time zone, then take the local date (`business_date()`). Never truncate UTC.
 
+## Root sites and a future production cutover (design only)
+
+The site guard refuses every tenant root site, also when it is configured as the allowed site. This stays so.
+
+If production cutover ever targets an approved root site, an explicit override procedure is needed. `tools/provisioning/cutover_guard.py` is the offline design of its checks; it is **not** wired into `apply()`:
+- explicit cutover mode;
+- the exact approved production URL;
+- a human approval record (approver, time, change reference);
+- a fresh drift check of that site (within 60 minutes) without incompatible drift;
+- a dry-run plan whose hash equals the approved plan hash;
+- an explicit typed confirmation naming the URL and the plan hash;
+- an audit evidence record for the run log.
+
+Every failed condition is reported together. Tests: `test_cutover_guard.py` O01–O09 (including that the normal guard still refuses root sites).
+
 ## Reference data (seed rows)
 
 `tools/provisioning/reference_data.py` loads small master lists from a seed (rows keyed by a business key) with the same safety model:

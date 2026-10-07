@@ -31,7 +31,7 @@ class WorkClassification(unittest.TestCase):
         cls.target = {"lists": [copy.deepcopy(l) for l in cls.full["lists"] if l["title"] in LISTS]}
 
     def _decided(self, n1="<X>Code"):
-        """The S04.3 target once R04-N1 is decided for the `<X>Code` convention and the story gate is opened.
+        """The S04.3 target with the story gate opened (R04-N1 is resolved: <X>Code, 2026-10-07).
         Field gates (e.g. the confidential LegacyModifiedBy) stay closed."""
         t = copy.deepcopy(self.target)
         for l in t["lists"]:
@@ -63,12 +63,16 @@ class WorkClassification(unittest.TestCase):
         self.assertIn("<Validation>=[Factor]&gt;0</Validation>", sr.field_schema_xml(factor))
         self.assertFalse({"ApprovalStatus", "IsDeleted"} & {n for t in LISTS for n in self._fields(t)})
 
-    def test_W02_open_r04_n1_blocks_every_list_and_plans_nothing(self):
+    def test_W02_r04_n1_resolved_and_only_the_story_gate_holds_the_lists(self):
+        for t in LISTS:
+            fl = self._fields(t)
+            self.assertFalse([n for n, f in fl.items() if f.get("decision")], "no open decision on any S04.3 column (R04-N1, R04-N3 resolved)")
+            self.assertNotIn("Code", fl, "never a generic Code column (R04-N1)")
+            self.assertEqual(sorted(n for n in fl if n.endswith("Code")), [CODE[t]])
         f = sr.reconcile(self.target, {"site": ALLOWED, "lists": []})
         s = statuses(f)
         for t in LISTS:
-            self.assertEqual(s[(t, "")], sr.DECISION, t)
-            self.assertIn("R04-N1", next(x for x in f if x.list == t and not x.field).detail)
+            self.assertEqual(s[(t, "")], sr.GATED, t)  # S04.3 live provisioning still needs the owner go
         self.assertEqual(sr.plan(f), [])
         site = FakeSite({"site": ALLOWED, "lists": []})
         sr.apply(self.target, site.actual, site, ALLOWED, allowed_url=ALLOWED, dry_run=False)
@@ -151,9 +155,11 @@ class WorkClassification(unittest.TestCase):
         self.assertEqual(sr.plan(f), [])
         self.assertFalse(set(sr.ROLLBACK) & {"delete_list", "delete_field", "rename_field", "change_type"})
 
-    def test_W10_other_r04_n1_answer_changes_names_not_safety(self):
-        """If R04-N1 is answered differently (`Code`), the definition must be regenerated; until then the list stays blocked."""
-        t = self._decided(n1="Code")
+    def test_W10_a_reopened_key_decision_would_block_the_lists_again(self):
+        """Safety mechanism kept: an open decision on a key column blocks creating the list (no partial list)."""
+        t = self._decided()
+        for l in t["lists"]:
+            next(f for f in l["fields"] if f["internalName"] == CODE[l["title"]]).update(decision="reopened", decisionBlocksList=True)
         f = sr.reconcile(t, {"site": ALLOWED, "lists": []})
         self.assertTrue(all(statuses(f)[(x, "")] == sr.DECISION for x in LISTS))
         self.assertEqual(sr.plan(f), [])
