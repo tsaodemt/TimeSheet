@@ -165,5 +165,42 @@ class WorkClassification(unittest.TestCase):
         self.assertEqual(sr.plan(f), [])
 
 
+@unittest.skipUnless(os.environ.get("TS_TARGET_SCHEMA") and os.environ.get("TS_ASBUILT_LIVE"),
+                     "set TS_TARGET_SCHEMA and TS_ASBUILT_LIVE (inventory after the S04.3/S04.7 live run)")
+class PostLive(unittest.TestCase):
+    """L01-L03: the live STAGING schema equals the S04.3/S04.7 target; a second run plans nothing."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(os.environ["TS_TARGET_SCHEMA"], encoding="utf-8") as fh:
+            cls.full = json.load(fh)
+        with open(os.environ["TS_ASBUILT_LIVE"], encoding="utf-8") as fh:
+            cls.inv = json.load(fh)
+
+    def _opened(self, titles):
+        t = {"lists": [copy.deepcopy(l) for l in self.full["lists"] if l["title"] in titles]}
+        for l in t["lists"]:
+            l.pop("gate", None)
+        return t
+
+    def test_L01_s043_lists_reconcile_ok_except_the_confidential_gate(self):
+        f = sr.reconcile(self._opened(LISTS), self.inv)
+        bad = [x.line() for x in f if x.list in LISTS and not (x.status == sr.OK or (x.status == sr.GATED and x.field == "LegacyModifiedBy"))]
+        self.assertEqual(bad, [])
+        self.assertEqual(sr.plan(f), [])
+        for t in LISTS:
+            l = next(x for x in self.inv["lists"] if x["title"] == t)
+            self.assertEqual(l["itemCount"], 0, "schema only: no business rows")
+
+    def test_L02_appsettings_reconciles_ok(self):
+        f = [x for x in sr.reconcile(self._opened(["AppSettings"]), self.inv) if x.list == "AppSettings"]
+        self.assertTrue(f and all(x.status == sr.OK for x in f), [x.line() for x in f])
+
+    def test_L03_full_target_no_blocked_and_no_plan(self):
+        f = sr.reconcile(self.full, self.inv)
+        self.assertFalse([x for x in f if x.status == sr.BLOCKED])
+        self.assertEqual(sr.plan(f), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

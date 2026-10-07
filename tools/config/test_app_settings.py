@@ -227,6 +227,8 @@ class AppSettings(unittest.TestCase):
         self.assertIn("owner interim", a.basis)
         row = next(x for x in cfg.seed_rows(REG, STG) if x["Title"] == "AssignmentScoping")
         self.assertTrue(row["Description"].startswith("[INTERIM"))
+        for part in ("INTERIM: YES", "Q-3 OPEN", "ENGINEERING ONLY: YES", "UAT READY: NO", "PRODUCTION READY: NO"):
+            self.assertIn(part, row["Description"])
         self.assertIn("INTERIM", dict(cfg.drift(REG, cfg.seed_rows(REG, STG), STG))["AssignmentScoping"])
         self.assertTrue(cfg.gate(s, "AssignmentScoping").enabled, "engineering use is allowed")
         self.assertFalse(cfg.gate(s, "AssignmentScoping", allow_interim=False).enabled)

@@ -57,6 +57,7 @@ class Setting:
     detail: str = ""
     interim: bool = False
     basis: str = ""
+    decision: str = ""
 
 
 @dataclass
@@ -238,7 +239,8 @@ def resolve(registry: dict, overlay=None, site_rows: Optional[Iterable[Mapping]]
             out[k] = Setting(k, INVALID, None, err)
             continue
         is_interim = interim and _parse(d, ov_value)[0] == v
-        out[k] = Setting(k, CONFIGURED, v, src, interim=is_interim, basis=ov.get("basis", "") if is_interim else "")
+        out[k] = Setting(k, CONFIGURED, v, src, interim=is_interim, basis=ov.get("basis", "") if is_interim else "",
+                         decision=ov.get("customerDecision", "") if is_interim else "")
     for d in derived:
         src = out.get(d["derived"]["from"])
         if src is None or src.status != CONFIGURED:
@@ -306,7 +308,7 @@ def seed_rows(registry: dict, overlay=None) -> list:
         s = eff[d["key"]]
         desc = d.get("description", "")
         if s.interim:
-            desc = "[INTERIM - engineering only; customer decision open; not for UAT or production] " + desc
+            desc = ("[INTERIM: YES | %s | ENGINEERING ONLY: YES | UAT READY: NO | PRODUCTION READY: NO] " % (s.decision or "customer decision OPEN")) + desc
         rows.append({"Title": d["key"], "Value": _text(s.value) if s.status == CONFIGURED else "", "Description": desc})
     return rows
 
