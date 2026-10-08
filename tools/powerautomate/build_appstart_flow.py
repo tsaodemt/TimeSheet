@@ -1,7 +1,9 @@
 """TS-AppOpen with client configuration (offline template; NOT deployed).
 
     trusted caller (invoker's own Users connection) -> employee -> IdCode     (guard_template identity actions)
-      -> AppOpen / IdentityRejected audit row                                  (audit_template.app_open_actions, unchanged)
+      -> required references: Department/DepartmentCode and Discipline/DisciplineCode projected by the SERVICE read
+     must be non-empty (missing or broken lookup -> INVALID_EMPLOYEE_REFERENCE); Position optional, not read
+  -> AppOpen / IdentityRejected audit row (MANDATORY)                      (audit_template.app_open_actions)
       -> AppSettings read by the SERVICE connection (list is locked down: no human read, AS-1)
       -> client subset (keys marked exposeToClient in the registry), typed and validated like client_config.py
       -> response {ok, resultcode, messagecode, correlationid, employeecode, configstatus, config, interim, missing}
@@ -9,6 +11,10 @@
 Configuration knowledge is baked from the registry and the environment overlay at build time (exposed keys, types,
 bounds, fallback values, interim values allowed in this environment); a change means regenerating the template.
 Connections are solution connection-reference PLACEHOLDERS: no connection, account or UPN is bound here.
+
+Every run ends in exactly one PowerApp response with the same key set: `Respond` (normal path) or `Respond_error`
+(the normal path did not complete): caller-profile read failed -> DIRECTORY_ERROR; any later failure, including the
+mandatory audit write -> INTERNAL_ERROR. Errors return no employee code and no configuration.
 """
 from __future__ import annotations
 
@@ -24,7 +30,9 @@ bd = dr.bd
 CR = {base.SP: "<PFX>_CR_SharePoint_OpsService", base.USERS: "<PFX>_CR_O365Users_Invoker", base.GROUPS: "<PFX>_CR_O365Groups_OpsService"}
 MESSAGE = {"OK": "MSG_OK", "UNMAPPED_IDENTITY": "MSG_ACCOUNT_NOT_ENABLED", "INACTIVE_EMPLOYEE": "MSG_ACCOUNT_NOT_ENABLED",
            "DUPLICATE_IDENTITY": "MSG_ACCOUNT_NOT_ENABLED", "INVALID_IDENTITY": "MSG_ACCOUNT_NOT_ENABLED",
-           "ACCOUNT_NOT_ALLOWED": "MSG_ACCOUNT_NOT_ENABLED", "DIRECTORY_ERROR": "MSG_TEMPORARY_PROBLEM"}
+           "ACCOUNT_NOT_ALLOWED": "MSG_ACCOUNT_NOT_ENABLED", "DIRECTORY_ERROR": "MSG_TEMPORARY_PROBLEM",
+           "INVALID_EMPLOYEE_REFERENCE": "MSG_TEMPORARY_PROBLEM", "INTERNAL_ERROR": "MSG_TEMPORARY_PROBLEM"}
+REF_FIELDS = ("Department/DepartmentCode", "Discipline/DisciplineCode")   # required references (Position optional)
 
 
 def _lit(s):
@@ -130,7 +138,8 @@ def appstart_actions(*, site: str, domain: str, emp_list: str, audit_list: str, 
                      untrusted_inputs=("CallerUpn", "ActorUpn", "OwnerUpn", "EmployeeId", "Role", "Scope", "UserPrincipalName", "Config"),
                      refs: dict = None) -> dict:
     g = at.app_open_actions(site=site, domain=domain, emp_list=emp_list, audit_list=audit_list, environment=environment,
-                            client_type_expr=client_type_expr, untrusted_inputs=untrusted_inputs, fields=gt.EMPLOYEES_FIELDS)
+                            client_type_expr=client_type_expr, untrusted_inputs=untrusted_inputs, fields=gt.EMPLOYEES_FIELDS,
+                            ref_fields=REF_FIELDS)
     g.pop("Respond")
     ok = "equals(outputs('IdCode'), 'OK')"
     g["Settings_read"] = sp_http("GET", "_api/web/lists/getbytitle('%s')/items?$select=Title,Value&$top=500" % settings_list,
@@ -167,4 +176,11 @@ def appstart_actions(*, site: str, domain: str, emp_list: str, audit_list: str, 
                     "inputs": {"statusCode": 200, "body": body,
                                "schema": {"type": "object", "properties": {k: {"title": k, "x-ms-dynamically-added": True, "type": "string"}
                                                                             for k in body}}}}
+    err = "if(equals(actions('Get_caller_profile')?['status'], 'Succeeded'), 'INTERNAL_ERROR', 'DIRECTORY_ERROR')"
+    err_body = {"ok": "false", "resultcode": "@{%s}" % err, "messagecode": "MSG_TEMPORARY_PROBLEM",
+                "correlationid": "@{workflow()?['run']?['name']}", "employeecode": "", "configstatus": "", "config": "{}",
+                "interim": "{}", "missing": ""}
+    assert list(err_body) == list(body)
+    g["Respond_error"] = {"type": "Response", "kind": "PowerApp", "runAfter": {"Config_status": ["Failed", "Skipped", "TimedOut"]},
+                          "inputs": {"statusCode": 200, "body": err_body, "schema": g["Respond"]["inputs"]["schema"]}}
     return bind_connection_references(base._fix(g), refs)

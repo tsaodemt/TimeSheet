@@ -64,10 +64,10 @@ def u(name):
     return name + "@" + DOM
 
 
-EMPS = [Employee(11, "E1", u("emp"), True, "D1"), Employee(12, "E2", u("peer"), True, "D1"),
-        Employee(13, "E3", u("far"), True, "D2"), Employee(14, "E4", u("far2"), True, "D2"),
-        Employee(15, "E5", u("gone"), False, "D1"), Employee(16, "E6", u("twin"), True, "D1"),
-        Employee(17, "E7", u("twin"), True, "D2"), Employee(18, "E8", u("nodisc"), True, None)]
+EMPS = [Employee(11, "E1", u("emp"), True, "D1", "DEP1"), Employee(12, "E2", u("peer"), True, "D1", "DEP1"),
+        Employee(13, "E3", u("far"), True, "D2", "DEP2"), Employee(14, "E4", u("far2"), True, "D2", "DEP2"),
+        Employee(15, "E5", u("gone"), False, "D1", "DEP1"), Employee(16, "E6", u("twin"), True, "D1", "DEP1"),
+        Employee(17, "E7", u("twin"), True, "D2", "DEP2"), Employee(18, "E8", u("nodisc"), True, None, "DEP1")]
 
 
 def rows(emps):
@@ -78,7 +78,8 @@ def rows(emps):
 def lookup_rows(emps):
     """Operational `Employees` shape: the discipline code arrives through the expanded `Discipline` lookup (null when unset)."""
     return [{"Id": e.item_id, "LegacyId": e.legacy_id, "IsActive": e.is_active, "AccountUpn": e.account_upn,
-             "Discipline": {"DisciplineCode": e.discipline_id} if e.discipline_id else None} for e in emps]
+             "Discipline": {"DisciplineCode": e.discipline_id} if e.discipline_id else None,
+             "Department": {"DepartmentCode": e.department_id} if e.department_id else None} for e in emps]
 
 
 class Case:

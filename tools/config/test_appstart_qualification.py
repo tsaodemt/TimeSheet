@@ -1,4 +1,5 @@
 """OFFLINE-APPSTART-QUALIFICATION-01 tests AQ01-AQ16 (synthetic data only; run: python -m unittest).
+Updated by OFFLINE-APPSTART-GAP-FIX-01: the former gaps AS09/AS10/AS13 are now asserted as closed (AQ07, AQ12).
 
 Pins the CURRENT AppStart contract (reference appstart.py == generated flow build_appstart_flow.py, both run through the
 WDL simulator via test_appstart's harness) for the qualification checks AS02-AS17. Behaviour that the current contract
@@ -19,7 +20,7 @@ import wdl_sim  # noqa: E402
 
 RESPONSE_KEYS = ["ok", "resultCode", "messageCode", "correlationId", "employeeCode", "configStatus", "config", "interim", "missing"]
 CODES = {"OK", "INVALID_IDENTITY", "ACCOUNT_NOT_ALLOWED", "UNMAPPED_IDENTITY", "DUPLICATE_IDENTITY", "INACTIVE_EMPLOYEE",
-         "DIRECTORY_ERROR"}
+         "DIRECTORY_ERROR", "INVALID_EMPLOYEE_REFERENCE", "INTERNAL_ERROR"}
 FLOW_JSON = json.dumps(ta.FLOW)
 
 
@@ -83,17 +84,19 @@ class Qualification(unittest.TestCase):
         r, _, _ = both(tg.u("gone"))
         self.assertEqual((r["ok"], r["resultCode"], r["employeeCode"], r["config"]), (False, "INACTIVE_EMPLOYEE", "", {}))
 
-    def test_aq07_missing_discipline_current_behaviour(self):
-        # AS09 / AS10 GAP (documented): AppStart grants nothing and does not validate Department / Discipline; an active
-        # mapped row without a Discipline still gets OK. SharePoint enforces both lookups as required on write.
+    def test_aq07_missing_discipline_fails_closed(self):
+        # AS09 / AS10 (OFFLINE-APPSTART-GAP-FIX-01, decision 1): a required reference that does not resolve -> coded deny.
         r, _, _ = both(tg.u("nodisc"))
-        self.assertEqual((r["ok"], r["resultCode"]), (True, "OK"))
+        self.assertEqual((r["ok"], r["resultCode"], r["messageCode"], r["employeeCode"], r["config"]),
+                         (False, "INVALID_EMPLOYEE_REFERENCE", "MSG_TEMPORARY_PROBLEM", "", {}))
 
-    def test_aq08_department_and_position_not_read(self):
-        # AS11: Position (optional) and Department are not part of the projection -> an absent Position cannot fail AppStart.
+    def test_aq08_position_not_read(self):
+        # AS11: Position (optional) is not part of the projection -> an absent Position cannot fail AppStart.
         uri = next(re.search(r"\$select=([^&]+)", json.dumps(a)).group(1) for a in _walk(ta.FLOW)
                    if "AccountUpn eq" in json.dumps(a) and "$select=" in json.dumps(a) and a.get("type") != "Scope")
-        self.assertEqual(set(uri.split(",")), {"Id", "LegacyId", "IsActive", "Discipline/DisciplineCode", "AccountUpn"})
+        self.assertEqual(set(uri.split(",")), {"Id", "LegacyId", "IsActive", "Discipline/DisciplineCode", "AccountUpn",
+                                               "Department/DepartmentCode"})
+        self.assertEqual(len(uri.split(",")), 6)
 
     def test_aq09_response_shape_fixed_and_minimal(self):
         # AS12: the same keys for success and every failure; no item id, list name, URL, department / position values.
@@ -112,19 +115,21 @@ class Qualification(unittest.TestCase):
         # AS13: every identity code the flow can emit has a message code; no other result code exists.
         emitted = set(re.findall(r"'([A-Z_]+)'", ta.FLOW["IdCode"]["inputs"]))
         self.assertEqual(emitted, {"OK", "INVALID_IDENTITY", "DIRECTORY_ERROR", "UNMAPPED_IDENTITY", "DUPLICATE_IDENTITY",
-                                   "INACTIVE_EMPLOYEE"})
+                                   "INACTIVE_EMPLOYEE", "INVALID_EMPLOYEE_REFERENCE"})
         self.assertLessEqual(emitted, CODES)
         self.assertLessEqual(emitted, set(json.loads(json.dumps(__import__("build_appstart_flow").MESSAGE))))
 
-    def test_aq12_profile_failure_returns_no_success(self):
-        # AS13 GAP (documented): if MyProfile_V2 fails the run fails before Respond -> the app gets no response
-        # (client treats it as not-ok); there is no INTERNAL_ERROR result code in the current contract.
+    def test_aq12_profile_failure_is_coded(self):
+        # AS13 (decision 3): a failed MyProfile_V2 still ends in exactly one coded response.
         def mocks(name, a, p):
             if a["inputs"]["host"]["operationId"] == "MyProfile_V2":
                 return "Failed", {"error": "x"}
             return "Succeeded", {"value": []}
         run = wdl_sim.Run(trigger_body={"text": "Teams"}, run_name="r", mocks=mocks, now=ta.NOW).run(ta.FLOW)
-        self.assertNotEqual(run.results.get("Respond", {}).get("status"), "Succeeded")
+        self.assertNotEqual(run.results["Respond"]["status"], "Succeeded")
+        out = run.results["Respond_error"]["outputs"]
+        self.assertEqual((out["ok"], out["resultcode"], out["messagecode"], out["employeecode"], out["config"]),
+                         ("false", "DIRECTORY_ERROR", "MSG_TEMPORARY_PROBLEM", "", "{}"))
 
     def test_aq13_employees_read_by_service_not_user(self):
         # AS14: every SharePoint call uses the service connection reference; the caller needs no Employees access.

@@ -34,6 +34,8 @@ UNMAPPED_IDENTITY = "UNMAPPED_IDENTITY"      # no Employees row for the authenti
 DUPLICATE_IDENTITY = "DUPLICATE_IDENTITY"    # more than one Employees row claims the UPN (configuration error)
 INACTIVE_EMPLOYEE = "INACTIVE_EMPLOYEE"
 DIRECTORY_ERROR = "DIRECTORY_ERROR"          # lookup failed; never treated as "not found"
+INVALID_EMPLOYEE_REFERENCE = "INVALID_EMPLOYEE_REFERENCE"  # AppStart: required Department/Discipline missing or broken
+INTERNAL_ERROR = "INTERNAL_ERROR"            # AppStart: unexpected failure after identity entered processing (e.g. audit)
 UNKNOWN_ACTION = "UNKNOWN_ACTION"            # action not in the capability catalogue
 UNKNOWN_SCOPE = "UNKNOWN_SCOPE"              # requested scope kind unknown, or configured scope value not self/discipline/company
 DECISION_PENDING = "DECISION_PENDING"        # role/action decision not yet taken by the customer (default deny)
@@ -43,7 +45,8 @@ SCOPE_NOT_ALLOWED = "SCOPE_NOT_ALLOWED"      # action granted, requested target 
 
 ID_CODES = {idr.INVALID_IDENTITY: INVALID_IDENTITY, idr.ACCOUNT_NOT_ALLOWED: ACCOUNT_NOT_ALLOWED,
              idr.NOT_REGISTERED: UNMAPPED_IDENTITY, idr.DUPLICATE_MAPPING: DUPLICATE_IDENTITY,
-             idr.INACTIVE: INACTIVE_EMPLOYEE, idr.DIRECTORY_ERROR: DIRECTORY_ERROR}
+             idr.INACTIVE: INACTIVE_EMPLOYEE, idr.DIRECTORY_ERROR: DIRECTORY_ERROR,
+             idr.INVALID_EMPLOYEE_REFERENCE: INVALID_EMPLOYEE_REFERENCE}
 
 # Requested scope kinds. `ref` is the target employee code (employee) or discipline code (discipline).
 K_SELF, K_EMPLOYEE, K_DISCIPLINE, K_COMPANY = "self", "employee", "discipline", "company"

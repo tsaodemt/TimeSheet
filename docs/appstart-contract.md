@@ -1,10 +1,10 @@
 # AppStart (TS-AppOpen) — contract and offline qualification
 
-Status: **offline qualified** (OFFLINE-APPSTART-QUALIFICATION-01). Not deployed: no valid Power Platform STAGING environment
+Status: **offline qualified, gaps closed** (OFFLINE-APPSTART-QUALIFICATION-01, OFFLINE-APPSTART-GAP-FIX-01). Not deployed: no valid Power Platform STAGING environment
 is available yet. Reference `tools/config/appstart.py`; generated flow `tools/powerautomate/build_appstart_flow.py`
 (`appstart_actions`, alias AppStart in `tools/alm/r1_flows.py`); Canvas consumer `tools/powerapp/demo-r1/scrStartup.pa.yaml`.
 Tests: `tools/config/test_appstart.py` (AO01–AO22, reference == flow in the WDL simulator) and
-`tools/config/test_appstart_qualification.py` (AQ01–AQ16).
+`tools/config/test_appstart_qualification.py` (AQ01–AQ16), `tools/config/test_appstart_gapfix.py` (AF01–AF18).
 
 ## Chain (as implemented)
 
@@ -12,12 +12,14 @@ Tests: `tools/config/test_appstart.py` (AO01–AO22, reference == flow in the WD
 Canvas: 'TS-AppOpen'.Run(<client type>)
   → flow: Office 365 Users MyProfile_V2 on the INVOKER's own connection   (only identity source)
   → toLower(trim(userPrincipalName)), allowed-domain check
-  → SERVICE SharePoint read: Employees?$select=Id,LegacyId,IsActive,Discipline/DisciplineCode,AccountUpn
-                              &$filter=AccountUpn eq '<upn>'&$top=2
-  → 0 rows / >1 row / inactive → deny code;  1 active row → OK
-  → AppOpen / IdentityRejected audit row (service)
+  → SERVICE SharePoint read: Employees?$select=Id,LegacyId,IsActive,Discipline/DisciplineCode,AccountUpn,
+                              Department/DepartmentCode&$filter=AccountUpn eq '<upn>'&$top=2&$expand=Department,Discipline
+  → 0 rows / >1 row / inactive → deny code
+  → 1 active row: Department and Discipline must resolve (projected code non-empty) else INVALID_EMPLOYEE_REFERENCE;
+    Position optional (not read)
+  → AppOpen / IdentityRejected audit row (service) — MANDATORY
   → AppSettings read (service) → client configuration subset
-  → Response (PowerApp)
+  → Response (PowerApp): `Respond`, or `Respond_error` when the normal path did not complete
 ```
 
 ## Request
@@ -54,10 +56,27 @@ and AppStart grants nothing (no role lookup). Roles, scope and discipline are re
 | `UNMAPPED_IDENTITY` | `NOT_REGISTERED` | no row |
 | `DUPLICATE_IDENTITY` | `DUPLICATE_MAPPING` | more than one row (unique index bypassed / malformed data) |
 | `INACTIVE_EMPLOYEE` | `INACTIVE` | row not active |
-| `DIRECTORY_ERROR` | `DIRECTORY_ERROR` | Employees read failed (never treated as "not found") |
+| `INVALID_EMPLOYEE_REFERENCE` | `INVALID_EMPLOYEE_REFERENCE` | AppStart only: exactly one active row, but its required Department or Discipline lookup is missing, null or does not resolve |
+| `DIRECTORY_ERROR` | `DIRECTORY_ERROR` | Employees read failed, or the caller-profile read (`MyProfile_V2`) failed (never treated as "not found") |
+| `INTERNAL_ERROR` | — (AppStart response only) | unexpected failure after the identity entered processing, incl. a failed mandatory AppOpen audit write |
 | `ACCOUNT_NOT_ALLOWED` | `ACCOUNT_NOT_ALLOWED` | reference only (disabled / guest flag); the flow has no such flag and relies on the domain check |
 
-`docs/identity-resolution.md` §3 uses the reference names; `tools/identity/guard.py` `ID_CODES` maps them to the flow names.
+Message codes: `MSG_OK`; `MSG_ACCOUNT_NOT_ENABLED` for INVALID_IDENTITY, ACCOUNT_NOT_ALLOWED, UNMAPPED_IDENTITY,
+DUPLICATE_IDENTITY, INACTIVE_EMPLOYEE; `MSG_TEMPORARY_PROBLEM` for INVALID_EMPLOYEE_REFERENCE, DIRECTORY_ERROR,
+INTERNAL_ERROR. Every failure returns the same keys with no employee code and no configuration; the correlation id is
+always the flow run id. `tools/identity/guard.py` `ID_CODES` maps the reference names to the flow names
+(see `docs/identity-resolution.md` §3).
+
+## Employee references
+
+| Reference | AppStart | Returned |
+|---|---|---|
+| Department | **required** — must resolve | no |
+| Discipline | **required** — must resolve | no |
+| Position | optional — not read | no |
+
+Validated on the stored row read by the service; never from client values, display names, `Author`, `EmployeeAccount`
+or `LegacyId`. The guard flows (ReadOwn / SaveEntry) do not apply this check.
 
 ## Identity rules confirmed
 
@@ -68,15 +87,9 @@ and AppStart grants nothing (no role lookup). Roles, scope and discipline are re
 - Connections are solution connection-reference placeholders; no account, UPN, URL, secret or token is in source.
 - No Dataverse connector, no Default-environment or Production reference.
 
-## Gaps (not changed — decisions required)
+## Former gaps (closed by OFFLINE-APPSTART-GAP-FIX-01)
 
-1. **Department / Discipline not validated by AppStart.** An active mapped row with an empty or dangling Department or
-   Discipline lookup returns `OK` (AQ07). SharePoint enforces both as required on write, but nothing checks dangling
-   references at runtime and no `INVALID_EMPLOYEE_REFERENCE` code exists. Decide whether AppStart (or only the guard
-   flows that use the discipline) must fail closed, and with which code and message.
-2. **Department / Discipline / Position / display name are not returned.** The Canvas app gets only `employeecode`.
-   If the app must show employee context, the response contract must be extended (and the "no internals" rule kept).
-3. **No `INTERNAL_ERROR` result.** If `MyProfile_V2` or the audit write fails, the run fails before `Respond` (AQ12);
-   the app receives no response and the startup screen falls back to the access-denied screen with an empty code.
-   Fail-closed, but not a deterministic coded response.
-4. Position is optional in the schema and not read by AppStart, so a missing Position cannot fail AppStart (AQ08).
+1. Department / Discipline integrity → `INVALID_EMPLOYEE_REFERENCE` (decision 1; AF02–AF05, AQ07).
+2. Response not extended with employee context → unchanged public contract, no Canvas change (decision 2; AF16).
+3. Coded internal failure → `Respond_error`: `DIRECTORY_ERROR` for a failed caller-profile read, `INTERNAL_ERROR`
+   for any later failure incl. the mandatory audit write (decision 3; AF09–AF11, AQ12).

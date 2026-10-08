@@ -42,9 +42,9 @@ def _write(audit_list, name):
 
 def app_open_actions(*, site: str, domain: str, emp_list: str, audit_list: str, environment: str,
                      client_type_expr: str, untrusted_inputs=(), source_flow: str = "TS-AppOpen",
-                     fields=gt.FIELDS, name: str = "Audit_event") -> dict:
-    g = gt.caller_actions(site=site, emp_list=emp_list, fields=fields)
-    g.update(gt.identity_code_actions(domain=domain, after="Caller_rows", fields=fields))
+                     fields=gt.FIELDS, name: str = "Audit_event", ref_fields=()) -> dict:
+    g = gt.caller_actions(site=site, emp_list=emp_list, fields=fields, extra_select=ref_fields)
+    g.update(gt.identity_code_actions(domain=domain, after="Caller_rows", fields=fields, ref_fields=ref_fields))
     ok = "equals(outputs('IdCode'), 'OK')"
     g["ClientType"] = c("@if(greater(length(%s), 40), substring(%s, 0, 40), %s)" % ((nz(client_type_expr),) * 3), S("CallerDisc"))
     code = "if(%s, 'OK', outputs('IdCode'))" % ok

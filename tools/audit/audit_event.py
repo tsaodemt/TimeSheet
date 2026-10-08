@@ -155,10 +155,11 @@ def _split_scope(requested: str) -> tuple:
 
 def app_open(identity: Optional[idr.TrustedIdentity], lookup, config: idr.Config, *, correlation_id: str,
              environment: str, client_type: str = "", source_flow: str = "TS-AppOpen", now: Optional[str] = None,
-             **untrusted) -> AuditEvent:
+             require_references: bool = False, **untrusted) -> AuditEvent:
     """Application start. Resolved, active employee -> AppOpen/ALLOW/OK (session start).
-    Anything else -> IdentityRejected/DENY with the guard's identity code (access denied)."""
-    res = idr.resolve(identity, lookup, config)
+    Anything else -> IdentityRejected/DENY with the guard's identity code (access denied).
+    require_references (AppStart): invalid Department/Discipline -> IdentityRejected/DENY/INVALID_EMPLOYEE_REFERENCE."""
+    res = idr.resolve(identity, lookup, config, require_references=require_references)
     ok = res.ok
     emp = res.employee
     return AuditEvent(TimestampUtc=now or utc_now(), CorrelationId=correlation_id,

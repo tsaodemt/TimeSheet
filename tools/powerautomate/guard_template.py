@@ -79,9 +79,10 @@ def _select(fields) -> str:
     return ",".join(fields), ("&$expand=" + ",".join(exp)) if exp else ""
 
 
-def caller_actions(*, site: str, emp_list: str, fields=FIELDS) -> dict:
-    """Trusted caller (invoker's own Users connection) -> employee rows by AccountUpn ($top=2)."""
-    (sel, expand), f_upn, T = _select(fields), fields[4], o("Trusted")
+def caller_actions(*, site: str, emp_list: str, fields=FIELDS, extra_select=()) -> dict:
+    """Trusted caller (invoker's own Users connection) -> employee rows by AccountUpn ($top=2).
+    extra_select: additional projected fields (e.g. AppStart's required lookup references)."""
+    (sel, expand), f_upn, T = _select(tuple(dict.fromkeys(tuple(fields) + tuple(extra_select)))), fields[4], o("Trusted")
     return {
         "SiteUrl": c(site, {}),
         "Get_caller_profile": op(USERS, "MyProfile_V2", {"$select": "userPrincipalName,id"}, S("SiteUrl")),
@@ -94,16 +95,22 @@ def caller_actions(*, site: str, emp_list: str, fields=FIELDS) -> dict:
     }
 
 
-def identity_code_actions(*, domain: str, after: str, fields=FIELDS) -> dict:
-    """IdCode (OK or the identity deny code), Emp, CallerCode, CallerDisc."""
+def identity_code_actions(*, domain: str, after: str, fields=FIELDS, ref_fields=()) -> dict:
+    """IdCode (OK or the identity deny code), Emp, CallerCode, CallerDisc.
+    ref_fields (AppStart only): projected lookup values that must be non-empty on the resolved active row, else
+    INVALID_EMPLOYEE_REFERENCE (a missing or broken lookup projects as null)."""
     f_id, f_code, f_active, f_disc, f_upn = fields
     T, rows = o("Trusted"), "body('Caller_rows')"
+    last = "'OK'"
+    if ref_fields:
+        refs_ok = "and(true, %s)" % ", ".join("not(empty(%s))" % nz(_acc("first(%s)" % rows, f)) for f in ref_fields)
+        last = "if(%s, 'OK', 'INVALID_EMPLOYEE_REFERENCE')" % refs_ok
     g = {"IdCode": c("@if(or(empty(%(T)s), not(endsWith(%(T)s, '@%(D)s'))), 'INVALID_IDENTITY', "
                      "if(not(equals(actions('Caller_lookup')?['status'], 'Succeeded')), 'DIRECTORY_ERROR', "
                      "if(equals(length(%(R)s), 0), 'UNMAPPED_IDENTITY', "
                      "if(greater(length(%(R)s), 1), 'DUPLICATE_IDENTITY', "
-                     "if(not(equals(first(%(R)s)?['%(A)s'], true)), 'INACTIVE_EMPLOYEE', 'OK')))))"
-                     % dict(T=T, D=domain.lower(), R=rows, A=f_active), S(after))}
+                     "if(not(equals(first(%(R)s)?['%(A)s'], true)), 'INACTIVE_EMPLOYEE', %(L)s)))))"
+                     % dict(T=T, D=domain.lower(), R=rows, A=f_active, L=last), S(after))}
     ok = "equals(%s, 'OK')" % o("IdCode")
     g["Emp"] = c("@if(%s, first(%s), json('{}'))" % (ok, rows), S("IdCode"))
     g["CallerCode"] = c("@%s" % nz("outputs('Emp')?['%s']" % f_code), S("Emp"))

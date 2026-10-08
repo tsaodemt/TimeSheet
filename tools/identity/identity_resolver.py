@@ -29,6 +29,7 @@ NOT_REGISTERED = "NOT_REGISTERED"          # tenant user without an Employees ro
 INACTIVE = "INACTIVE"                      # mapped employee is not active
 DUPLICATE_MAPPING = "DUPLICATE_MAPPING"    # more than one Employees row claims the UPN (data error)
 DIRECTORY_ERROR = "DIRECTORY_ERROR"        # lookup failed; never treated as "not found"
+INVALID_EMPLOYEE_REFERENCE = "INVALID_EMPLOYEE_REFERENCE"  # resolved active row, required Department/Discipline missing or broken
 
 _UPN_RE = re.compile(r"^[a-z0-9._%+'-]+@[a-z0-9.-]+\.[a-z]{2,}$")
 
@@ -49,7 +50,8 @@ class Employee:
     legacy_id: str                       # stable business key (portable)
     account_upn: str                     # Employees.AccountUpn (stored normalised)
     is_active: bool
-    discipline_id: Optional[int] = None
+    discipline_id: Optional[int] = None  # resolved Discipline reference (None = missing or broken lookup)
+    department_id: Optional[object] = None  # resolved Department reference (None = missing or broken lookup)
 
 
 @dataclass(frozen=True)
@@ -93,10 +95,14 @@ def normalise_upn(raw: Optional[str]) -> Optional[str]:
 def resolve(identity: Optional[TrustedIdentity],
             lookup: Callable[[str], Iterable[Employee]],
             config: Config,
+            *, require_references: bool = False,
             **untrusted: object) -> Resolution:
     """Resolve the caller. `untrusted` swallows request-supplied fields (CallerUpn, OwnerUpn,
     ActorUpn, display name, Author, headers ...) so that callers can pass them for logging;
-    they are deliberately never read."""
+    they are deliberately never read.
+
+    require_references (AppStart): the resolved active row must also carry a resolvable Department and Discipline
+    (the stored lookups, as read by the service); otherwise INVALID_EMPLOYEE_REFERENCE. Position is optional."""
     del untrusted  # never trusted, never used
     if identity is None:
         return Resolution(INVALID_IDENTITY, detail="no platform identity")
@@ -119,6 +125,8 @@ def resolve(identity: Optional[TrustedIdentity],
     emp = matches[0]
     if not emp.is_active:
         return Resolution(INACTIVE, upn=upn)
+    if require_references and (emp.department_id in (None, "") or emp.discipline_id in (None, "")):
+        return Resolution(INVALID_EMPLOYEE_REFERENCE, upn=upn, detail="department or discipline reference invalid")
     member_of = {g.lower() for g in identity.group_ids}
     roles = [r for r in config.roles
              if (config.baseline_role_key and r.key == config.baseline_role_key)
