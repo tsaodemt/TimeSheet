@@ -161,7 +161,8 @@ class R1Alm(unittest.TestCase):
     def test_RA09_resolved_engineering_is_ready_with_notices(self):
         r = check()
         self.assertEqual((r.ready, r.blockers), (True, []))
-        self.assertIn(("CREATE_IDEMPOTENCY_INTERIM", "TS-SaveEntry", "R1-Q3 OPEN; exactly-once not guaranteed"), r.notices)
+        self.assertIn(("CREATE_RETRY_NON_IDEMPOTENT_R1", "TS-SaveEntry",
+                       "R1_KNOWN_LIMITATION_CREATE_RETRY_NON_IDEMPOTENT (approved); exactly-once not guaranteed"), r.notices)
         self.assertIn(("FIRST_LIVE_CHECK_PENDING", "TS-SaveEntry", "V-ETAG"), r.notices)
         self.assertIn(("FIRST_LIVE_CHECK_PENDING", "TS-ReadOwn", "V-LAZY"), r.notices)
 

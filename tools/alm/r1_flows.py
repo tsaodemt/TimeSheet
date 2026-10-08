@@ -53,15 +53,16 @@ FIRST_LIVE = {
     "V-SKIPPED": "actions('X') of a skipped action is readable null-safely (?[]) and reports status Skipped",
     "V-FAILONERROR": "a Compose whose date expression is invalid fails and is handled by its runAfter Failed branch",
     "V-ETAG": "odata.etag of the read-back after MERGE is the new ETag (not the one sent)",
+    "V-ERROR-RESPONDER": "Respond_error (runAfter Respond Skipped) answers Power Apps when a mandatory earlier step failed, never after Respond",
 }
 
 TEMPLATES = {
     "TS-AppOpen": {"alias": "AppStart", "template": "tools/powerautomate/build_appstart_flow.py:appstart_actions",
-                   "checks": ["V-LAZY", "V-INVOKER", "V-SKIPPED"]},
+                   "checks": ["V-LAZY", "V-INVOKER", "V-SKIPPED", "V-ERROR-RESPONDER"]},
     "TS-ReadOwn": {"alias": "ReadOwn", "template": "tools/powerautomate/build_r1_flows.py:read_own_actions",
-                   "checks": ["V-LAZY", "V-INVOKER", "V-SKIPPED", "V-FAILONERROR"]},
+                   "checks": ["V-LAZY", "V-INVOKER", "V-SKIPPED", "V-FAILONERROR", "V-ERROR-RESPONDER"]},
     "TS-SaveEntry": {"alias": "SaveEntry", "template": "tools/powerautomate/build_r1_flows.py:save_draft_actions",
-                     "checks": ["V-LAZY", "V-INVOKER", "V-SKIPPED", "V-FAILONERROR", "V-ETAG"]},
+                     "checks": ["V-LAZY", "V-INVOKER", "V-SKIPPED", "V-FAILONERROR", "V-ETAG", "V-ERROR-RESPONDER"]},
 }
 
 
@@ -154,9 +155,14 @@ def flow_entry(name, registry=None, overlay=None) -> dict:
          "triggerInputs": dep["triggerInputs"],
          "firstLiveChecks": meta["checks"]}
     if name == "TS-SaveEntry":
-        e["createIdempotency"] = {"status": "INTERIM / NOT GUARANTEED", "decision": "R1-Q3 OPEN", "requestKey": False,
-                                  "mitigation": ["app disables Save while a request is in flight", "WARN_DUPLICATE warning"],
+        e["createIdempotency"] = {"status": "NON_IDEMPOTENT_R1", "decision": "R1_KNOWN_LIMITATION_CREATE_RETRY_NON_IDEMPOTENT (approved)",
+                                  "requestKey": False,
+                                  "mitigation": ["app disables Save while a request is in flight", "WARN_DUPLICATE warning (advisory)",
+                                                 "duplicates stay visible; no silent deduplication"],
                                   "exactlyOnce": False}
+        e["preWriteFailures"] = {"callerProfile": "DIRECTORY_ERROR / MSG_TEMPORARY_PROBLEM",
+                                 "permissionAudit": "INTERNAL_ERROR / MSG_TEMPORARY_PROBLEM", "write": False,
+                                 "postWriteAudit": "AUD-F1 option B (AUDIT_DEGRADED)"}
         e["etagReadback"] = {"onFailure": "ok=true, etag='', warnings += WARN_RELOAD_REQUIRED; client re-reads before the next edit",
                              "staleEtagReturned": False}
     if name == "TS-ReadOwn":

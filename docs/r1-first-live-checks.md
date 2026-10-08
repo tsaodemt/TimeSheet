@@ -8,6 +8,7 @@ Some runtime facts cannot be established offline. Each check below runs on the f
 | V-INVOKER | all | The invoker Users reference runs with the run-only user's own connection inside the solution (formerly gate V-6). |
 | V-SKIPPED | all | `actions('X')` of a skipped action is readable null-safely (`?[]`) and reports `Skipped`. |
 | V-FAILONERROR | ReadOwn, SaveEntry | A Compose whose date expression is invalid fails, and the flow continues through its `runAfter: Failed` branch. |
+| V-ERROR-RESPONDER | all | A second Response action that runs after `Respond` is `Skipped` (`Respond_error`) returns to Power Apps when an earlier mandatory step failed (caller profile → `DIRECTORY_ERROR`, mandatory audit → `INTERNAL_ERROR`), and never runs when `Respond` ran. |
 | V-ETAG | SaveEntry | `odata.etag` read back after a MERGE is the new ETag. If it can't be read, the response has an empty ETag and `WARN_RELOAD_REQUIRED`. |
 
 ## V-LAZY — lazy branch evaluation

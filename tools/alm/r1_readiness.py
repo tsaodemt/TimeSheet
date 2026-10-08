@@ -19,7 +19,7 @@ templates by r1_flows.py), so a flow is only blocked by what it actually uses. E
   CONFIG_NOT_READY                      any other AppSettings readiness failure
 
 INVOKER-owned references (the run-only user's own connection) are never reported as missing service ownership.
-Notices do not block: first-live runtime checks still to run, interim create idempotency (R1-Q3).
+Notices do not block: first-live runtime checks still to run, the approved R1 non-idempotent create (known limitation).
 """
 from __future__ import annotations
 
@@ -187,7 +187,7 @@ def readiness(purpose: str, flows: Iterable[str] = R1_FLOWS, *, manifest: dict, 
             r.notices.append(("FIRST_LIVE_CHECK_PENDING", f["name"], c))
         idem = f.get("createIdempotency")
         if idem:
-            r.notices.append(("CREATE_IDEMPOTENCY_INTERIM", f["name"], "%s; exactly-once not guaranteed" % idem["decision"]))
+            r.notices.append(("CREATE_RETRY_NON_IDEMPOTENT_R1", f["name"], "%s; exactly-once not guaranteed" % idem["decision"]))
     seen, out = set(), []
     for x in r.blockers:
         if x not in seen:

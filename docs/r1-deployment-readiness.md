@@ -59,17 +59,14 @@ What each purpose accepts:
 
 Notices do not block:
 - `FIRST_LIVE_CHECK_PENDING` (`r1-first-live-checks.md`);
-- `CREATE_IDEMPOTENCY_INTERIM`.
+- `CREATE_RETRY_NON_IDEMPOTENT_R1` (approved known limitation).
 
-## Create idempotency (R1-Q3 open)
+## Create retry (R1: non-idempotent, approved)
 
-Create idempotency is **INTERIM / NOT GUARANTEED**. There is no RequestKey, and the generator accepts only `idempotency="none"`.
-
-Current engineering mitigation:
-- the app disables Save while a call is in flight;
-- `WARN_DUPLICATE` makes a repeated create visible.
-
-Exactly-once creation is not claimed.
+R1 create is **NON_IDEMPOTENT_R1** — an approved known limitation (`R1_KNOWN_LIMITATION_CREATE_RETRY_NON_IDEMPOTENT`,
+`docs/r1-known-limitations.md`). There is no RequestKey and no duplicate suppression; the generator accepts only
+`idempotency="none"`. Mitigation: the app disables Save while a call is in flight; `WARN_DUPLICATE` (advisory) makes a
+repeated create visible. Exactly-once creation is not claimed.
 
 ## D-3 — when the operational service identity exists
 
