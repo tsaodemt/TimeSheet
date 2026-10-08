@@ -148,6 +148,12 @@ class DemoApp(unittest.TestCase):
         self.assertNotIn(").Phase.Id", items)
 
 
+    def test_DA17_load_more_hidden_on_last_page(self):
+        # live STAGING: ReadOwn returns nextafterid "0" when the page is not full; the button must stay hidden
+        more = [c["btnMore"] for c in app.screens()["scrMyTimesheets"]["Children"] if "btnMore" in c][0]["Properties"]["Visible"]
+        self.assertIn('varNextAfter <> "0"', more)
+
+
 class DemoData(unittest.TestCase):
     def test_DD01_rows_valid_and_marked(self):
         self.assertEqual(dd.validate(dd.demo_rows()), [])

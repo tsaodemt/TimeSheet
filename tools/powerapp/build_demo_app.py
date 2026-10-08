@@ -185,7 +185,7 @@ def screens() -> dict:
                                     Visible='ThisItem.status = "Draft"',
                                     OnSelect="Set(varEdit, ThisItem); Navigate(scrEntry, ScreenTransition.None)")}]}},
             {"btnMore": ctl("Classic/Button@2.2.0", Text='"Load more"', X="20", Y="Parent.Height - 70",
-                            Visible="!IsBlank(varNextAfter) && varNextAfter <> \"\"",
+                            Visible="!IsBlank(varNextAfter) && varNextAfter <> \"\" && varNextAfter <> \"0\"",  # contract: nextafterid 0 = no more pages
                             OnSelect="Set(varAfter, Value(varNextAfter));\n" + READ)}]},
         "scrEntry": {"Children": [
             {"lblTitle": ctl("Label@2.5.1", Text='If(IsBlank(varEdit), "New entry", "Edit draft")', X="20", Y="10", Width="600", Height="50",
