@@ -125,7 +125,7 @@ Options and recommendations for AUD-F1, AUD-P1 and the unbounded read: `docs/aud
 - **Findings for the flows (2026-10-07):**
   - the WriteProxy row now stamps `TargetLegacyId` (the stored record's `LegacyId`) — fixed;
   - the discipline is read through the required `Discipline` lookup; an employee without one gets `CONFIG_INVALID` before any write — fixed;
-  - a no-date `TS-ReadOwn` for an owner with more than 5,000 entries would hit the threshold. Recommendation: the app always sends a range; the API decision stays open.
+  - a no-date `TS-ReadOwn` for an owner with more than 5,000 entries would hit the threshold. RESOLVED: the API now requires FromDate + ToDate (`VALIDATION_DATE` otherwise; OFFLINE-READOWN-GAP-FIX-01).
 
 ## Phased live plans
 

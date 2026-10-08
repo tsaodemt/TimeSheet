@@ -1,10 +1,11 @@
 # ReadOwn (TS-ReadOwn) — contract and offline qualification
 
-Status: **offline qualified with open decisions** (OFFLINE-READOWN-QUALIFICATION-01). Not deployed.
+Status: **offline qualified, decisions implemented** (OFFLINE-READOWN-QUALIFICATION-01, OFFLINE-READOWN-GAP-FIX-01). Not deployed.
 Reference `tools/timesheet/entries.py` (`read_own`, `ReadFilter`) after `tools/identity/guard.py` (`authorize`);
 generated flow `tools/powerautomate/build_r1_flows.py` (`read_own_actions`); date semantics `tools/timesheet/business_dates.py`
 and `tools/powerautomate/date_range.py` (POC P4 proven); Canvas consumer `tools/powerapp/demo-r1/scrMyTimesheets.pa.yaml`.
-Tests: `tools/timesheet/test_r1_read_flow.py` (RR01–RR23, reference == flow) and `test_readown_qualification.py` (RQ01–RQ20).
+Tests: `tools/timesheet/test_r1_read_flow.py` (RR01–RR23, reference == flow), `test_readown_qualification.py` (RQ01–RQ20),
+`test_readown_gapfix.py` (RF01–RF24).
 
 ## Chain
 
@@ -17,6 +18,8 @@ Canvas: 'TS-ReadOwn'.Run(FromDate, ToDate, AfterId, PageSize, RequestedOwner)
        and EntryStatus ne 'Deleted' and Id gt <AfterId> &$orderby=Id asc &$top=<PageSize ≤ 500>
   → leak check (any foreign or Deleted row → ERROR_LEAK, no rows)
   → ReadProxy audit row (mandatory) → Response
+  (normal path not completed → Respond_error: DIRECTORY_ERROR for a failed caller-profile read, INTERNAL_ERROR for a
+   failed mandatory audit append or other internal step; no rows)
 ```
 
 ## Ownership
@@ -35,14 +38,16 @@ fields are logged as claimed values only; there is no request field for an emplo
 
 | Input | Rule |
 |---|---|
-| `FromDate`, `ToDate` | `yyyy-MM-dd` business dates; **both or neither**; reversed / malformed / single → `VALIDATION_DATE` |
+| `FromDate`, `ToDate` | `yyyy-MM-dd` business dates; **both mandatory**; missing, single, malformed or reversed → `VALIDATION_DATE` |
 | `AfterId` | keyset cursor (integer ≥ 0) |
 | `PageSize` | 1–500 (default 500; clamped) |
 | `RequestedOwner` | optional; must equal the caller |
 
 Business dates use the configured `BusinessTimezone` (Asia/Ho_Chi_Minh): a date is stored as local midnight in UTC; a
-range is the half-open UTC interval [local from 00:00, local to+1 00:00). No pay-period / PeriodKey input; no maximum
-span is defined.
+range is the half-open UTC interval [local from 00:00, local to+1 00:00). An undated read is forbidden. **No maximum span
+is currently defined** (bounded by the mandatory range, PageSize ≤ 500 and keyset paging). **PeriodKey is not a request
+field**: a pay period is sent as FromDate + ToDate; `TimesheetEntries.PeriodKey` is never used for filtering, ownership or
+authorization by ReadOwn.
 
 ## Response (all values strings)
 
@@ -56,21 +61,22 @@ Empty own result → `ok = true`, `rows = []`. Status filter: Draft and Approved
 
 `OK`; guard codes `INVALID_IDENTITY`, `UNMAPPED_IDENTITY`, `DUPLICATE_IDENTITY`, `INACTIVE_EMPLOYEE`, `DIRECTORY_ERROR`,
 `ROLE_NOT_ALLOWED` (and the other guard deny codes); `FORBIDDEN`; `VALIDATION_DATE`; `VALIDATION_LOOKUP` (bad
-AfterId / PageSize); `CONFIG_UNRESOLVED` (business time zone); `ERROR` (TimesheetEntries query failed); `ERROR_LEAK`.
+AfterId / PageSize); `CONFIG_UNRESOLVED` (business time zone); `ERROR` (TimesheetEntries query failed); `ERROR_LEAK`;
+`DIRECTORY_ERROR` / `MSG_TEMPORARY_PROBLEM` (caller-profile read failed); `INTERNAL_ERROR` / `MSG_TEMPORARY_PROBLEM`
+(a mandatory audit append — Authorization or ReadProxy — or another internal step failed). Every handled failure returns
+the same keys with `rows = []`, `nextafterid = 0`, `pagesize = 0`; a mandatory audit failure never returns rows.
 
 ## Paging and volume
 
 Keyset paging (`Id gt AfterId`, `$orderby=Id asc`, `$top ≤ 500`, `nextafterid`) returns every row exactly once across
-pages (RQ12); the Canvas app pages with `nextafterid` and always sends a date range. The first indexed filter is
-`OwnerUpn`: an owner with more than 5,000 rows makes an unbounded query exceed the list view threshold and return
-`ERROR` (safe, no rows).
+pages (RQ12, RF20); the Canvas app pages with `nextafterid` and always sends a date range. The first indexed filter is
+`OwnerUpn`; with the mandatory range the threshold risk of an undated owner-wide query no longer exists. A query that
+still exceeds a SharePoint limit returns `ERROR` (safe, no rows).
 
-## Open decisions (not changed here)
+## Decisions (OFFLINE-READOWN-GAP-FIX-01)
 
-1. **Unbounded read** — dates are optional by contract; without them the read is bounded by page size only. Decide
-   before production: keep optional unbounded reads, or reject them / cap the span (`docs/auditlog-open-decisions.md`).
-2. **Read-audit failure semantics** — if the Authorization or ReadProxy audit append fails (or the caller profile read
-   fails) the run ends before `Respond`: fail closed (no rows reach the caller) but no coded response. AUD-F1 option B
-   was decided for SaveEntry only; decide the read-side behaviour (e.g. a coded `ERROR` / `DIRECTORY_ERROR` response).
-3. **PeriodKey** — the read is date-range based; PeriodKey is not an input. Confirm that a pay-period read is always
-   expressed as a date range by the client.
+1. **Mandatory date range** — FromDate + ToDate required; undated reads → `VALIDATION_DATE`. No maximum span yet (a
+   business-period cap would be a separate decision).
+2. **PeriodKey** — not part of the request contract; pay periods are expressed as FromDate + ToDate.
+3. **Coded failures** — `DIRECTORY_ERROR` (caller profile / directory), `ERROR` (TimesheetEntries query),
+   `INTERNAL_ERROR` (mandatory audit or other internal failure); both audit appends stay mandatory.

@@ -116,13 +116,14 @@ class BusinessDateRange(unittest.TestCase):
         self.assertEqual((r["code"], got), (E.VALIDATION_DATE, []), "R1 contract: both dates or neither")
         self.assertNotIn(" ge datetime", E.ReadFilter(ME, None, "2026-10-07", 0, 5, TZ).odata())
 
-    def test_RD13_no_date_filter(self):
+    def test_RD13_undated_read_refused(self):
+        # OFFLINE-READOWN-GAP-FIX-01: FromDate + ToDate are mandatory; an undated read never reaches the query.
         st = SharePointLike(days("2026-10-05", "2026-10-09"))
         r, got = read(st)
-        self.assertEqual(got, days("2026-10-05", "2026-10-09"))
-        self.assertNotIn("WorkDate", E.ReadFilter(ME, None, None, 0, 5, TZ).odata())
-        r = E.read_own(GUARD, CALLER, {}, st, correlation_id="c")  # the zone is needed even without a range (business-date output)
-        self.assertEqual(r["code"], E.CONFIG_UNRESOLVED)
+        self.assertEqual((r["code"], got), (E.VALIDATION_DATE, []))
+        self.assertNotIn("WorkDate", E.ReadFilter(ME, None, None, 0, 5, TZ).odata())  # internal filter builder only
+        r = E.read_own(GUARD, CALLER, {"FromDate": "2026-10-05", "ToDate": "2026-10-06"}, st, correlation_id="c")
+        self.assertEqual(r["code"], E.CONFIG_UNRESOLVED, "the zone is needed for every read")
         r = E.read_own(GUARD, CALLER, {"FromDate": "2026-10-05", "ToDate": "2026-10-06"}, st, correlation_id="c", business_timezone="Mars/Base")
         self.assertEqual(r["code"], E.CONFIG_UNRESOLVED, "unknown time zone fails closed")
 

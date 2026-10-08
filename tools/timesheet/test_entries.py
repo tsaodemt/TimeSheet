@@ -247,6 +247,7 @@ class Read(unittest.TestCase):
                                  "EntryStatus": "Deleted" if i == 5 else "Draft", "Hours": 1}, "e%d-1" % i)
 
     def read(self, **r):
+        r = dict({"FromDate": "2026-10-01", "ToDate": "2026-10-31"}, **r)  # a date range is mandatory
         return E.read_own(guard(), CALLER, r, self.st, correlation_id="run-2", business_timezone="Asia/Ho_Chi_Minh")
 
     def test_E18_own_rows_only_paged_without_deleted(self):
@@ -271,7 +272,8 @@ class Read(unittest.TestCase):
         class Leaky(FakeStore):
             def query(self, flt):
                 return [(4, {"OwnerUpn": OTHER, "EntryStatus": "Draft"}, "e")]
-        r = E.read_own(guard(), CALLER, {}, Leaky(), correlation_id="c", business_timezone="Asia/Ho_Chi_Minh")
+        r = E.read_own(guard(), CALLER, {"FromDate": "2026-10-01", "ToDate": "2026-10-31"}, Leaky(), correlation_id="c",
+                       business_timezone="Asia/Ho_Chi_Minh")
         self.assertEqual((r["ok"], r["code"], r["rows"]), (False, E.ERROR_LEAK, []))
 
     def test_E22_page_size_clamped_and_filter_text(self):
@@ -285,7 +287,7 @@ class Read(unittest.TestCase):
         r = E.read_own(guard(), CALLER, {"FromDate": "2026-10-01", "ToDate": "2026-10-02"}, self.st, correlation_id="c")
         self.assertEqual((r["ok"], r["code"], r["rows"]), (False, E.CONFIG_UNRESOLVED, []))
         r = E.read_own(guard(), CALLER, {}, self.st, correlation_id="c")
-        self.assertEqual((r["ok"], r["code"]), (False, E.CONFIG_UNRESOLVED), "every read needs the zone (business-date output)")
+        self.assertEqual((r["ok"], r["code"]), (False, E.VALIDATION_DATE), "an undated read is refused before the zone check")
         with self.assertRaises(ValueError):
             E.ReadFilter("a", "2026-10-01", None, 0, 1).odata()  # no business time zone configured
 

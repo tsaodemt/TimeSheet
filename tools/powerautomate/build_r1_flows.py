@@ -68,7 +68,8 @@ def _settings(g, registry, overlay, keys, after, settings_list):
 
 def read_own_actions(*, scope_config, role_groups, site, domain, emp_list, audit_list, conf_audit_list, environment,
                      registry, overlay, settings_list="AppSettings", source_flow="TS-ReadOwn", refs=None) -> dict:
-    """Trigger: text FromDate, text_1 ToDate, text_2 AfterId, text_3 PageSize, text_4 RequestedOwner, text_5..9 decoys."""
+    """Trigger: text FromDate, text_1 ToDate (both mandatory), text_2 AfterId, text_3 PageSize, text_4 RequestedOwner,
+    text_5..9 decoys. PeriodKey is not an input: a pay period is sent as FromDate + ToDate."""
     g = gt.guard_actions(scope_config, role_groups, site=site, domain=domain, emp_list=emp_list, audit_list=audit_list,
                          action_expr="'TS.ViewOwn'", kind_expr="'self'", ref_expr=EMPTY, untrusted_inputs=DECOYS, legacy_audit=False,
                          fields=gt.EMPLOYEES_FIELDS)
@@ -88,7 +89,8 @@ def read_own_actions(*, scope_config, role_groups, site, domain, emp_list, audit
     has = "or(not(empty(%s)), not(empty(%s)))" % (F, T)
     # the reversed-range test only ever sees well-formed dates: invalid input is replaced before any date function runs
     both_ok = "and(%s, %s, equals(actions('Date_check')?['status'], 'Succeeded'))" % (_date_shape_ok(F), _date_shape_ok(T))
-    date_bad = ("or(not(equals(actions('Date_check')?['status'], 'Succeeded')), not(equals(empty(%s), empty(%s))), "
+    # FromDate AND ToDate are mandatory (no undated read; no maximum span); malformed or reversed -> VALIDATION_DATE
+    date_bad = ("or(not(equals(actions('Date_check')?['status'], 'Succeeded')), or(empty(%s), empty(%s)), "
                 "and(not(empty(%s)), not(%s)), and(not(empty(%s)), not(%s)), "
                 "and(not(empty(%s)), not(empty(%s)), %s))"
                 % (F, T, F, _date_shape_ok(F), T, _date_shape_ok(T), F, T,
@@ -121,7 +123,9 @@ def read_own_actions(*, scope_config, role_groups, site, domain, emp_list, audit
     g["If_ok"] = {"type": "If", "runAfter": S("Size"), "expression": {"equals": ["@outputs('Validation')", "OK"]},
                   "actions": {"Filter": filt, "Query": query}, "else": {"actions": {}}}
     rows = _rows("Query")
-    g["Rows"] = c("@" + rows, {"If_ok": ["Succeeded", "Failed", "Skipped", "TimedOut"]})
+    # not after Skipped: If_ok is skipped only when an earlier mandatory step failed (profile, authorization audit);
+    # that path ends in Respond_error, never in a data response
+    g["Rows"] = c("@" + rows, {"If_ok": ["Succeeded", "Failed", "TimedOut"]})
     g["Leak"] = {"type": "Query", "runAfter": S("Rows"), "inputs": {"from": "@outputs('Rows')", "where":
                  "@or(not(equals(toLower(%s), %s)), equals(%s, 'Deleted'))" % (nz("item()?['OwnerUpn']"), trusted, nz("item()?['EntryStatus']"))}}
     g["Final_code"] = c("@if(not(equals(outputs('Validation'), 'OK')), outputs('Validation'), if(not(equals(actions('Query')?['status'], 'Succeeded')), 'ERROR', "
@@ -144,6 +148,14 @@ def read_own_actions(*, scope_config, role_groups, site, domain, emp_list, audit
     g["Respond"] = {"type": "Response", "kind": "PowerApp", "runAfter": S("Write_Read_audit"),
                     "inputs": {"statusCode": 200, "body": body, "schema": {"type": "object", "properties": {
                         k: {"title": k, "x-ms-dynamically-added": True, "type": "string"} for k in body}}}}
+    # Exactly one coded response when the normal path did not complete: caller-profile read failed -> DIRECTORY_ERROR;
+    # a mandatory audit append (authorization or ReadProxy) or other internal step failed -> INTERNAL_ERROR. No rows.
+    err = "if(equals(actions('Get_caller_profile')?['status'], 'Succeeded'), 'INTERNAL_ERROR', 'DIRECTORY_ERROR')"
+    err_body = {"ok": "false", "resultcode": "@{%s}" % err, "messagecode": "MSG_TEMPORARY_PROBLEM",
+                "correlationid": "@{workflow()?['run']?['name']}", "rows": "[]", "nextafterid": "0", "pagesize": "0"}
+    assert list(err_body) == list(body)
+    g["Respond_error"] = {"type": "Response", "kind": "PowerApp", "runAfter": {"Respond": ["Skipped"]},
+                          "inputs": {"statusCode": 200, "body": err_body, "schema": g["Respond"]["inputs"]["schema"]}}
     return baf.bind_connection_references(base._fix(g), refs)
 
 

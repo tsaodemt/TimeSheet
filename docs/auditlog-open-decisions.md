@@ -1,4 +1,4 @@
-# AuditLog and R1 read: open decisions (AUD-P1, AUD-F1, unbounded read)
+# AuditLog and R1 read: open decisions (AUD-P1, AUD-F1; unbounded read RESOLVED)
 
 Decision support only. Nothing here is approved or deployed. The recommendations are for the project owner to accept or reject.
 
@@ -83,10 +83,14 @@ tests AF01–AF08). Option C (durable outbox / retry) is a production-hardening 
 | 3. The API rejects an unbounded read with `VALIDATION_DATE`, or limits the span (e.g. at most 12 periods) | **yes** (R1 contract) | threshold-safe by design |
 
 **Recorded recommendation (project owner 2026-10-07):** the Power App always calls `TS-ReadOwn` with a bounded range,
-normally the active pay period. Unbounded API behaviour stays an OPEN production-hardening decision: before production,
-decide A (retain optional unbounded reads) or B (reject unbounded reads). It does not block the engineering R1 demo.
+normally the active pay period.
 
-Earlier recommendation: adopt **1 now** (app design S05.2/S06; no contract change). Decide between **2 and 3** before production, after migration volumes are known. The R1 contract is unchanged; this decision is **OPEN**.
+**RESOLVED (project owner, OFFLINE-READOWN-GAP-FIX-01): option 3 without a span cap** — `TS-ReadOwn` requires
+`FromDate` and `ToDate`; an undated read returns `VALIDATION_DATE`. No maximum span is defined yet (separate decision).
+Read-side audit failure is also decided: a failed Authorization or ReadProxy append returns `INTERNAL_ERROR` with no rows;
+a failed caller-profile read returns `DIRECTORY_ERROR` (`docs/readown-contract.md`).
+
+Earlier recommendation (superseded): adopt 1 now and decide between 2 and 3 before production. Decided: 3 (mandatory range, no cap yet).
 
 ## Fixed in this change (no decision needed)
 

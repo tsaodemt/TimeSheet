@@ -30,7 +30,7 @@ Status: design. The read and save flow templates are generated and tested offlin
 ## Read
 
 Request:
-- `FromDate` / `ToDate` (optional; both or neither, `yyyy-MM-dd`, not reversed — otherwise `VALIDATION_DATE`);
+- `FromDate` / `ToDate` (**mandatory**, `yyyy-MM-dd`, not reversed — otherwise `VALIDATION_DATE`; no maximum span defined; PeriodKey is not a request field — a pay period is sent as FromDate + ToDate);
 - `AfterId` (default 0);
 - `PageSize` (clamped to 1…500).
 
@@ -38,8 +38,8 @@ Identity-, role- or scope-claiming fields are ignored and recorded by name only.
 
 ```
 $filter  = OwnerUpn eq '<trusted caller>'
-           [and WorkDate ge datetime'<fromUtc>']
-           [and WorkDate lt datetime'<toUtcExclusive>']
+           and WorkDate ge datetime'<fromUtc>'
+           and WorkDate lt datetime'<toUtcExclusive>'
            and EntryStatus ne 'Deleted'
            and Id gt <AfterId>
 $orderby = Id asc
@@ -52,6 +52,7 @@ $top     = <PageSize>
 - `OwnerUpn` and `WorkDate` are indexed before any data is loaded.
 - The list is never loaded and then filtered in memory.
 - Every returned row is re-checked against the owner. Any mismatch returns `ERROR_LEAK` and no rows.
+- Caller-profile failure → `DIRECTORY_ERROR`; failed mandatory audit append (Authorization or ReadProxy) → `INTERNAL_ERROR`; TimesheetEntries query failure → `ERROR`. All with `MSG_TEMPORARY_PROBLEM` (`ERROR`: `MSG_ERROR`) and no rows (`docs/readown-contract.md`).
 
 Response:
 

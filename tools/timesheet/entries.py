@@ -18,7 +18,7 @@ import datetime as _dt
 import re
 import uuid
 from dataclasses import dataclass, field
-from typing import Iterable, Mapping, Optional, Protocol
+from typing import Callable, Iterable, Mapping, Optional, Protocol
 
 import business_dates as bd
 
@@ -343,14 +343,39 @@ class ReadFilter:
         return " and ".join(parts)
 
 
+DIRECTORY_ERROR, INTERNAL_ERROR = "DIRECTORY_ERROR", "INTERNAL_ERROR"
+MSG_TEMPORARY_PROBLEM = "MSG_TEMPORARY_PROBLEM"
+
+
 def read_own(guard_result, caller: Optional[Caller], request: Mapping, store: Store, *, correlation_id: str,
-             business_timezone: Optional[str] = None) -> dict:
+             business_timezone: Optional[str] = None, profile_failed: bool = False,
+             audit_writer: Optional[Callable[[str], None]] = None) -> dict:
     """TS-ReadOwn. Returns the contract response dict, with the one `ReadProxy` audit row of the call in `audit`.
-    `business_timezone` is the configured IANA zone (AppSettings BusinessTimezone); the offset is derived from it."""
+    `business_timezone` is the configured IANA zone (AppSettings BusinessTimezone); the offset is derived from it.
+
+    profile_failed: the caller-profile read (MyProfile_V2) failed -> DIRECTORY_ERROR / MSG_TEMPORARY_PROBLEM.
+    audit_writer(kind): the two MANDATORY appends, "Authorization" (before any read) and "ReadProxy" (after the
+    read); it raises on failure -> INTERNAL_ERROR / MSG_TEMPORARY_PROBLEM, no rows. None = the caller appends."""
+    def failed(code):
+        return {"ok": False, "code": code, "messageCode": MSG_TEMPORARY_PROBLEM, "correlationId": correlation_id,
+                "rows": [], "nextAfterId": 0, "pageSize": 0, "ignoredInputs": sorted(k for k in request if k not in READ_INPUTS),
+                "audit": []}
+    if profile_failed:
+        return failed(DIRECTORY_ERROR)
+    if audit_writer is not None:
+        try:
+            audit_writer("Authorization")
+        except Exception:
+            return failed(INTERNAL_ERROR)
     r = _read_own(guard_result, caller, request, store, correlation_id, business_timezone)
     r["audit"] = [{"EventType": "ReadProxy", "Action": "ReadOwn", "Decision": "ALLOW" if r["ok"] else "DENY",
                    "ResultCode": r["code"], "CorrelationId": correlation_id, "ActorUpn": caller.upn if caller else "",
                    "RowCount": len(r["rows"]), "IgnoredInputs": r["ignoredInputs"]}]
+    if audit_writer is not None:
+        try:
+            audit_writer("ReadProxy")
+        except Exception:  # mandatory: the rows already read are discarded
+            return failed(INTERNAL_ERROR)
     return r
 
 
@@ -364,8 +389,8 @@ def _read_own(guard_result, caller, request, store, correlation_id, tz):
         return dict(base, ok=False, code=FORBIDDEN)
     fd, td = request.get("FromDate"), request.get("ToDate")
     fdd, tdd = (_date(fd) if fd else None), (_date(td) if td else None)
-    if (fd and fdd is None) or (td and tdd is None) or (fdd and tdd and fdd > tdd) or (bool(fd) != bool(td)):
-        return dict(base, ok=False, code=VALIDATION_DATE)  # both dates or neither (R1 read contract); no reversed range
+    if fdd is None or tdd is None or fdd > tdd:
+        return dict(base, ok=False, code=VALIDATION_DATE)  # FromDate AND ToDate mandatory (no undated read); no reversed range
     try:  # always needed: stored date-only values are instants; the response returns business dates.
         bd.windows_zone(tz)  # flows convert with the Windows id: a zone without a mapping is unusable
     except bd.TimeZoneConfigError:

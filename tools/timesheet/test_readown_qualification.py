@@ -2,7 +2,8 @@
 
 Pins the CURRENT TS-ReadOwn contract on the reference (entries.read_own after guard.authorize) and the generated flow
 (build_r1_flows.read_own_actions in the WDL simulator), reusing test_r1_read_flow's harness. Open decisions recorded in
-docs/auditlog-open-decisions.md (unbounded read; read-audit failure) are asserted as they are today, not changed.
+docs/auditlog-open-decisions.md were resolved by OFFLINE-READOWN-GAP-FIX-01 (mandatory date range; coded
+DIRECTORY_ERROR / INTERNAL_ERROR responses) and are asserted in RQ07, RQ15, RQ16.
 """
 import json
 import os
@@ -123,13 +124,10 @@ class ReadOwnQualification(unittest.TestCase):
         self.assertIn("EntryStatus ne ''Deleted''", filt)
         self.assertIn("ERROR_LEAK", rr.FLOW["Final_code"]["inputs"])   # defence in depth after the server filter
 
-    def test_rq07_unbounded_read_current_behaviour(self):
-        # OPEN decision (docs/auditlog-open-decisions.md): dates optional (both or neither); without dates the read is
-        # bounded by page size only. Pinned as-is.
+    def test_rq07_undated_read_rejected(self):
+        # RO15 (OFFLINE-READOWN-GAP-FIX-01): FromDate + ToDate are mandatory; no maximum span is defined.
         r, _, _ = self.both(ME, {}, items=ITEMS)
-        self.assertTrue(r["ok"])
-        self.assertIn(13, self.ids(r))
-        self.assertEqual(r["pageSize"], 500)
+        self.assertEqual((r["ok"], r["code"], r["rows"], r["pageSize"]), (False, "VALIDATION_DATE", [], 0))
 
     def test_rq08_invalid_period_rejected(self):
         for req in ({"FromDate": "2026-10-10", "ToDate": "2026-10-01"}, {"FromDate": "2026-10-01"}, {"ToDate": "2026-10-01"},
@@ -181,16 +179,20 @@ class ReadOwnQualification(unittest.TestCase):
         r = E.read_own(g, E.Caller(ME, 11, "E1", "D1"), dict(OCT), Boom([]), correlation_id="c", business_timezone=rr.TZ)
         self.assertEqual((r["ok"], r["code"], r["rows"]), (False, "ERROR", []))
 
-    def test_rq15_audit_failure_returns_no_data(self):
-        # Read-audit failure: today the run ends before Respond (fail closed; no rows reach the caller; no coded
-        # response). The read-side audit-failure semantics are not decided (AUD-F1 B covers SaveEntry only).
+    def test_rq15_audit_failure_coded_no_data(self):
+        # RO23 / RO24: a failed mandatory audit append ends in a coded INTERNAL_ERROR response with no rows.
         for audit in ("Write_Authz_audit", "Write_Read_audit"):
             run = run_custom(lambda n, a, p, audit=audit: ("Failed", {"error": "x"}) if n == audit else None)
-            self.assertNotEqual(run.results.get("Respond", {}).get("status"), "Succeeded", audit)
+            self.assertFalse(getattr(run, "aborted", False))
+            self.assertEqual(run.results["Respond"]["status"], "Skipped", audit)
+            out = run.results["Respond_error"]["outputs"]
+            self.assertEqual((out["ok"], out["resultcode"], out["messagecode"], out["rows"], out["nextafterid"], out["pagesize"]),
+                             ("false", "INTERNAL_ERROR", "MSG_TEMPORARY_PROBLEM", "[]", "0", "0"), audit)
 
-    def test_rq16_profile_failure_no_data(self):
+    def test_rq16_profile_failure_coded_no_data(self):
         run = run_custom(lambda n, a, p: ("Failed", {"error": "x"}) if a["inputs"]["host"]["operationId"] == "MyProfile_V2" else None)
-        self.assertNotEqual(run.results.get("Respond", {}).get("status"), "Succeeded")
+        out = run.results["Respond_error"]["outputs"]
+        self.assertEqual((out["ok"], out["resultcode"], out["messagecode"], out["rows"]), ("false", "DIRECTORY_ERROR", "MSG_TEMPORARY_PROBLEM", "[]"))
         self.assertNotIn("Query", [k for k, v in run.results.items() if v["status"] == "Succeeded"])
 
     def test_rq17_response_shape_fixed(self):

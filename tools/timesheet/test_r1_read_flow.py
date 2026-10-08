@@ -24,6 +24,7 @@ REG = {"settings": [{"key": "BusinessTimezone", "type": "iana_tz", "value": "Asi
 OVL = {"environment": "STAGING", "values": {}, "external": {}}
 SETTINGS = [{"Title": "BusinessTimezone", "Value": TZ}]
 DECOYS = ["OwnerUpn", "ActorUpn", "EmployeeId", "Role", "Scope"]
+YEAR = {"FromDate": "2026-01-01", "ToDate": "2026-12-31"}  # FromDate + ToDate are mandatory (OFFLINE-READOWN-GAP-FIX-01)
 
 
 def item(i, owner, date, status="Draft"):
@@ -120,27 +121,29 @@ class R1Read(unittest.TestCase):
         return [x["workDate"] for x in res["rows"]]
 
     def test_RR01_valid_own_read(self):
-        f, _, _ = self.both(ME, {})
+        f, _, _ = self.both(ME, dict(YEAR))
         self.assertEqual((f["ok"], f["code"], len(f["rows"])), (True, "OK", 13))
         self.assertEqual(f["rows"][0], {"id": 1, "workDate": "2026-10-01", "projectId": 11, "phaseId": 21, "workTypeId": 31, "shiftId": 41,
                                          "hourTypeId": 51, "hours": 2, "remark": "r1", "status": "Draft", "etag": "\"1\""})
 
     def test_RR02_other_owner_excluded(self):
-        f, _, _ = self.both(ME, {})
+        f, _, _ = self.both(ME, dict(YEAR))
         self.assertNotIn(11, [x["id"] for x in f["rows"]])
 
     def test_RR03_forged_owner_ignored_and_foreign_request_refused(self):
-        f, _, run = self.both(ME, {}, decoys={"OwnerUpn": OTHER, "ActorUpn": OTHER, "Role": "ADM"})
+        f, _, run = self.both(ME, dict(YEAR), decoys={"OwnerUpn": OTHER, "ActorUpn": OTHER, "Role": "ADM"})
         self.assertNotIn(11, [x["id"] for x in f["rows"]])
         self.assertIn("OwnerUpn", run.results["Guard_result"]["outputs"]["IgnoredInputs"])
-        f, _, _ = self.both(ME, {"RequestedOwner": OTHER})
+        f, _, _ = self.both(ME, dict(YEAR, RequestedOwner=OTHER))
         self.assertEqual((f["code"], f["rows"]), ("FORBIDDEN", []))
 
     def test_RR04_deleted_excluded(self):
-        self.assertNotIn(12, [x["id"] for x in self.both(ME, {})[0]["rows"]])
+        self.assertNotIn(12, [x["id"] for x in self.both(ME, dict(YEAR))[0]["rows"]])
 
-    def test_RR05_no_date_read(self):
-        self.assertEqual(len(self.both(ME, {})[0]["rows"]), 13)
+    def test_RR05_undated_read_rejected(self):
+        f = self.both(ME, {})[0]
+        self.assertEqual((f["ok"], f["code"], f["rows"]), (False, "VALIDATION_DATE", []))
+        self.assertEqual(len(self.both(ME, dict(YEAR))[0]["rows"]), 13)
 
     def test_RR06_to_RR09_range_first_last_next(self):
         f, _, run = self.both(ME, {"FromDate": "2026-10-03", "ToDate": "2026-10-05"})
@@ -157,18 +160,18 @@ class R1Read(unittest.TestCase):
             self.assertEqual(self.both(ME, req)[0]["code"], "VALIDATION_DATE", req)
 
     def test_RR12_to_RR15_paging(self):
-        p1, _, _ = self.both(ME, {"PageSize": 5})
-        p2, _, _ = self.both(ME, {"PageSize": 5, "AfterId": p1["nextAfterId"]})
-        p3, _, _ = self.both(ME, {"PageSize": 5, "AfterId": p2["nextAfterId"]})
+        p1, _, _ = self.both(ME, dict(YEAR, PageSize=5))
+        p2, _, _ = self.both(ME, dict(YEAR, PageSize=5, AfterId=p1["nextAfterId"]))
+        p3, _, _ = self.both(ME, dict(YEAR, PageSize=5, AfterId=p2["nextAfterId"]))
         ids = [x["id"] for p in (p1, p2, p3) for x in p["rows"]]
         self.assertEqual(ids, sorted(ids), "stable ordering by Id")
         self.assertEqual(len(ids), len(set(ids)), "no duplicates between pages")
         self.assertEqual((len(ids), p3["nextAfterId"]), (13, 0))
 
     def test_RR16_page_size_capped(self):
-        self.assertEqual(self.both(ME, {"PageSize": 10000})[0]["pageSize"], 500)
-        self.assertEqual(self.both(ME, {"PageSize": 0})[0]["pageSize"], 1)
-        self.assertEqual(self.both(ME, {"PageSize": "x"})[0]["code"], "VALIDATION_LOOKUP")
+        self.assertEqual(self.both(ME, dict(YEAR, PageSize=10000))[0]["pageSize"], 500)
+        self.assertEqual(self.both(ME, dict(YEAR, PageSize=0))[0]["pageSize"], 1)
+        self.assertEqual(self.both(ME, dict(YEAR, PageSize="x"))[0]["code"], "VALIDATION_LOOKUP")
 
     def test_RR17_RR18_missing_or_invalid_zone_fails_closed(self):
         for settings in ([{"Title": "BusinessTimezone", "Value": "Mars/Base"}], [{"Title": "BusinessTimezone", "Value": "Europe/Paris"}]):
@@ -179,30 +182,30 @@ class R1Read(unittest.TestCase):
                                    domain=tg.DOM, emp_list=tg.EMP_LIST, audit_list="_Audit", conf_audit_list="_ConfAudit",
                                    environment="STAGING", registry=noval, overlay=OVL)
         for settings in ([], [{"Title": "BusinessTimezone", "Value": ""}]):
-            f = run_flow(ME, {}, settings=settings, flow=flow)[0]
-            r = ref(ME, {}, settings=settings, reg=noval)
+            f = run_flow(ME, dict(YEAR), settings=settings, flow=flow)[0]
+            r = ref(ME, dict(YEAR), settings=settings, reg=noval)
             self.assertEqual(f, r)
             self.assertEqual((f["code"], f["rows"]), ("CONFIG_UNRESOLVED", []), "missing zone")
 
     def test_RR19_correlation_preserved(self):
-        f, posts, _ = self.both(ME, {}, cid="run-corr-9")
+        f, posts, _ = self.both(ME, dict(YEAR), cid="run-corr-9")
         self.assertEqual(f["correlationId"], "run-corr-9")
         self.assertTrue(posts and all(p.get("CorrelationId") == "run-corr-9" for p in posts))
         self.assertEqual([p["EventType"] for p in posts], ["AuthorizationAllow", "ReadProxy"])
 
     def test_RR20_denied_identity_gets_no_rows(self):
         for upn, code in ((tg.u("stranger"), "UNMAPPED_IDENTITY"), (tg.u("gone"), "INACTIVE_EMPLOYEE")):
-            f, posts, _ = self.both(upn, {})
+            f, posts, _ = self.both(upn, dict(YEAR))
             self.assertEqual((f["ok"], f["code"], f["rows"]), (False, code, []))
             self.assertEqual(next(p for p in posts if p.get("EventType"))["Decision"], "DENY")
 
     def test_RR23_employee_without_discipline_can_still_read_own(self):
         """Discipline is only needed to stamp a new entry (save refuses CONFIG_INVALID); reading own rows does not use it."""
-        f, posts, _ = self.both(tg.u("nodisc"), {})
+        f, posts, _ = self.both(tg.u("nodisc"), dict(YEAR))
         self.assertEqual((f["ok"], f["code"]), (True, "OK"))
 
     def test_RR21_leak_returns_no_rows(self):
-        f, _, _ = self.both(ME, {}, leak=True)
+        f, _, _ = self.both(ME, dict(YEAR), leak=True)
         self.assertEqual((f["code"], f["rows"]), ("ERROR_LEAK", []))
 
     def test_RR22_no_sharepoint_internals_or_bound_accounts(self):
