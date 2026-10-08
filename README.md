@@ -42,7 +42,8 @@ tools/powerautomate/
 tools/identity/
   identity_resolver.py                Reference identity resolver (trusted identity → employee → roles)
   scope_resolver.py                   Reference data scoping (self / discipline / company, project assignment)
-  test_*.py                           Contract tests I1–I10 and S1–S8 (synthetic data; python -m unittest)
+  employee_matching.py                Conservative Employees ↔ directory account matching (proposals only, never applied)
+  test_*.py                           Contract tests I1–I10, S1–S8 and EM01–EM23 (synthetic data; python -m unittest)
 ```
 
 ## Confidentiality
