@@ -1,5 +1,7 @@
 # R1 flow set — dependencies and deployment readiness
 
+> Current maturity of every R1 area: `docs/r1-status.md` (authoritative summary). Live STAGING deployment is BLOCKED_BY_TENANT_CAPACITY.
+
 The R1 flow set is three offline templates. None is deployed.
 
 | Flow | Alias | Template |

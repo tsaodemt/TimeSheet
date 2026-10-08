@@ -6,7 +6,7 @@ capability `TS.EditOwnDraft`, scope self); generated flow `tools/powerautomate/b
 business rules `docs/timesheet-r1-contracts.md`; audit decision `docs/auditlog-open-decisions.md` (AUD-F1 = option B);
 Canvas consumer `tools/powerapp/demo-r1/scrEntry.pa.yaml`. Tests: `tools/timesheet/test_r1_save_flow.py` (RS01–RS25,
 ET01–ET07, FG01–FG05, AF01–AF08; reference == flow, stored rows compared) and `test_saveentry_qualification.py`
-(SQ01–SQ24).
+(SQ01–SQ25).
 
 ## Chain
 
@@ -72,7 +72,7 @@ data unreadable or SharePoint write failure other than 412).
 | caller-profile read fails | no write; **no coded response** (gap 2) |
 | response fails after a committed write | the entry exists; the client sees a failure (gap 1 risk: a retried create duplicates) |
 
-## Open decisions (not changed here)
+## SAVEENTRY_DESIGN_DECISIONS_REQUIRED (not changed here)
 
 1. **Create idempotency (R1-Q3)** — none: a retried create makes a second row (`WARN_DUPLICATE` shows it). RequestKey is
    out of scope; a production decision is required.

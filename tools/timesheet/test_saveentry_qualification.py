@@ -1,4 +1,4 @@
-"""OFFLINE-SAVEENTRY-QUALIFICATION-01 tests SQ01-SQ24 (synthetic data only; run: python -m unittest).
+"""OFFLINE-SAVEENTRY-QUALIFICATION-01 tests SQ01-SQ25 (synthetic data only; run: python -m unittest).
 
 Pins the CURRENT TS-SaveEntry contract on the reference (guard.authorize + entries.save_entry + finalize_audit) and the
 generated flow (build_r1_flows.save_draft_actions in the WDL simulator), reusing test_r1_save_flow's harness, for the
@@ -76,7 +76,7 @@ class SaveQualification(t._Both):
     def test_sq03_forged_fields_in_reference_are_ignored(self):
         st = t.Store(t.ITEMS)
         forged = dict(t.req(), OwnerUpn=OTHER, EmployeeItemId=12, Employee=12, EmployeeId=12, ActorUpn=OTHER, CallerUpn=OTHER,
-                      DisciplineCode="D2", LegacyId="LEGACY-OTHER", PeriodKey="1999-01", EntryStatus="Approved")
+                      DisciplineCode="D2", LegacyId="LEGACY-OTHER", PeriodKey="1999-01", EntryStatus="Approved", Author=OTHER)
         f, rr = t.ref(ME, {k: v for k, v in forged.items()}, st, t.SCOPING_OFF)
         self.assertTrue(f["ok"])
         row = st.items[f["itemId"]]
@@ -85,7 +85,8 @@ class SaveQualification(t._Both):
         self.assertNotEqual(row["LegacyId"], "LEGACY-OTHER")
         self.assertEqual(row["PeriodKey"], E.period_key(__import__("datetime").date(2026, 10, 9), 26))
         self.assertLessEqual({"OwnerUpn", "EmployeeItemId", "Employee", "EmployeeId", "ActorUpn", "CallerUpn", "DisciplineCode",
-                              "LegacyId", "PeriodKey", "EntryStatus"}, set(rr.ignoredInputs))
+                              "LegacyId", "PeriodKey", "EntryStatus", "Author"}, set(rr.ignoredInputs))
+        self.assertNotIn("Author", row)                                  # SharePoint metadata, never written by the flow
 
     def test_sq04_foreign_row_with_forged_self_claims_denied(self):
         decoys = {"OwnerUpn": ME, "EmployeeId": str(t.ME_EMP.item_id), "ActorUpn": ME}
@@ -224,6 +225,15 @@ class SaveQualification(t._Both):
             src = f.read()
         self.assertIn("'TS-SaveEntry'.Run(", src)
         self.assertNotRegex(src, r"Patch\(|SubmitForm\(|TimesheetEntries")       # no direct list write from the app
+
+    def test_sq25_retry_with_stale_etag_after_successful_update(self):
+        # Case E: the first update succeeded (new ETag); a retry with the old ETag is a CONFLICT, nothing written.
+        st = t.Store(t.ITEMS)
+        a, _ = t.ref(ME, t.req(ItemId="1", ETag='"1,1"', Hours="3"), st, t.SCOPING_OFF)
+        before = dict(st.items[1])
+        b, _ = t.ref(ME, t.req(ItemId="1", ETag='"1,1"', Hours="4"), st, t.SCOPING_OFF)
+        self.assertEqual((a["code"], b["code"]), ("OK", "CONFLICT"))
+        self.assertEqual(st.items[1], before)
 
     def test_sq23_conflict_exposes_no_foreign_data(self):
         f = self.both(ME, t.req(ItemId="1", ETag='"1,9"'))
