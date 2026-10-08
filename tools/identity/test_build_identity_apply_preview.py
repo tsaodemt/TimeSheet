@@ -1,4 +1,4 @@
-"""Apply-preview tests AP01-AP16 (synthetic data only; run: python -m unittest)."""
+"""Apply-preview tests AP01-AP19 (synthetic data only; run: python -m unittest)."""
 import csv
 import json
 import os
@@ -26,14 +26,15 @@ DIR = [{"objectId": "o1", "upn": "an.tran@" + DOM, "displayName": "Tran Van An",
        {"objectId": "o6", "upn": "taken@" + DOM, "displayName": "Taken", "userType": "Member", "enabled": True}]
 
 
-def row(item, legacy, cand="", decision="", rupn="", cur="", by="hr.reviewer", on="2026-10-08"):
+def row(item, legacy, cand="", decision="", rupn="", cur="", by="hr.reviewer", on="2026-10-08",
+        basis=bp.HR_IT_APPROVED):
     return {"EmployeeItemId": str(item), "LegacyId": legacy, "CandidateUpn": cand, "CurrentAccountUpn": cur,
             "ReviewerDecision": decision, "ReviewerUpn": rupn, "ReviewedBy": by if decision else "",
-            "ReviewedOn": on if decision else ""}
+            "ReviewedOn": on if decision else "", "ApprovalBasis": basis if decision else ""}
 
 
-def run(rows):
-    return bp.build_preview(rows, EMPS, DIR, CFG)
+def run(rows, env="STAGING"):
+    return bp.build_preview(rows, EMPS, DIR, CFG, env)
 
 
 def reasons(res, item):
@@ -49,7 +50,7 @@ class Preview(unittest.TestCase):
     def test_ap02_approve_accepted(self):
         res = run([row(1, "L-1", "an.tran@" + DOM, "APPROVE")])
         self.assertEqual(res["apply"], [{"employeeItemId": 1, "legacyId": "L-1", "accountUpn": "an.tran@" + DOM,
-                                         "decision": "APPROVE"}])
+                                         "decision": "APPROVE", "approvalBasis": bp.HR_IT_APPROVED}])
 
     def test_ap03_change_requires_reviewer_upn(self):
         res = run([row(1, "L-1", "an.tran@" + DOM, "CHANGE")])
@@ -86,7 +87,7 @@ class Preview(unittest.TestCase):
     def test_ap08_guest_with_valid_format_rejected(self):
         d = DIR + [{"objectId": "o7", "upn": "guest.user@" + DOM, "displayName": "G", "userType": "Guest",
                     "enabled": True}]
-        res = bp.build_preview([row(1, "L-1", "", "CHANGE", "guest.user@" + DOM)], EMPS, d, CFG)
+        res = bp.build_preview([row(1, "L-1", "", "CHANGE", "guest.user@" + DOM)], EMPS, d, CFG, "STAGING")
         self.assertIn("ACCOUNT_IS_GUEST", reasons(res, 1))
 
     def test_ap09_unknown_account_rejected(self):
@@ -138,10 +139,34 @@ class Preview(unittest.TestCase):
                     json.dump(v, f)
             before = set(os.listdir(d))
             bp.main(["--review", p("r.csv"), "--employees", p("e.json"), "--directory", p("d.json"),
-                     "--config", p("c.json"), "--out", p("out.json")])
+                     "--config", p("c.json"), "--environment", "STAGING", "--out", p("out.json")])
             self.assertEqual(set(os.listdir(d)) - before, {"out.json"})
             with open(p("out.json"), encoding="utf-8") as f:
                 self.assertEqual(json.load(f)["summary"]["applyRows"], 1)
+
+    def test_ap17_staging_bypass_only_valid_in_staging(self):
+        r = [row(1, "L-1", "an.tran@" + DOM, "APPROVE", basis=bp.STAGING_TEMPORARY_BYPASS)]
+        self.assertEqual(len(run(r, "STAGING")["apply"]), 1)
+        for env in ("UAT", "PRODUCTION"):
+            res = run(r, env)
+            self.assertEqual(res["apply"], [], env)
+            self.assertIn(f"APPROVAL_BASIS_NOT_VALID_FOR_{env}", reasons(res, 1))
+        self.assertEqual(len(run([row(1, "L-1", "an.tran@" + DOM, "APPROVE")], "PRODUCTION")["apply"]), 1)
+
+    def test_ap18_approval_basis_required(self):
+        for b in ("", "OWNER_SAID_OK", "staging_temporary_bypass"):
+            res = run([row(1, "L-1", "an.tran@" + DOM, "APPROVE", basis=b)])
+            self.assertEqual(res["apply"], [], b)
+            self.assertIn("APPROVAL_BASIS_MISSING_OR_INVALID", reasons(res, 1))
+
+    def test_ap19_readiness_predicate(self):
+        f = bp.is_identity_approved_for
+        self.assertTrue(f(bp.STAGING_TEMPORARY_BYPASS, "STAGING"))
+        self.assertFalse(f(bp.STAGING_TEMPORARY_BYPASS, "UAT"))
+        self.assertFalse(f(bp.STAGING_TEMPORARY_BYPASS, "PRODUCTION"))
+        self.assertTrue(f(bp.HR_IT_APPROVED, "PRODUCTION"))
+        self.assertFalse(f("", "STAGING"))
+        self.assertFalse(f(bp.HR_IT_APPROVED, "prod"))
 
 
 if __name__ == "__main__":

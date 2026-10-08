@@ -44,7 +44,7 @@ tools/identity/
   scope_resolver.py                   Reference data scoping (self / discipline / company, project assignment)
   employee_matching.py                Conservative Employees ↔ directory account matching (proposals only, never applied)
   build_identity_apply_preview.py     Reviewed mapping CSV → APPLY PREVIEW (closed decision vocabulary; local file, no writes)
-  test_*.py                           Contract tests I1–I10, S1–S8, EM01–EM23, AP01–AP16 (synthetic data; python -m unittest)
+  test_*.py                           Contract tests I1–I10, S1–S8, EM01–EM23, AP01–AP19 (synthetic data; python -m unittest)
 ```
 
 ## Confidentiality

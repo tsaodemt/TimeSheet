@@ -15,6 +15,12 @@ Review decisions (closed vocabulary):
     (blank)               not reviewed                 -> no mapping
 A row is never approved merely because CandidateUpn exists.
 
+Approval basis (column ApprovalBasis, closed vocabulary) and environment boundary:
+    HR_IT_APPROVED            HR/IT signed the mapping - valid in every environment
+    STAGING_TEMPORARY_BYPASS  Project Owner temporary bypass - valid for environment STAGING ONLY; never UAT/PRODUCTION
+is_identity_approved_for(basis, environment) is the single readiness predicate; tooling must use it rather than read
+the marker itself.
+
 An apply row is produced only when every check passes (otherwise the row is rejected with reason codes):
     one row per employee, one employee per UPN, no duplicate proposed UPN, no clash with another employee's AccountUpn;
     account exists in the supplied directory snapshot, is enabled, is a Member (not Guest), is not a service / test /
@@ -23,7 +29,7 @@ An apply row is produced only when every check passes (otherwise the row is reje
 
 CLI:
     python build_identity_apply_preview.py --review reviewed.csv --employees employees.json --directory directory.json
-        --config config.json --out preview.json
+        --config config.json --environment STAGING --out preview.json
     employees.json : [{"itemId", "legacyId", "active", "accountUpn"}]
     directory.json : [{"objectId", "upn", "displayName", "userType", "enabled"}]
     config.json    : {"orgDomains": [...], "excludedUpns": [...], "excludedLocalPatterns": [...]}
@@ -43,8 +49,21 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from employee_matching import MEMBER_ENABLED, Account, Config, classify_account, normalize  # noqa: E402
 
 DECISIONS = ("APPROVE", "REJECT", "CHANGE", "NO_ACCOUNT_CONFIRMED", "DEFER")
+HR_IT_APPROVED = "HR_IT_APPROVED"
+STAGING_TEMPORARY_BYPASS = "STAGING_TEMPORARY_BYPASS"
+APPROVAL_BASES = (HR_IT_APPROVED, STAGING_TEMPORARY_BYPASS)
+ENVIRONMENTS = ("STAGING", "UAT", "PRODUCTION")
 NO_MAPPING = ("REJECT", "NO_ACCOUNT_CONFIRMED", "DEFER", "")
 _UPN_RE = re.compile(r"^[a-z0-9._%+'-]+@[a-z0-9.-]+\.[a-z]{2,}$")
+
+
+def is_identity_approved_for(basis: str, environment: str) -> bool:
+    """True only if a mapping with this approval basis may be applied / relied on in the environment."""
+    if environment not in ENVIRONMENTS:
+        return False
+    if basis == HR_IT_APPROVED:
+        return True
+    return basis == STAGING_TEMPORARY_BYPASS and environment == "STAGING"
 
 
 def _s(row: Mapping, k: str) -> str:
@@ -74,6 +93,8 @@ def validate_review(rows: Sequence[Mapping]) -> list:
             e.append("REVIEWER_UPN_NOT_ALLOWED_FOR_DECISION")
         if d in ("APPROVE", "CHANGE") and not (_s(r, "ReviewedBy") and _s(r, "ReviewedOn")):
             e.append("REVIEWER_IDENTITY_OR_DATE_MISSING")
+        if d in ("APPROVE", "CHANGE") and _s(r, "ApprovalBasis") not in APPROVAL_BASES:
+            e.append("APPROVAL_BASIS_MISSING_OR_INVALID")
         if e:
             out.append({"row": n, "employeeItemId": _s(r, "EmployeeItemId"), "errors": e})
     return out
@@ -89,7 +110,7 @@ def _proposed_upn(r: Mapping) -> str:
 
 
 def build_preview(rows: Sequence[Mapping], employees: Iterable[Mapping], directory: Iterable[Mapping],
-                  cfg: Config) -> dict:
+                  cfg: Config, environment: str) -> dict:
     emps = {int(e["itemId"]): e for e in employees}
     accts = {normalize(a["upn"]): a for a in directory}
     struct = {x["row"]: x["errors"] for x in validate_review(rows)}
@@ -104,6 +125,9 @@ def build_preview(rows: Sequence[Mapping], employees: Iterable[Mapping], directo
                                  "reasons": struct[n]})
             continue
         reasons = list(struct.get(n, []))
+        basis = _s(r, "ApprovalBasis")
+        if basis in APPROVAL_BASES and not is_identity_approved_for(basis, environment):
+            reasons.append(f"APPROVAL_BASIS_NOT_VALID_FOR_{environment}")
         upn = _proposed_upn(r)
         try:
             item = int(_s(r, "EmployeeItemId"))
@@ -138,7 +162,7 @@ def build_preview(rows: Sequence[Mapping], employees: Iterable[Mapping], directo
                                 "MEMBER_DISABLED": "ACCOUNT_DISABLED",
                                 "MEMBER_STATUS_UNKNOWN": "ACCOUNT_STATUS_UNVERIFIED"}[kind])
         candidates.append({"row": n, "employeeItemId": item, "legacyId": _s(r, "LegacyId"), "decision": d,
-                           "upn": upn, "reasons": reasons})
+                           "upn": upn, "basis": basis, "reasons": reasons})
 
     # One employee per UPN, and no clash with another employee's existing AccountUpn.
     upn_count = Counter(c["upn"] for c in candidates if c["upn"])
@@ -149,11 +173,11 @@ def build_preview(rows: Sequence[Mapping], employees: Iterable[Mapping], directo
         if c["upn"] in owners and owners[c["upn"]] != c["employeeItemId"]:
             c["reasons"].append("UPN_ALREADY_USED_BY_OTHER_EMPLOYEE")
     apply_rows = [{"employeeItemId": c["employeeItemId"], "legacyId": c["legacyId"], "accountUpn": c["upn"],
-                   "decision": c["decision"]} for c in candidates if not c["reasons"]]
+                   "decision": c["decision"], "approvalBasis": c["basis"]} for c in candidates if not c["reasons"]]
     rejected += [{"row": c["row"], "employeeItemId": c["employeeItemId"], "decision": c["decision"],
                   "reasons": list(dict.fromkeys(c["reasons"]))} for c in candidates if c["reasons"]]
     decisions = Counter(_s(r, "ReviewerDecision") or "(blank)" for r in rows)
-    return {"mode": "PREVIEW_ONLY_NO_WRITES", "apply": apply_rows, "rejected": rejected,
+    return {"mode": "PREVIEW_ONLY_NO_WRITES", "environment": environment, "apply": apply_rows, "rejected": rejected,
             "summary": {"reviewRows": len(rows), "decisions": dict(decisions), "applyRows": len(apply_rows),
                         "rejectedRows": len(rejected), "structuralErrors": len(struct)}}
 
@@ -167,6 +191,7 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="Build an identity APPLY PREVIEW (no writes).")
     for k in ("review", "employees", "directory", "config", "out"):
         p.add_argument("--" + k, required=True)
+    p.add_argument("--environment", required=True, choices=ENVIRONMENTS)
     a = p.parse_args(argv)
     with open(a.config, encoding="utf-8") as f:
         c = json.load(f)
@@ -176,7 +201,7 @@ def main(argv=None) -> int:
         emps = json.load(f)
     with open(a.directory, encoding="utf-8") as f:
         dirs = json.load(f)
-    res = build_preview(_read_csv(a.review), emps, dirs, cfg)
+    res = build_preview(_read_csv(a.review), emps, dirs, cfg, a.environment)
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(res, f, indent=1, ensure_ascii=False)
     print(json.dumps(res["summary"]))
