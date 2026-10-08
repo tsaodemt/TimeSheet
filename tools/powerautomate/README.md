@@ -35,3 +35,7 @@ Configuration comes from environment variables. Nothing tenant-specific is store
 | `TS_BUILD_SCRIPT_OUT` | Output path of the generated designer script (do not commit) |
 
 Known classic-designer limitation: pasted expressions lose `coalesce(x, '<string>')` and empty string literals. The generator rewrites them as `if(empty(x), substring('x', 0, 0), x)`, which has the same meaning.
+
+Live STAGING findings (R1, 2026-10-08), handled centrally by `build_read_flow._fix` for every generated flow:
+- a property whose value is `""` is dropped by the designer on paste (error responses lost `employeecode`, `configstatus`, `missing`, `etag`, `auditstatus`); such values are generated as `@{substring('x', 0, 0)}`;
+- `createArray()` without parameters is rejected by the runtime (InvalidTemplate); the empty array is generated as `json('[]')`. `wdl_sim` now raises on it, as the runtime does. Tests: `tools/timesheet/test_r1_live_fixes.py` (BF01-BF15).

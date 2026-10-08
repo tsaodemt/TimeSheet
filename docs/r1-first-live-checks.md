@@ -29,7 +29,7 @@ Simulator results are not live proof. The first-live probe `tools/powerautomate/
 | NZ | `string(if(equals(x, null), '', x))` | `x` = null | `string(null)` (old form) | `''` | null-coalesce helper fails: guard, audit and edit checks error |
 | ITEMID | `int(if(empty(raw), '0', if(<digits>, raw, '-1')))` | `raw` = `'abc'` | `int('abc')` (old form) | `-1` (→ `NOT_FOUND`) | save fails for a non-numeric ItemId instead of returning `NOT_FOUND` |
 | RANGE | reversed-range test on dates replaced by `'2000-01-01'` unless well-formed | `FromDate` = `'2026-02-30'` | `formatDateTime('2026-02-30')` after `and(false, …)` | `false`, no error | read fails instead of returning `VALIDATION_DATE` |
-| SKIPPED | `if(<status> = Succeeded, actions('X')?['outputs']?['body']?['value'], createArray())` | `X` skipped | `body('X')` of a skipped action | `[]` | read fails after any refusal (query skipped) |
+| SKIPPED | `if(<status> = Succeeded, actions('X')?['outputs']?['body']?['value'], json('[]'))` | `X` skipped | `body('X')` of a skipped action | `[]` | read fails after any refusal (query skipped) |
 
 The probe reports `NEW_*` (the R1 forms) and `OLD_*` (the former forms) with status and value.
 - **Gate:** every `NEW_*` Succeeded with its expected value, and `DATE_CHECK` = `Failed` (V-FAILONERROR).
@@ -43,3 +43,9 @@ Contract: an edit that persisted is always `ok = true`.
 - A stale ETag is never returned as current. A later edit with the old ETag gets `CONFLICT` (tests ET01–ET07).
 
 The live check confirms that the read-back after a MERGE returns the new ETag.
+
+## Live findings (STAGING, 2026-10-08)
+
+- L01 run: the guard's `Caller_rows` failed with InvalidTemplate because `createArray()` without parameters is not valid at run time, so a failed Employees lookup reached the error responder as `INTERNAL_ERROR` instead of the contract's `DIRECTORY_ERROR`. Fixed: empty arrays are `json('[]')`; the lookup failure is again coded by `IdCode` (`DIRECTORY_ERROR`, audited as IdentityRejected).
+- The same run showed that the designer drops response properties whose value is `""`. Fixed: such values are generated as an empty-string expression, so every response keeps its canonical key set.
+- V-ERROR-RESPONDER: the error branch executed live and the caller received a coded response (partial evidence); it is not a contract-level PASS until a live run shows the correct code with the complete key set.

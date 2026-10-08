@@ -263,7 +263,10 @@ class Run:
     def f_string(self, x): return _str(x)
     def f_int(self, x): return int(x)
     def f_json(self, s): return json.loads(s)
-    def f_createArray(self, *a): return list(a)
+    def f_createArray(self, *a):
+        if not a:  # Power Automate: "expects a comma separated list of parameters" (InvalidTemplate)
+            raise WdlError("createArray() expects at least one parameter")
+        return list(a)
     def f_max(self, *a): return max(a)
     def f_min(self, *a): return min(a)
     def f_endsWith(self, s, t): return _str(s).lower().endswith(_str(t).lower())

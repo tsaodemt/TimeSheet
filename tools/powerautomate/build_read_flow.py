@@ -157,10 +157,16 @@ guard = {
 _EMPTY_RE = re.compile(r"(?<![\w'])''(?![\w'])")
 
 
+EMPTY_ARRAY = "json('[]')"       # the runtime rejects createArray() without parameters (InvalidTemplate; live STAGING)
+EMPTY_VALUE = "@{%s}" % EMPTY      # the classic designer drops properties whose value is "" on paste (live STAGING)
+
+
 def _fix(x):
+    """Designer-/runtime-safe forms: '' in expressions -> EMPTY, createArray() -> json('[]'), a "" value -> @{EMPTY}."""
     if isinstance(x, dict): return {k: _fix(v) for k, v in x.items()}
     if isinstance(x, list): return [_fix(v) for v in x]
-    if isinstance(x, str) and "@" in x: return _EMPTY_RE.sub(EMPTY, x)
+    if isinstance(x, str) and x == "": return EMPTY_VALUE
+    if isinstance(x, str) and "@" in x: return _EMPTY_RE.sub(EMPTY, x).replace("createArray()", EMPTY_ARRAY)
     return x
 
 
