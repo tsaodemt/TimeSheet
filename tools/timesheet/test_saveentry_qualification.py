@@ -3,7 +3,8 @@
 Pins the CURRENT TS-SaveEntry contract on the reference (guard.authorize + entries.save_entry + finalize_audit) and the
 generated flow (build_r1_flows.save_draft_actions in the WDL simulator), reusing test_r1_save_flow's harness, for the
 qualification points not already asserted by RS01-RS25, ET01-ET07, FG01-FG05 and AF01-AF08. Open decisions are
-asserted as they are today (see docs/saveentry-contract.md), not changed.
+resolved by SAVEENTRY-FINALIZE-AND-R1-OFFLINE-READINESS (non-idempotent create accepted for R1; coded pre-write
+failures) and asserted in SQ09, SQ10, SQ12.
 """
 import json
 import os
@@ -45,8 +46,13 @@ def run_hooked(hook, upn=ME, request=None, items=None):
     with mock.patch.object(t.wdl_sim, "Run", HookRun):
         try:
             resp, posts, writes, run = t.run_flow(upn, request or t.req(), store, t.SCOPING_OFF)
-        except KeyError:  # no Respond
-            resp, posts, writes, run = None, None, None, holder["run"]
+        except (KeyError, TypeError):  # Respond skipped: read the pre-write failure response instead
+            run = holder["run"]
+            b = (run.results.get("Respond_error") or {}).get("outputs")
+            resp = None if b is None else {
+                "ok": b["ok"] == "true", "code": b["resultcode"], "messageCode": b["messagecode"], "itemId": int(b["itemid"]),
+                "etag": b["etag"], "correlationId": b["correlationid"], "warnings": json.loads(b["warnings"]),
+                "interim": json.loads(b["interim"]), "auditStatus": b["auditstatus"]}
     sp_writes = [n for n, v in run.results.items() if n in ("Create", "Update") and v["status"] == "Succeeded"]
     return resp, sp_writes, store, run
 
@@ -121,26 +127,23 @@ class SaveQualification(t._Both):
         self.assertEqual((resp["ok"], resp["code"]), (False, "ERROR"))
         self.assertEqual(store.items[1]["Hours"], 2.0)
 
-    def test_sq09_decision_audit_failure_writes_nothing_and_has_no_coded_response(self):
-        # GAP (documented): the decision row is appended before any write; if that append fails the run stops before any
-        # write, but the app gets no coded response (as ReadOwn/AppStart had before their fixes).
+    def test_sq09_decision_audit_failure_coded_without_write(self):
+        # SE37 (SAVEENTRY-FINALIZE): the mandatory pre-write permission audit failed -> INTERNAL_ERROR, nothing written.
         hook = lambda n, a, p: ("Failed", {"statusCode": 400}) if n == "Write_Authz_audit" else None  # noqa: E731
         resp, writes, store, run = run_hooked(hook)
+        self.assertFalse(getattr(run, "aborted", False))
         self.assertEqual(writes, [])
         self.assertEqual(len(store.items), len(t.ITEMS))
-        self.assertIsNone(resp)
-        # static proof: the write branch is gated on Valid == OK, which needs Pre == OK, which needs the guard result
+        self.assertEqual((resp["ok"], resp["code"], resp["messageCode"], resp["itemId"], resp["etag"], resp["warnings"]),
+                         (False, "INTERNAL_ERROR", "MSG_TEMPORARY_PROBLEM", 0, "", []))
         self.assertEqual(t.FLOW["If_write"]["expression"], {"equals": ["@outputs('Valid')", "OK"]})
-        self.assertIn("outputs('Lookup_code')", t.FLOW["Valid"]["inputs"])
-        self.assertIn("outputs('Edit_code')", t.FLOW["Lookup_code"]["inputs"])
-        self.assertIn("outputs('Pre')", t.FLOW["Edit_code"]["inputs"])
-        self.assertIn("Guard_result", t.FLOW["Pre"]["inputs"])
 
-    def test_sq10_profile_failure_writes_nothing_and_has_no_coded_response(self):
+    def test_sq10_profile_failure_coded_without_write(self):
         hook = lambda n, a, p: ("Failed", {"statusCode": 500}) if a["inputs"]["host"]["operationId"] == "MyProfile_V2" else None  # noqa: E731
-        resp, writes, store, _ = run_hooked(hook)
+        resp, writes, store, run = run_hooked(hook)
+        self.assertFalse(getattr(run, "aborted", False))
         self.assertEqual(writes, [])
-        self.assertIsNone(resp)
+        self.assertEqual((resp["ok"], resp["code"], resp["messageCode"]), (False, "DIRECTORY_ERROR", "MSG_TEMPORARY_PROBLEM"))
 
     def test_sq11_post_write_audit_failure_is_aud_f1_option_b(self):
         f = self.both(ME, t.req(), fail_audit="WriteProxy")

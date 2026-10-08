@@ -1,12 +1,12 @@
 # SaveEntry (TS-SaveEntry) — contract and offline qualification
 
-Status: **offline qualified with open decisions** (OFFLINE-SAVEENTRY-QUALIFICATION-01). Not deployed.
+Status: **CLOSED — offline qualified 44/44** (OFFLINE-SAVEENTRY-QUALIFICATION-01, SAVEENTRY-FINALIZE). Not deployed.
 Reference `tools/timesheet/entries.py` (`save_entry`, `finalize_audit`) after `tools/identity/guard.py` (`authorize`,
 capability `TS.EditOwnDraft`, scope self); generated flow `tools/powerautomate/build_r1_flows.py` (`save_draft_actions`);
 business rules `docs/timesheet-r1-contracts.md`; audit decision `docs/auditlog-open-decisions.md` (AUD-F1 = option B);
 Canvas consumer `tools/powerapp/demo-r1/scrEntry.pa.yaml`. Tests: `tools/timesheet/test_r1_save_flow.py` (RS01–RS25,
 ET01–ET07, FG01–FG05, AF01–AF08; reference == flow, stored rows compared) and `test_saveentry_qualification.py`
-(SQ01–SQ25).
+(SQ01–SQ25) and `test_saveentry_finalize.py` (SF01–SF24).
 
 ## Chain
 
@@ -59,7 +59,8 @@ Canvas: 'TS-SaveEntry'.Run(ItemId, ETag, WorkDate, ProjectCode, PhaseCode, WorkT
 ETag or empty), `correlationid`, `warnings` (JSON array), `interim` (JSON array of interim settings), `auditstatus`
 (`OK` / `AUDIT_DEGRADED`). Codes: `OK`; guard codes; `FORBIDDEN`, `NOT_FOUND`, `LOCKED`, `CONFLICT`,
 `VALIDATION_LOOKUP`, `VALIDATION_HOURS`, `VALIDATION_DATE`, `CONFIG_UNRESOLVED`, `CONFIG_INVALID`, `ERROR` (reference
-data unreadable or SharePoint write failure other than 412).
+data unreadable or SharePoint write failure other than 412), `DIRECTORY_ERROR` (caller profile), `INTERNAL_ERROR`
+(pre-write permission audit).
 
 ## Atomicity and audit
 
@@ -68,14 +69,13 @@ data unreadable or SharePoint write failure other than 412).
 | guard deny / validation / conflict | no write; WriteProxy row with Decision DENY; coded response |
 | SharePoint write fails (non-412) | no row; `ERROR` |
 | write succeeds, WriteProxy append fails | AUD-F1 option B: `ok=true`, `auditstatus=AUDIT_DEGRADED` + warning, run ends Failed (alert); no retry |
-| decision (Authorization) append fails | run stops before any write; **no coded response** (gap 2) |
-| caller-profile read fails | no write; **no coded response** (gap 2) |
-| response fails after a committed write | the entry exists; the client sees a failure (gap 1 risk: a retried create duplicates) |
+| decision (Authorization) append fails | no write; `INTERNAL_ERROR` / `MSG_TEMPORARY_PROBLEM`, itemid 0, no ETag, auditstatus "" |
+| caller-profile read fails | no write; `DIRECTORY_ERROR` / `MSG_TEMPORARY_PROBLEM`, itemid 0, no ETag, auditstatus "" |
+| response fails after a committed write | the entry exists; a retried create makes a second own row (approved R1 limitation) |
 
-## SAVEENTRY_DESIGN_DECISIONS_REQUIRED (not changed here)
+## Decisions (SAVEENTRY-FINALIZE-AND-R1-OFFLINE-READINESS)
 
-1. **Create idempotency (R1-Q3)** — none: a retried create makes a second row (`WARN_DUPLICATE` shows it). RequestKey is
-   out of scope; a production decision is required.
-2. **Pre-write failure response** — caller-profile or decision-audit failure ends the run without a coded response
-   (fail closed, nothing written). AppStart/ReadOwn now return `DIRECTORY_ERROR` / `INTERNAL_ERROR`; decide whether
-   SaveEntry adopts the same.
+1. **Create retry** — R1 create is non-idempotent (`R1_KNOWN_LIMITATION_CREATE_RETRY_NON_IDEMPOTENT`,
+   `docs/r1-known-limitations.md`). No RequestKey, no duplicate suppression; `WARN_DUPLICATE` is advisory.
+2. **Pre-write failures** — `DIRECTORY_ERROR` (caller profile) and `INTERNAL_ERROR` (permission audit), both
+   `MSG_TEMPORARY_PROBLEM`, no write, no item data. Post-write audit failure stays AUD-F1 option B.

@@ -50,7 +50,7 @@ How the generated save flow behaves today (test AL17):
 2. The entry is written.
 3. The `WriteProxy` row is appended. If it fails, the run fails and the app receives **no response**.
 
-So the entry is persisted, but the user sees a failure. Create idempotency (R1-Q3) is open, so a retry creates a **duplicate**.
+So the entry is persisted, but the user sees a failure. R1 create is non-idempotent (approved known limitation), so a retry creates a **duplicate**.
 
 | | A. Fail the whole request | B. Business success + `AUDIT_DEGRADED` | C. Durable outbox / retry |
 |---|---|---|---|

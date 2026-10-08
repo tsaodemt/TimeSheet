@@ -145,11 +145,19 @@ Customer-facing wording is not decided yet. The app maps each code to a message;
 
 The save needs the pay-period start day, the two warning limits, the project-assignment switch and the business time zone. If any of them is unresolved or invalid (including a time zone without a Windows zone id), the save refuses with `CONFIG_UNRESOLVED` / `CONFIG_INVALID`; it never assumes a value.
 
-## Create idempotency (open)
+## Create retry (R1: non-idempotent, approved)
 
-Edits are protected by the ETag. Create idempotency is an open decision (R1-Q3): **INTERIM / NOT GUARANTEED**; exactly-once creation is not claimed. The reference implementation keeps it pluggable:
-- default: none — the app disables Save while a call is in flight, and `WARN_DUPLICATE` makes a repeated create visible;
-- option under review: a client-generated request key stored in an indexed, unique column; a repeat of the same key by the same owner with the same values returns the existing entry (`OK_REPLAY`), any other reuse is refused (`IDEMPOTENCY_KEY_REUSED`) without revealing the other entry. This needs a schema change and is not provisioned.
+Edits are protected by the ETag. R1 create is **non-idempotent** by an approved decision
+(`R1_KNOWN_LIMITATION_CREATE_RETRY_NON_IDEMPOTENT`): every valid create is an independent command with a fresh `LegacyId`;
+a retry after a lost response may create a second own row. `WARN_DUPLICATE` is advisory (never blocks, merges or
+deletes). Exactly-once creation is not claimed. The reference keeps a request-key strategy only as an unapproved,
+unprovisioned option for a later release; it is not part of R1 (no RequestKey column).
+
+## Pre-write failures
+
+Caller-profile failure → `DIRECTORY_ERROR`; failed mandatory pre-write permission-decision audit → `INTERNAL_ERROR`;
+both `MSG_TEMPORARY_PROBLEM`, `itemid=0`, `etag=""`, no write. A failed post-write WriteProxy append keeps AUD-F1
+option B (`ok=true`, `AUDIT_DEGRADED`).
 
 ## Reference implementation
 

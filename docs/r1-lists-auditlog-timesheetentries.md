@@ -80,7 +80,7 @@ Phase 1 readiness:
   - Choice Draft / Approved / Deleted, default Draft;
   - `Rejected` is reserved and not provisioned;
   - soft delete = `Deleted`.
-- No `ApprovalStatus`, `IsDeleted`, `RequestKey` (R1-Q3 open) or version column. The SharePoint ETag is the concurrency mechanism.
+- No `ApprovalStatus`, `IsDeleted`, `RequestKey` (R1 create is non-idempotent by approved decision) or version column. The SharePoint ETag is the concurrency mechanism.
 - `OwnerUpn` is the indexed ownership key. `Author` is metadata only.
 - `WorkDate`:
   - date-only;

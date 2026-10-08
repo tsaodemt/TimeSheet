@@ -32,6 +32,9 @@ WARN_RELOAD_REQUIRED = "WARN_RELOAD_REQUIRED"
 CONFIG_UNRESOLVED, CONFIG_INVALID = "CONFIG_UNRESOLVED", "CONFIG_INVALID"
 ERROR_LEAK, IDEMPOTENCY_KEY_REUSED = "ERROR_LEAK", "IDEMPOTENCY_KEY_REUSED"
 ERROR = "ERROR"  # technical failure, e.g. reference data unreadable (fail closed)
+DIRECTORY_ERROR = "DIRECTORY_ERROR"  # caller-profile / directory operational failure
+INTERNAL_ERROR = "INTERNAL_ERROR"    # mandatory internal step (e.g. a pre-write audit append) failed
+MSG_TEMPORARY_PROBLEM = "MSG_TEMPORARY_PROBLEM"
 VALIDATION_REQUEST_KEY = "VALIDATION_REQUEST_KEY"  # only with the request-key strategy (R1-Q3 option, not approved)
 
 DRAFT, APPROVED, DELETED = "Draft", "Approved", "Deleted"
@@ -187,8 +190,27 @@ class RequestKeyIdempotency:
 # ---------------------------------------------------------------- save
 
 def save_entry(guard_result, caller: Optional[Caller], request: Mapping, masters: Optional[Masters], settings: Mapping,
-               store: Store, *, correlation_id: str, idempotency=None, messages: Optional[Mapping] = None) -> Response:
-    """TS-SaveEntry for own drafts. `guard_result` is the guard decision for the own-draft capability (scope self)."""
+               store: Store, *, correlation_id: str, idempotency=None, messages: Optional[Mapping] = None,
+               profile_failed: bool = False, audit_writer: Optional[Callable[[str], None]] = None) -> Response:
+    """TS-SaveEntry for own drafts. `guard_result` is the guard decision for the own-draft capability (scope self).
+
+    Pre-write failures (no TimesheetEntries write, no WriteProxy row, no item data; auditStatus "" = not applicable):
+      profile_failed            caller-profile read (MyProfile_V2) failed      -> DIRECTORY_ERROR / MSG_TEMPORARY_PROBLEM
+      audit_writer("Authorization") raises: mandatory pre-write permission-decision append failed
+                                                                              -> INTERNAL_ERROR / MSG_TEMPORARY_PROBLEM
+    The post-write WriteProxy append keeps AUD-F1 option B (finalize_audit), never INTERNAL_ERROR.
+    R1 create is NON-IDEMPOTENT (R1_KNOWN_LIMITATION_CREATE_RETRY_NON_IDEMPOTENT): a retried create is a new row."""
+    def pre_write_failure(code):
+        return Response(False, code, (messages or {}).get(code, ""), correlationId=correlation_id,
+                        ignoredInputs=sorted(k for k in request if k not in SAVE_INPUTS), messageCode=MSG_TEMPORARY_PROBLEM,
+                        auditStatus="")
+    if profile_failed:
+        return pre_write_failure(DIRECTORY_ERROR)
+    if audit_writer is not None:
+        try:
+            audit_writer("Authorization")
+        except Exception:
+            return pre_write_failure(INTERNAL_ERROR)
     idem = idempotency or NoIdempotency()
     msg = lambda c: (messages or {}).get(c, "")  # noqa: E731  customer wording is R1-Q4 (open)
     ignored = sorted(k for k in request if k not in SAVE_INPUTS)
@@ -341,10 +363,6 @@ class ReadFilter:
             parts.append("WorkDate lt datetime'%s'" % hi)
         parts += ["EntryStatus ne '%s'" % DELETED, "Id gt %d" % self.after_id]
         return " and ".join(parts)
-
-
-DIRECTORY_ERROR, INTERNAL_ERROR = "DIRECTORY_ERROR", "INTERNAL_ERROR"
-MSG_TEMPORARY_PROBLEM = "MSG_TEMPORARY_PROBLEM"
 
 
 def read_own(guard_result, caller: Optional[Caller], request: Mapping, store: Store, *, correlation_id: str,

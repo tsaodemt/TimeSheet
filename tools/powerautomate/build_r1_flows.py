@@ -221,7 +221,8 @@ def save_draft_actions(*, scope_config, role_groups, site, domain, emp_list, aud
     text_5 WorkTypeCode, text_6 ShiftCode, text_7 HourTypeCode, text_8 Hours, text_9 Remark, text_10..15 decoys
     (OwnerUpn, ActorUpn, EmployeeId, Role, Scope, EntryStatus: recorded by name, never used).
 
-    No approval, no delete. Create idempotency is R1-Q3 (open): only "none" can be generated. UAT and PRODUCTION
+    No approval, no delete. R1 create is NON-IDEMPOTENT (approved; R1_KNOWN_LIMITATION_CREATE_RETRY_NON_IDEMPOTENT):
+    only "none" can be generated; a retried create is an independent new row. UAT and PRODUCTION
     builds refuse interim or unapproved settings (B-03 interim Off is engineering only)."""
     if idempotency != "none":
         raise ValueError("create idempotency is an open decision (R1-Q3): only 'none' can be generated")
@@ -274,7 +275,9 @@ def save_draft_actions(*, scope_config, role_groups, site, domain, emp_list, aud
             "if(equals(%s?['EntryStatus'], 'Deleted'), 'NOT_FOUND', if(not(equals(toLower(%s), %s)), 'FORBIDDEN', "
             "if(not(equals(%s?['EntryStatus'], 'Draft')), 'LOCKED', if(not(equals(%s, %s)), 'CONFLICT', 'OK')))))))"
             % (pre_ok, is_edit, _okd("Get_item"), it, nz("%s?['OwnerUpn']" % it), T, it, o("ETagIn"), nz(stored_etag)))
-    g["Edit_code"] = c("@" + edit, {"If_edit": ["Succeeded", "Failed", "Skipped", "TimedOut"]})
+    # never after Skipped: If_edit / If_lookup / If_write / Write_Write_proxy are skipped only when a mandatory earlier step
+    # (caller profile, pre-write permission audit) failed; that path ends in Respond_error without a write
+    g["Edit_code"] = c("@" + edit, {"If_edit": ["Succeeded", "Failed", "TimedOut"]})
 
     # lookups: reference lists read by code; any unreadable list fails closed (ERROR), nothing is assumed
     first = lambda n: "first(%s)" % _rows(n)  # noqa: E731
@@ -303,7 +306,7 @@ def save_draft_actions(*, scope_config, role_groups, site, domain, emp_list, aud
         + ["or(not(%s), greater(length(%s), 0))" % (scoping_on, _rows("Get_assign")),
            "greater(length(%s), 0)" % _rows("Get_pp"), "not(equals(%s?['IsActive'], false))" % first("Get_pp")])
     g["Lookup_code"] = c("@if(not(equals(outputs('Edit_code'), 'OK')), outputs('Edit_code'), if(not(%s), 'ERROR', if(not(%s), 'VALIDATION_LOOKUP', 'OK')))"
-                         % (masters_ok, valid_lookup), {"If_lookup": ["Succeeded", "Failed", "Skipped", "TimedOut"]})
+                         % (masters_ok, valid_lookup), {"If_lookup": ["Succeeded", "Failed", "TimedOut"]})
     g["Hours"] = c("@float(if(%s, %s, '0'))" % (_decimal_ok(H), H), S("Lookup_code"))
     hours_ok = "and(%s, greater(outputs('Hours'), 0), not(greater(outputs('Hours'), 24)))" % _decimal_ok(H)
     date_ok = "and(%s, equals(actions('Date_check')?['status'], 'Succeeded'))" % _date_shape_ok(WD)
@@ -353,7 +356,7 @@ def save_draft_actions(*, scope_config, role_groups, site, domain, emp_list, aud
     g["Final_code"] = c("@if(not(equals(outputs('Valid'), 'OK')), outputs('Valid'), if(not(and(%s, %s)), 'ERROR', if(%s, 'OK', "
                         "if(and(%s, equals(actions('Update')?['outputs']?['statusCode'], 412)), 'CONFLICT', 'ERROR'))))"
                         % (_okd("Day_query"), _okd("Get_type"), written, is_edit),
-                        {"If_write": ["Succeeded", "Failed", "Skipped", "TimedOut"]})
+                        {"If_write": ["Succeeded", "Failed", "TimedOut"]})
     ok = "equals(outputs('Final_code'), 'OK')"
     g["Out_id"] = c("@if(%s, if(%s, %s, %s?['d']?['Id']), if(equals(outputs('Final_code'), 'CONFLICT'), %s, 0))"
                     % (ok, is_edit, ITEM, _ab("Create"), ITEM), S("Final_code"))
@@ -390,7 +393,7 @@ def save_draft_actions(*, scope_config, role_groups, site, domain, emp_list, aud
     # entry's CorrelationId is the reconciliation key. No retry is made. A failed decision append (before any write)
     # still stops the run without a write.
     g["Audit_status"] = c("@if(equals(actions('Write_Write_proxy')?['status'], 'Succeeded'), 'OK', 'AUDIT_DEGRADED')",
-                          {"Write_Write_proxy": ["Succeeded", "Failed", "Skipped", "TimedOut"]})
+                          {"Write_Write_proxy": ["Succeeded", "Failed", "TimedOut"]})
     degraded = "equals(outputs('Audit_status'), 'AUDIT_DEGRADED')"
     g["Warnings_out"] = {"type": "Query", "runAfter": S("Audit_status"), "inputs": {
         "from": "@union(body('Warnings'), createArray(if(and(%s, %s), 'AUDIT_DEGRADED', %s)))" % (ok, degraded, EMPTY),
@@ -408,4 +411,13 @@ def save_draft_actions(*, scope_config, role_groups, site, domain, emp_list, aud
     g["Respond"] = {"type": "Response", "kind": "PowerApp", "runAfter": S("Warnings_out"),
                     "inputs": {"statusCode": 200, "body": body, "schema": {"type": "object", "properties": {
                         k: {"title": k, "x-ms-dynamically-added": True, "type": "string"} for k in body}}}}
+    # Pre-write failure (the normal path did not complete, nothing was written): caller-profile read failed ->
+    # DIRECTORY_ERROR; mandatory pre-write permission-decision audit (or another internal step) failed -> INTERNAL_ERROR.
+    # No item data; auditstatus "" (no WriteProxy row was attempted). AUD-F1 option B (post-write) is unchanged.
+    err = "if(equals(actions('Get_caller_profile')?['status'], 'Succeeded'), 'INTERNAL_ERROR', 'DIRECTORY_ERROR')"
+    err_body = {"ok": "false", "resultcode": "@{%s}" % err, "messagecode": "MSG_TEMPORARY_PROBLEM", "itemid": "0", "etag": "",
+                "correlationid": "@{workflow()?['run']?['name']}", "warnings": "[]", "interim": "[]", "auditstatus": ""}
+    assert list(err_body) == list(body)
+    g["Respond_error"] = {"type": "Response", "kind": "PowerApp", "runAfter": {"Respond": ["Skipped"]},
+                          "inputs": {"statusCode": 200, "body": err_body, "schema": g["Respond"]["inputs"]["schema"]}}
     return baf.bind_connection_references(base._fix(g), refs)
