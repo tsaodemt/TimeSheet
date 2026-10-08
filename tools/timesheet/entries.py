@@ -378,7 +378,10 @@ def _read_own(guard_result, caller, request, store, correlation_id, tz):
         return dict(base, ok=False, code=VALIDATION_LOOKUP)
     size = min(max(size, 1), MAX_PAGE)
     flt = ReadFilter(caller.upn, fdd.isoformat() if fdd else None, tdd.isoformat() if tdd else None, after, size, tz)
-    rows = store.query(flt)
+    try:
+        rows = store.query(flt)
+    except Exception:  # SharePoint / query failure: fail closed with the technical code, as the flow does
+        return dict(base, ok=False, code=ERROR)
     if any(f.get("OwnerUpn") != caller.upn or f.get("EntryStatus") == DELETED for _, f, _ in rows):
         return dict(base, ok=False, code=ERROR_LEAK)  # never return a page that contains anything foreign
     biz = lambda v: bd.business_date(v, tz) if isinstance(v, str) and v.endswith("Z") else v  # noqa: E731
