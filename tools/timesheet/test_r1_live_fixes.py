@@ -158,6 +158,22 @@ class LiveFixes(unittest.TestCase):
                          (ref["ok"], ref["resultCode"], ref["messageCode"], ref["employeeCode"], ref["configStatus"]))
         self.assertEqual(audit, [ev.to_row()])
 
+    def test_BF16_audit_writes_never_retry(self):
+        # live STAGING: a 502 after a committed AuditLog POST was retried and duplicated the row (non-idempotent append)
+        def posts(x):
+            if isinstance(x, dict):
+                if x.get("type") == "OpenApiConnection" and x["inputs"]["parameters"].get("parameters/method") == "POST":
+                    yield x
+                for v in x.values():
+                    yield from posts(v)
+        for f, flow in FLOWS.items():
+            audit = [a for a in posts(flow) if "_Audit" in a["inputs"]["parameters"]["parameters/uri"]
+                     or "AuditLog" in a["inputs"]["parameters"]["parameters/uri"]]
+            self.assertTrue(audit, f)
+            self.assertTrue(all(a["inputs"].get("retryPolicy") == {"type": "none"} for a in audit), f)
+            business = [a for a in posts(flow) if a not in audit]
+            self.assertFalse([a for a in business if "retryPolicy" in a["inputs"]], f)  # business writes unchanged
+
     def _suite_ok(self, module):
         with open(os.devnull, "w") as null:
             res = unittest.TextTestRunner(stream=null).run(unittest.defaultTestLoader.loadTestsFromModule(module))

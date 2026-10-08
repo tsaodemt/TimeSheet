@@ -588,7 +588,9 @@ class AuditFailure(_Both):
         self.assertEqual(len(creates), 1, "exactly one create")
         self.assertEqual(len(self.ctx["store"].items), len(ITEMS) + 1)
         flow = json.dumps(FLOW)
-        self.assertNotIn('"retryPolicy"', flow)
+        # no automatic duplicate retry: the only retry policies are explicit no-retry on the audit appends (live STAGING)
+        self.assertEqual(set(re.findall(r'"retryPolicy": (\{[^}]*\})', flow)), {'{"type": "none"}'})
+        self.assertEqual(flow.count('"retryPolicy"'), flow.count("getbytitle('_Audit')/items\""))
         self.assertEqual(flow.count("getbytitle('TimesheetEntries')/items\""), 1, "one create action, no loop")
 
     def test_AF07_deny_path_audit_failure_is_distinguishable(self):

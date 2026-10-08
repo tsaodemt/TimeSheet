@@ -36,8 +36,13 @@ def _detail(ignored, omitted, client_expr):
             % (_arr(sorted(ignored)), _arr(sorted(omitted)), client_expr))
 
 
+NO_RETRY = {"type": "none"}  # audit append is non-idempotent: a retried POST after a committed write duplicates the row (live STAGING)
+
+
 def _write(audit_list, name):
-    return sp_http("POST", "_api/web/lists/getbytitle('%s')/items" % audit_list, S(name), "@{string(outputs('%s'))}" % name)
+    a = sp_http("POST", "_api/web/lists/getbytitle('%s')/items" % audit_list, S(name), "@{string(outputs('%s'))}" % name)
+    a["inputs"]["retryPolicy"] = dict(NO_RETRY)
+    return a
 
 
 def app_open_actions(*, site: str, domain: str, emp_list: str, audit_list: str, environment: str,

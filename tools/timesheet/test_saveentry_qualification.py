@@ -113,7 +113,8 @@ class SaveQualification(t._Both):
         self.assertNotIn("*", h["IF-MATCH"])
         self.assertIn("Get_item", h["IF-MATCH"])                        # the stored ETag the client's ETag was checked against
         self.assertNotIn('"*"', FLOW_JSON)
-        self.assertNotRegex(FLOW_JSON, r"retryPolicy")
+        self.assertEqual(set(re.findall(r'"retryPolicy": (\{[^}]*\})', FLOW_JSON)), {'{"type": "none"}'})  # audit appends only
+        self.assertNotIn("retryPolicy", json.dumps(t.FLOW["If_write"]))                                      # business writes: no policy
 
     def test_sq07_create_write_failure_is_error_without_row(self):
         hook = lambda n, a, p: ("Failed", {"statusCode": 500}) if n == "Create" else None  # noqa: E731
