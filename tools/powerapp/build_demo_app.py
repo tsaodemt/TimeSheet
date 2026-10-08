@@ -102,10 +102,18 @@ ClearCollect(colMessages, %s);
 Set(varBusy, false); Set(varSaving, false); Set(varReloadRequired, false)
 """ % _table(MESSAGES)
 
+# Power Apps Studio rejects Navigate in the start screen's OnVisible ("would automatically always navigate away"):
+# OnVisible calls AppOpen and arms a hidden timer; the timer's OnTimerEnd routes (live STAGING finding).
 STARTUP_ONVISIBLE = """
+Set(varRoute, false);
 Set(varBusy, true);
 Set(varOpen, %(F)s.Run("canvas-demo"));
 Set(varBusy, false);
+Set(varRoute, true)
+""" % {"F": FLOW_APPOPEN}
+
+STARTUP_ROUTE = """
+Set(varRoute, false);
 If(varOpen.ok = "true" && varOpen.configstatus = "OK",
     Set(varCfg, ParseJSON(varOpen.config));
     Set(varStartDay, Value(Text(varCfg.settings.PayPeriodStartDay)));
@@ -115,7 +123,7 @@ If(varOpen.ok = "true" && varOpen.configstatus = "OK",
     Set(varDeniedCode, If(varOpen.ok = "true", "MSG_" & varOpen.configstatus, varOpen.messagecode));
     Set(varDeniedRef, varOpen.correlationid);
     Navigate(scrAccessDenied, ScreenTransition.None))
-""" % {"F": FLOW_APPOPEN}
+"""
 
 LIST_ONVISIBLE = RANGE + ";\nSet(varAfter, Blank());\n" + READ
 
@@ -137,7 +145,7 @@ If(varSave.ok = "true",
     If(varSave.resultcode = "CONFLICT", Set(varEdit, Blank()); Navigate(scrMyTimesheets, ScreenTransition.None)))
 """ % {"F": FLOW_SAVE, "OK": MSG % '"MSG_OK"', "W": MSG % "w", "ERR": MSG % "varSave.messagecode"}
 
-PHASES_FOR_PROJECT = ("Filter(Phases, IsActive, ID in Filter(ProjectPhases, ProjectItemId = ddProject.Selected.ID, IsActive).Phase.Id)")
+PHASES_FOR_PROJECT = ("Filter(Phases, IsActive, ID in ForAll(Filter(ProjectPhases, ProjectItemId = ddProject.Selected.ID, IsActive), Phase.Id))")
 
 
 def screens() -> dict:
@@ -147,7 +155,9 @@ def screens() -> dict:
     lookup = lambda src, idf, field: "LookUp(%s, ID = %s, %s)" % (src, idf, field)  # noqa: E731
     return {
         "scrStartup": {"Properties": {"OnVisible": _f(STARTUP_ONVISIBLE)},
-                       "Children": [{"lblTitle": hdr("Timesheet")}, {"lblBusy": busy},
+                       "Children": [{"tmrRoute": ctl("Timer@2.1.0", Duration="1", Start="varRoute", AutoStart="false", Repeat="false",
+                                                     Visible="false", OnTimerEnd=STARTUP_ROUTE)},
+                                    {"lblTitle": hdr("Timesheet")}, {"lblBusy": busy},
                                     {"lblLoading": ctl("Label@2.5.1", Text='"Loading your timesheet…"', X="20", Y="100", Width="600", Height="40")}]},
         "scrAccessDenied": {"Children": [
             {"lblTitle": hdr("Timesheet is not available")},
@@ -183,15 +193,15 @@ def screens() -> dict:
             {"dpWorkDate": ctl("Classic/DatePicker@2.6.0", X="20", Y="100", Width="300",
                                DefaultDate="If(IsBlank(varEdit), Today(), varEdit.workDate)", Format='"dd/mm/yyyy"')},
             {"ddProject": ctl("Classic/DropDown@2.3.1", X="20", Y="150", Width="400", Items='Filter(Projects, Status.Value = "Active")',
-                              Default="If(IsBlank(varEdit), Blank(), %s)" % lookup("Projects", "varEdit.projectId", "ProjectCode"), Value='"ProjectCode"')},
+                              Default="If(IsBlank(varEdit), Blank(), %s)" % lookup("Projects", "varEdit.projectId", "ProjectCode"), **{"Items.Value": "ProjectCode"})},
             {"ddPhase": ctl("Classic/DropDown@2.3.1", X="20", Y="200", Width="400", Items=PHASES_FOR_PROJECT,
-                            Default="If(IsBlank(varEdit), Blank(), %s)" % lookup("Phases", "varEdit.phaseId", "PhaseCode"), Value='"PhaseCode"')},
+                            Default="If(IsBlank(varEdit), Blank(), %s)" % lookup("Phases", "varEdit.phaseId", "PhaseCode"), **{"Items.Value": "PhaseCode"})},
             {"ddWorkType": ctl("Classic/DropDown@2.3.1", X="20", Y="250", Width="400", Items="Filter(WorkTypes, IsActive)",
-                               Default="If(IsBlank(varEdit), Blank(), %s)" % lookup("WorkTypes", "varEdit.workTypeId", "WorkTypeCode"), Value='"WorkTypeCode"')},
+                               Default="If(IsBlank(varEdit), Blank(), %s)" % lookup("WorkTypes", "varEdit.workTypeId", "WorkTypeCode"), **{"Items.Value": "WorkTypeCode"})},
             {"ddShift": ctl("Classic/DropDown@2.3.1", X="20", Y="300", Width="400", Items="Filter(Shifts, IsActive)",
-                            Default="If(IsBlank(varEdit), Blank(), %s)" % lookup("Shifts", "varEdit.shiftId", "ShiftCode"), Value='"ShiftCode"')},
+                            Default="If(IsBlank(varEdit), Blank(), %s)" % lookup("Shifts", "varEdit.shiftId", "ShiftCode"), **{"Items.Value": "ShiftCode"})},
             {"ddHourType": ctl("Classic/DropDown@2.3.1", X="20", Y="350", Width="400", Items="HourTypes",
-                               Default="If(IsBlank(varEdit), Blank(), %s)" % lookup("HourTypes", "varEdit.hourTypeId", "HourTypeCode"), Value='"HourTypeCode"')},
+                               Default="If(IsBlank(varEdit), Blank(), %s)" % lookup("HourTypes", "varEdit.hourTypeId", "HourTypeCode"), **{"Items.Value": "HourTypeCode"})},
             {"txtHours": ctl("Classic/TextInput@2.3.2", X="20", Y="400", Width="200", Format="TextFormat.Number",
                              Default='If(IsBlank(varEdit), "", Text(varEdit.hours))', HintText='"Hours"')},
             {"lblHoursHint": ctl("Label@2.5.1", X="240", Y="400", Width="500", Height="40",

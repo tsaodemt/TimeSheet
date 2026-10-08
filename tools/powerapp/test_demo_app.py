@@ -37,8 +37,10 @@ class DemoApp(unittest.TestCase):
                 self.assertIsInstance(yaml.safe_load(open(f, encoding="utf-8")), dict, f)
 
     def test_DA02_startup_calls_appopen_and_routes_denied_or_config_error(self):
-        s = app.screens()["scrStartup"]["Properties"]["OnVisible"]
-        self.assertIn("'TS-AppOpen'.Run(", s)
+        scr = app.screens()["scrStartup"]
+        route = [c["tmrRoute"] for c in scr["Children"] if "tmrRoute" in c][0]["Properties"]
+        self.assertIn("'TS-AppOpen'.Run(", scr["Properties"]["OnVisible"])
+        s = scr["Properties"]["OnVisible"] + route["OnTimerEnd"]
         self.assertIn('varOpen.configstatus = "OK"', s)
         self.assertIn("Navigate(scrAccessDenied", s)
         self.assertIn("Navigate(scrMyTimesheets", s)
@@ -116,6 +118,34 @@ class DemoApp(unittest.TestCase):
         for k, v in app.MESSAGES.items():
             self.assertNotRegex(v, r"(?i)sharepoint|list|flow|http|stack", k)
         self.assertIn("you can still save", self.text)
+
+
+    def test_DA14_dropdown_display_column_uses_items_value(self):
+        # live STAGING (Power Apps Studio paste): a Classic/DropDown `Value` property is rejected ("something wrong with
+        # the pasted code"); the display column is `Items.Value: =<column>`
+        f = [f for f in self.files if f.endswith("scrEntry.pa.yaml")][0]
+        scr = yaml.safe_load(open(f, encoding="utf-8"))
+        dds = {k: v for c in scr["Screens"]["scrEntry"]["Children"] for k, v in c.items() if v["Control"].startswith("Classic/DropDown")}
+        self.assertEqual({k: v["Properties"].get("Items.Value") for k, v in dds.items()},
+                         {"ddProject": "=ProjectCode", "ddPhase": "=PhaseCode", "ddWorkType": "=WorkTypeCode", "ddShift": "=ShiftCode",
+                          "ddHourType": "=HourTypeCode"})
+        self.assertFalse(any("Value" in v["Properties"] for v in dds.values()))
+
+    def test_DA15_start_screen_onvisible_never_navigates(self):
+        # live STAGING (Studio app checker): Navigate in the start screen's OnVisible is an error; a hidden timer routes
+        scr = app.screens()["scrStartup"]
+        self.assertNotIn("Navigate(", scr["Properties"]["OnVisible"])
+        self.assertIn("Set(varRoute, true)", scr["Properties"]["OnVisible"])
+        t = [c["tmrRoute"] for c in scr["Children"] if "tmrRoute" in c][0]
+        self.assertEqual((t["Control"], t["Properties"]["Start"], t["Properties"]["Visible"], t["Properties"]["AutoStart"]),
+                         ("Timer@2.1.0", "=varRoute", "=false", "=false"))
+        self.assertTrue(t["Properties"]["OnTimerEnd"].lstrip("=\n").startswith("Set(varRoute, false)"))
+
+    def test_DA16_phase_filter_reads_lookup_ids_per_row(self):
+        # live STAGING (Studio): `<table>.Phase.Id` is invalid Power Fx ("'Id' isn't recognized"); ids come from ForAll
+        items = [c["ddPhase"] for c in app.screens()["scrEntry"]["Children"] if "ddPhase" in c][0]["Properties"]["Items"]
+        self.assertIn("ForAll(Filter(ProjectPhases, ProjectItemId = ddProject.Selected.ID, IsActive), Phase.Id)", items)
+        self.assertNotIn(").Phase.Id", items)
 
 
 class DemoData(unittest.TestCase):
