@@ -44,6 +44,7 @@ EVENT_TYPES = {
     "Unlock":             {"source": "EPIC 17 decision F-5 (pending)", "enabled": False},
     "SoftDelete":         {"source": "D-7 soft delete", "enabled": True},
     "AdminMaintenance":   {"source": "D-6 EMP-Maintain; MasterDataChange; PermissionChange", "enabled": True},
+    "SecurityMonitor":    {"source": "S07.4 SEC-Monitor out-of-band edit detection (alert destination pending)", "enabled": False},
 }
 # Legacy display wording required by the backlog (S06.9, S07.2, S07.3).
 ACTION_TEXT = {"Create": "Tạo mới", "Update": "Thay đổi", "Delete": "Xóa",

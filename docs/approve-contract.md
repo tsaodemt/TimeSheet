@@ -83,7 +83,7 @@ Status 2026-10-09: **IMPLEMENTED** — reference `tools/approval/approve_entries
 
 - The MERGE never touches `OwnerUpn`, `ActorUpn`, `EmployeeItemId`, `Employee`, `LegacyId`, `WorkDate`, `PeriodKey`, `DisciplineCode`, `CorrelationId` or any business column.
 - SharePoint `Author` / `Created` are never written by MERGE. `Editor` / `Modified` become the service account, as for every R1 write.
-- Immutability: TS-SaveEntry already returns `LOCKED` for any non-Draft row. S07.4 adds delete / reorder refusal and the direct-edit monitor.
+- Immutability: TS-SaveEntry already returns `LOCKED` for any non-Draft row. S07.4 (`docs/immutability-and-monitor.md`) shares that check as the invariant for the future delete / reorder paths and specifies the direct-edit monitor.
 
 ## G. Audit
 

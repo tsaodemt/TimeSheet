@@ -189,6 +189,21 @@ class RequestKeyIdempotency:
 
 # ---------------------------------------------------------------- save
 
+def ordinary_mutation_refusal(stored: Optional[Mapping], caller_upn: str) -> Optional[str]:
+    """S07.4 immutability invariant for an ordinary business mutation (edit; the planned soft delete and reorder) of one
+    stored TimesheetEntries row. Only the row as read by the service is consulted, never request values (status, owner,
+    lock or role claims from the client are ignored). Returns NOT_FOUND / FORBIDDEN / LOCKED, or None when the row may
+    be changed. Every non-Draft row is LOCKED, so an Approved row wins over any client ETag (the ETag check comes after).
+    TS-Approve / TS-Unapprove are approval state transitions with their own rules and do not use this check."""
+    if stored is None or stored.get("EntryStatus") == DELETED:
+        return NOT_FOUND
+    if stored.get("OwnerUpn") != caller_upn:
+        return FORBIDDEN
+    if stored.get("EntryStatus") != DRAFT:
+        return LOCKED
+    return None
+
+
 def save_entry(guard_result, caller: Optional[Caller], request: Mapping, masters: Optional[Masters], settings: Mapping,
                store: Store, *, correlation_id: str, idempotency=None, messages: Optional[Mapping] = None,
                profile_failed: bool = False, audit_writer: Optional[Callable[[str], None]] = None) -> Response:
@@ -250,10 +265,9 @@ def save_entry(guard_result, caller: Optional[Caller], request: Mapping, masters
         if got is None or got[0].get("EntryStatus") == DELETED:
             return done(False, NOT_FOUND)
         existing, etag = got
-        if existing.get("OwnerUpn") != caller.upn:
-            return done(False, FORBIDDEN)
-        if existing.get("EntryStatus") != DRAFT:
-            return done(False, LOCKED)
+        refused = ordinary_mutation_refusal(existing, caller.upn)
+        if refused:
+            return done(False, refused)
         if str(request.get("ETag") or "") != etag:
             return done(False, CONFLICT, itemId=item_id)
 
