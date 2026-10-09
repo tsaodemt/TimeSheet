@@ -31,6 +31,9 @@ docs/
   role-model.md                       Target roles and capabilities
   approval-capability-rules.md        Approved approve / unapprove matrix (gate G5), immutability and audit contract
   approve-contract.md                 TS-Approve / TS-Unapprove / TS-ReadTeam contract (S07.2 + S07.3 DONE, STAGING live-proven)
+  immutability-and-monitor.md         Approved-row immutability and SEC-Monitor (S07.4)
+  approval-visual-and-role-tests.md   Lock visual, Home pending count (S07.5) and role x rule tests (S07.6)
+  delivery-process.md                 Open Spec first process for every new epic / business area (after EPIC 07)
   runbook-identity-jml.md             Joiner / mover / leaver guidance (group propagation)
   roadmap.md                          Epic structure
 tools/powerautomate/
@@ -53,6 +56,8 @@ tools/approval/
   approve_entries.py                  TS-Approve / TS-ReadTeam reference (per-row approval, ETag, self / scope rules, queue)
   test_approve_flow.py                AQ01–AQ26, AQ-EQ, RT01–RT12: reference vs generated flows in the WDL simulator
   test_unapprove_flow.py              UQ01–UQ38: TS-Unapprove + TS-ReadTeam Approved mode (S07.3)
+  test_approval_role_matrix.py        RM01–RM14, RM99: every role x BR-APPR-01..09 / BR-EDIT-01 / BR-EDIT-03 (S07.6)
+tools/powerapp/test_approval_visual.py   V01–V22: lock visual and Home pending count (S07.5)
 tools/powerautomate/build_approval_flows.py   TS-Approve, TS-Unapprove and TS-ReadTeam flow definitions (S07.2 / S07.3)
 ```
 

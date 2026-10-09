@@ -25,6 +25,15 @@ Screens:
                 remark: Text(ThisRecord.Value.remark), status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag)}));
             Set(varNextAfter, varRead.nextafterid),
             Notify(Coalesce(LookUp(colMessages, code = varRead.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text)) & " (" & varRead.correlationid & ")", NotificationType.Error))
+        ;
+
+        If(!varNoTeam,
+            Set(varPend, 'TS-ReadTeam'.Run(Text(Coalesce(varTo, Today()), "yyyy-mm"), "", "500", {text_7: ""}));
+            If(varPend.ok = "true",
+                Set(varPendingCount, CountRows(Table(ParseJSON(varPend.rows))));
+                Set(varPendingMore, !IsBlank(varPend.nextafterid) && varPend.nextafterid <> "" && varPend.nextafterid <> "0"),
+                Set(varPendingCount, Blank());
+                If(varPend.resultcode = "ROLE_NOT_ALLOWED", Set(varNoTeam, true))))
     Children:
     - lblTitle:
         Control: Label@2.5.1
@@ -91,6 +100,16 @@ Screens:
           Width: =200
           Visible: =!varNoTeam
           OnSelect: =Navigate(scrTeamApproval, ScreenTransition.None)
+    - lblPending:
+        Control: Label@2.5.1
+        Properties:
+          X: =600
+          Y: =130
+          Width: =400
+          Height: =40
+          FontWeight: =FontWeight.Bold
+          Visible: =!varNoTeam && !IsBlank(varPendingCount)
+          Text: '="Chờ phê duyệt: " & If(varPendingMore, "500+", Text(varPendingCount))'
     - galEntries:
         Control: Gallery@2.15.0
         Variant: Vertical
@@ -101,22 +120,23 @@ Screens:
           Width: =Parent.Width - 40
           Height: =Parent.Height - 260
           TemplateSize: =70
+          TemplateFill: =If(ThisItem.status = "Approved", RGBA(242, 242, 242, 1), RGBA(0, 0, 0, 0))
         Children:
         - lblLine1:
             Control: Label@2.5.1
             Properties:
-              X: =10
+              X: =44
               Y: =5
-              Width: =Parent.TemplateWidth - 20
+              Width: =Parent.TemplateWidth - 164
               Height: =30
               Text: =Text(ThisItem.workDate, "dd/mm/yyyy") & "  ·  " & LookUp(Projects, ID = ThisItem.projectId, ProjectCode) & " / " & LookUp(Phases, ID = ThisItem.phaseId, PhaseCode) & "  ·  " & Text(ThisItem.hours)
                 & " h  ·  " & ThisItem.status
         - lblLine2:
             Control: Label@2.5.1
             Properties:
-              X: =10
+              X: =44
               Y: =35
-              Width: =Parent.TemplateWidth - 20
+              Width: =Parent.TemplateWidth - 54
               Height: =30
               Text: =LookUp(WorkTypes, ID = ThisItem.workTypeId, Title) & "  ·  " & ThisItem.remark
         - btnEdit:
@@ -128,6 +148,17 @@ Screens:
               Width: =90
               Visible: =ThisItem.status = "Draft"
               OnSelect: =Set(varEdit, ThisItem); Navigate(scrEntry, ScreenTransition.None)
+        - icoLock:
+            Control: Classic/Icon@2.5.0
+            Properties:
+              Icon: =Icon.Lock
+              X: =10
+              Y: =20
+              Width: =24
+              Height: =24
+              Visible: =ThisItem.status = "Approved"
+              Tooltip: ="Đã phê duyệt"
+              AccessibleLabel: ="Đã phê duyệt"
     - btnMore:
         Control: Classic/Button@2.2.0
         Properties:

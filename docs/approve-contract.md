@@ -131,6 +131,7 @@ A row shown in the queue can still be refused by TS-Approve, for example after a
   - the Edit button is shown only for `status = Draft` (unchanged from R1). This is a UI convenience; the server already returns `LOCKED`.
 - The confirm prompt is an in-screen label with Yes / No (Power Apps has no native confirm dialog); the multi-select is a per-row toggle button over a local `colSel` collection of `{id, etag}`.
 - **Visibility:** AppStart grants nothing and returns no roles, and it stays unchanged. The button is shown, and the screen's first TS-ReadTeam call decides access. `ROLE_NOT_ALLOWED` shows `MSG_ROLE_NOT_ALLOWED` and hides the button for the session.
+- **S07.5 (2026-10-09):** the landing screen shows the pending count from the same TS-ReadTeam Pending read (Mode empty, PageSize 500; "500+" when a further page exists); a `ROLE_NOT_ALLOWED` answer hides the count and the Team approval button silently. Approved rows show a lock icon. No contract change (`approval-visual-and-role-tests.md`).
 - **`messages.json`:** add `MSG_PARTIAL`, `MSG_REFUSED`, `MSG_VALIDATION_REQUEST` and a per-row success text. The other codes already exist.
 
 ## I. Offline tests (implemented)

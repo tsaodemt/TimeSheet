@@ -160,6 +160,7 @@ Screens:
             Notify(If(varUn.resultcode = "OK", Coalesce(LookUp(colMessages, code = "MSG_UNAPPROVE_OK", text), LookUp(colMessages, code = "MSG_ERROR", text)), Coalesce(LookUp(colMessages, code = varUn.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text))) & " (" & varUn.correlationid & ")",
                    If(varUn.resultcode = "OK", NotificationType.Success, NotificationType.Error));
             Set(varUnRow, Blank());
+            If(varUn.resultcode = "OK", Set(varPendingCount, Blank()));  // S07.5: a stale Home count is never shown; Home re-reads
             Set(varTeamAfter, Blank());
 
             Set(varBusy, true);
@@ -244,6 +245,7 @@ Screens:
             Notify(If(varAppr.resultcode = "OK", Coalesce(LookUp(colMessages, code = "MSG_APPROVE_OK", text), LookUp(colMessages, code = "MSG_ERROR", text)), Coalesce(LookUp(colMessages, code = varAppr.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text))) & " (" & varAppr.correlationid & ")",
                    If(varAppr.resultcode = "OK", NotificationType.Success, varAppr.resultcode = "PARTIAL", NotificationType.Warning, NotificationType.Error));
             Clear(colSel);
+            If(Value(varAppr.approvedcount) > 0, Set(varPendingCount, Blank()));  // S07.5: a stale Home count is never shown; Home re-reads
             Set(varTeamAfter, Blank());
 
             Set(varBusy, true);
@@ -282,6 +284,7 @@ Screens:
           Width: =Parent.Width - 40
           Height: =Parent.Height - 490
           TemplateSize: =70
+          TemplateFill: =If(ThisItem.status = "Approved", RGBA(242, 242, 242, 1), RGBA(0, 0, 0, 0))
         Children:
         - btnSel:
             Control: Classic/Button@2.2.0
@@ -319,6 +322,17 @@ Screens:
               Visible: =varTeamMode = "Approved" && ThisItem.status = "Approved"
               DisplayMode: =If(varApproving || varBusy, DisplayMode.Disabled, DisplayMode.Edit)
               OnSelect: =Set(varUnRow, ThisItem); Set(varUnConfirm, true)
+        - icoTeamLock:
+            Control: Classic/Icon@2.5.0
+            Properties:
+              Icon: =Icon.Lock
+              X: =30
+              Y: =20
+              Width: =24
+              Height: =24
+              Visible: =ThisItem.status = "Approved"
+              Tooltip: ="Đã phê duyệt"
+              AccessibleLabel: ="Đã phê duyệt"
     - btnTeamMore:
         Control: Classic/Button@2.2.0
         Properties:
