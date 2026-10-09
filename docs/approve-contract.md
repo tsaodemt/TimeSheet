@@ -1,6 +1,6 @@
 # Approve (TS-Approve) and team approval queue (TS-ReadTeam) — S07.2 implementation contract
 
-Status 2026-10-09: **DESIGN READY, not built, not deployed.** It rests on gate G5 (PASS; `docs/approval-capability-rules.md`) and reuses the R1 architecture (`docs/saveentry-contract.md`, `docs/readown-contract.md`, `docs/r1-error-semantics.md`). Unapprove is S07.3 and is not part of this contract. There is no period submission (B-02).
+Status 2026-10-09: **IMPLEMENTED** — reference `tools/approval/approve_entries.py`, flows `tools/powerautomate/build_approval_flows.py` (`approve_actions`, `read_team_actions`), Canvas `scrTeamApproval` (`tools/powerapp/build_demo_app.py`), offline tests `tools/approval/test_approve_flow.py` (AQ01–AQ26, AQ-EQ, AQ-T1–T3, RT01–RT12) and `tools/powerapp/test_demo_app.py` DA16. STAGING deployment state is recorded per task in the private working area. It rests on gate G5 (PASS; `docs/approval-capability-rules.md`) and reuses the R1 architecture (`docs/saveentry-contract.md`, `docs/readown-contract.md`, `docs/r1-error-semantics.md`). Unapprove is S07.3 and is not part of this contract. There is no period submission (B-02).
 
 ## A. SharePoint schema delta (`TimesheetEntries`)
 
@@ -10,23 +10,23 @@ Status 2026-10-09: **DESIGN READY, not built, not deployed.** It rests on gate G
 | `ApprovedOn` | Date and time | UTC instant of the approval request (`utcNow()` ISO-8601 `Z`). Empty while Draft. Not indexed. |
 
 - No other column, index or choice change. `EntryStatus` already has `Draft` / `Approved` / `Deleted`. The queue query uses the existing `PeriodKey` and `DisciplineCode` indexes.
-- **Conflict to confirm before provisioning:** the earlier target data model and the gated definition in `tools/provisioning/r1_lists.py` declare `ApprovedBy` as a *Person* column. This contract uses text UPN, for three reasons:
+- **Decided (project owner, 2026-10-09, final):** `ApprovedBy` is single line of text holding the trusted approver UPN; it is **not** a SharePoint Person column. `ApprovedOn` is date and time holding the server-generated UTC instant. The earlier Person definition is removed from `tools/provisioning/r1_lists.py` and the target data model. Reasons:
   - it matches `OwnerUpn` / `ActorUpn`, and `AuditLog` already replaced its planned Person `Actor` with `ActorUpn` text;
   - authorization never depends on Person-field resolution;
   - it is tenant-portable and needs no `ensureuser` call by the service.
-- The gated definition is changed when the column is provisioned (next task). Legacy rows keep both columns empty (approver unknown).
+- Legacy rows keep both columns empty (approver unknown).
 
 ## B. TS-Approve input (Power Apps V2 trigger)
 
 | Input | Rule |
 |---|---|
 | `Items` | JSON array of `{"itemId": <int>, "etag": "<etag from TS-ReadTeam>"}`. 1–50 entries. Request order is kept. A duplicate `itemId`, invalid JSON, an empty array or more than 50 entries → `VALIDATION_REQUEST` and nothing is written |
-| `ClientRequestId` | optional, audit only |
-| Claimed `OwnerUpn`, `ApproverUpn`, `Role`, `Scope`, `EntryStatus` | Untrusted. The names are logged in `IgnoredInputs`; the values are never read |
+| `ClientRequestId` | audit only (may be empty) |
+| Claimed `ApprovedBy`, `ApproverUpn`, `DisciplineCode`, `EntryStatus`, `OwnerUpn`, `Role`, `Scope` | Untrusted, optional trigger inputs. The names are logged in `IgnoredInputs`; the values are never read |
 
 ## C. TS-Approve response (all values strings)
 
-`ok`, `resultcode`, `messagecode` (`MSG_<code>`), `correlationid`, `approvedcount`, `refusedcount`, `auditstatus` (`OK` / `AUDIT_DEGRADED`), and `results`. `results` is a JSON array in request order, one entry per item: `{itemid, resultcode, messagecode, etag}`, where `etag` is the new ETag after approval and empty otherwise.
+`ok`, `resultcode`, `messagecode` (`MSG_<code>`), `correlationid`, `approvedcount`, `refusedcount`, `auditstatus` (`OK` / `AUDIT_DEGRADED`), `results` and `warnings` (JSON array: `WARN_RELOAD_REQUIRED` when an approved row's new ETag could not be read back, `AUDIT_DEGRADED`). `results` is a JSON array in request order, one entry per item: `{itemid, resultcode, messagecode, etag}`, where `etag` is the new ETag after approval and empty otherwise.
 
 | Request `resultcode` | When |
 |---|---|
@@ -34,7 +34,10 @@ Status 2026-10-09: **DESIGN READY, not built, not deployed.** It rests on gate G
 | `PARTIAL` | at least one row approved and at least one refused (`ok=true`) |
 | `REFUSED` | no row approved; every row has its own code (`ok=false`) |
 | guard codes (`ROLE_NOT_ALLOWED`, `INACTIVE_EMPLOYEE`, `UNMAPPED_IDENTITY`, …) | caller-level refusal; `results=[]`; nothing read or written |
+| `SCOPE_NOT_ALLOWED` | Team Leader whose own employee row has no discipline (the guard's self-scope check); `results=[]` |
 | `VALIDATION_REQUEST` | malformed `Items` |
+| `CONFIG_UNRESOLVED` | `BusinessTimezone` unreadable or invalid (needed for the audit `WorkDate`); nothing read |
+| `ERROR` | the list entity type could not be read before the loop; nothing written |
 | `DIRECTORY_ERROR` / `INTERNAL_ERROR` | caller profile failed / mandatory pre-write authorization audit failed (`MSG_TEMPORARY_PROBLEM`, `results=[]`) |
 
 | Row `resultcode` | Meaning |
@@ -101,9 +104,10 @@ Status 2026-10-09: **DESIGN READY, not built, not deployed.** It rests on gate G
 |---|---|
 | Input | `PeriodKey` (`yyyy-MM`, required; `VALIDATION_DATE` otherwise), `AfterId`, `PageSize` (1–500) |
 | Guard | `TS.Approve`, scope self. The queue is purpose-bound: App Administrator holds `TS.ViewOthers` but not `TS.Approve`, so it gets `ROLE_NOT_ALLOWED` |
-| Query (service) | `PeriodKey eq '<p>' and EntryStatus eq 'Draft' [and DisciplineCode eq '<caller discipline>' when scope = discipline] and OwnerUpn ne '<caller>' and Id gt <AfterId>`, `$orderby=Id`, `$top`. `PeriodKey` is the first, indexed filter (the approved index decision) |
-| Response | `ok`, `resultcode`, `messagecode`, `correlationid`, `rows` = `{id, ownerName, ownerCode, workDate, project, phase, workType, shift, hourType, hours, remark, status, etag}`, `nextafterid`, `pagesize` |
-| Audit | `AuthorizationAllow` / `AuthorizationDeny` + `ReadProxy` (both mandatory, as ReadOwn); leak check: an own row or a non-Draft row → `ERROR_LEAK`, no rows |
+| Query (service) | `PeriodKey eq '<p>' and EntryStatus eq 'Draft' [and DisciplineCode eq '<caller discipline>' when scope = discipline] and OwnerUpn ne '<caller>' and EmployeeItemId ne <caller employee> and Id gt <AfterId>`, `$orderby=Id`, `$top`. `PeriodKey` is the first, indexed filter (the approved index decision) |
+| Response | `ok`, `resultcode`, `messagecode`, `correlationid`, `rows` = `{id, ownerName, ownerCode, workDate, projectId, phaseId, workTypeId, shiftId, hourTypeId, hours, remark, status, etag}` (reference ids as in TS-ReadOwn; the app maps them to codes; owner name / code come from the expanded `Employee` lookup), `nextafterid`, `pagesize` |
+| Refusals | guard codes; `VALIDATION_DATE` (PeriodKey not `yyyy-MM` with month 01–12); `CONFIG_UNRESOLVED`; `VALIDATION_LOOKUP` (AfterId / PageSize not integers); `SCOPE_NOT_ALLOWED` (Team Leader without discipline) |
+| Audit | `AuthorizationAllow` / `AuthorizationDeny` + `ReadProxy` (`Action=ReadTeam`; both mandatory, as ReadOwn); leak check: an own row, a non-Draft row, another period, or another discipline snapshot under discipline scope → `ERROR_LEAK`, no rows |
 
 A row shown in the queue can still be refused by TS-Approve, for example after a discipline transfer. That is safe and intended.
 
@@ -117,12 +121,13 @@ A row shown in the queue can still be refused by TS-Approve, for example after a
   - TS-Approve with the selected `{itemId, etag}`;
   - a per-row result list (`MSG_<code>`), then reload.
 - **`scrMyTimesheets`:**
-  - a "Duyệt chấm công" navigation button;
-  - the Edit button is disabled for `status = Approved`. This is a UI convenience; the server already returns `LOCKED`.
+  - a "Team approval" navigation button (`btnTeam`);
+  - the Edit button is shown only for `status = Draft` (unchanged from R1). This is a UI convenience; the server already returns `LOCKED`.
+- The confirm prompt is an in-screen label with Yes / No (Power Apps has no native confirm dialog); the multi-select is a per-row toggle button over a local `colSel` collection of `{id, etag}`.
 - **Visibility:** AppStart grants nothing and returns no roles, and it stays unchanged. The button is shown, and the screen's first TS-ReadTeam call decides access. `ROLE_NOT_ALLOWED` shows `MSG_ROLE_NOT_ALLOWED` and hides the button for the session.
 - **`messages.json`:** add `MSG_PARTIAL`, `MSG_REFUSED`, `MSG_VALIDATION_REQUEST` and a per-row success text. The other codes already exist.
 
-## I. Offline tests (next task)
+## I. Offline tests (implemented)
 
 | Area | Cases |
 |---|---|

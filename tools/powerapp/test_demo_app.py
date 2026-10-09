@@ -31,7 +31,7 @@ class DemoApp(unittest.TestCase):
     def test_DA01_four_screens_and_valid_yaml(self):
         names = {os.path.basename(f) for f in self.files}
         self.assertEqual(names, {"App.pa.yaml", "scrStartup.pa.yaml", "scrAccessDenied.pa.yaml", "scrMyTimesheets.pa.yaml",
-                                 "scrEntry.pa.yaml", "messages.json"})
+                                 "scrEntry.pa.yaml", "scrTeamApproval.pa.yaml", "messages.json"})
         for f in self.files:
             if f.endswith(".pa.yaml"):
                 self.assertIsInstance(yaml.safe_load(open(f, encoding="utf-8")), dict, f)
@@ -130,6 +130,31 @@ class DemoApp(unittest.TestCase):
                          {"ddProject": "=ProjectCode", "ddPhase": "=PhaseCode", "ddWorkType": "=WorkTypeCode", "ddShift": "=ShiftCode",
                           "ddHourType": "=HourTypeCode"})
         self.assertFalse(any("Value" in v["Properties"] for v in dds.values()))
+
+    def test_DA16_team_approval_mode(self):
+        """S07.2: queue from the guarded TS-ReadTeam, multi-select, Approve via TS-Approve with {itemId, etag} only, refresh."""
+        scr = app.screens()["scrTeamApproval"]
+        c = {k: v for x in scr["Children"] for k, v in x.items()}
+        self.assertIn("'TS-ReadTeam'.Run(varTeamPeriod,", scr["Properties"]["OnVisible"])
+        self.assertIn('"yyyy-mm"', scr["Properties"]["OnVisible"])
+        sel = c["galTeam"]["Children"][0]["btnSel"]["Properties"]["OnSelect"]
+        self.assertIn("Collect(colSel, {id: ThisItem.id, etag: ThisItem.etag})", sel)
+        self.assertIn("CountRows(colSel) = 0", c["btnApprove"]["Properties"]["DisplayMode"])
+        self.assertIn("CountRows(colSel) > 50", c["btnApprove"]["Properties"]["DisplayMode"])
+        self.assertEqual(c["btnApprove"]["Properties"]["OnSelect"], "=Set(varConfirm, true)")  # confirm first
+        ap = c["btnConfirmYes"]["Properties"]["OnSelect"]
+        self.assertIn("'TS-Approve'.Run(JSON(ForAll(colSel, {itemId: id, etag: etag}), JSONFormat.Compact), \"\")", ap)
+        call = ap[ap.index("'TS-Approve'.Run("):ap.index("));", ap.index("'TS-Approve'.Run("))]
+        self.assertNotRegex(call, r"(?i)owner|approvedby|role|scope|discipline|User\(\)", "only item ids and ETags are sent")
+        self.assertIn("'TS-ReadTeam'.Run(", ap[ap.index("'TS-Approve'"):], "the queue is re-read after approving")
+        self.assertNotIn("Unapprove", json.dumps(app.screens()), "no unapprove in S07.2")
+        self.assertIn("MSG_APPROVE_CONFIRM", app.MESSAGES)
+        for k in ("MSG_PARTIAL", "MSG_REFUSED", "MSG_VALIDATION_REQUEST", "MSG_ROW_APPROVED"):
+            self.assertIn(k, app.MESSAGES)
+        lst = {k: v for x in app.screens()["scrMyTimesheets"]["Children"] for k, v in x.items()}
+        self.assertEqual(lst["btnTeam"]["Properties"]["Visible"], "=!varNoTeam")
+        edit = lst["galEntries"]["Children"][2]["btnEdit"]["Properties"]["Visible"]
+        self.assertEqual(edit, '=ThisItem.status = "Draft"', "Edit only for Draft (Approved rows are locked)")
 
     def test_DA15_start_screen_onvisible_never_navigates(self):
         # live STAGING (Studio app checker): Navigate in the start screen's OnVisible is an error; a hidden timer routes

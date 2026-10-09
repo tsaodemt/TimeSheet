@@ -31,6 +31,12 @@
   "WARN_HOURS_DAY": "Note: the total for this day is above the usual daily maximum.",
   "WARN_DUPLICATE": "Note: a similar entry already exists for this day.",
   "WARN_RELOAD_REQUIRED": "Saved. Your entries were reloaded before further changes.",
-  "AUDIT_DEGRADED": "Saved. A background record could not be written; the administrator has been notified. Do not save again."
+  "AUDIT_DEGRADED": "Saved. A background record could not be written; the administrator has been notified. Do not save again.",
+  "MSG_APPROVE_OK": "The selected entries were approved.",
+  "MSG_ROW_APPROVED": "Approved.",
+  "MSG_PARTIAL": "Some entries were approved; the others were refused (see the results).",
+  "MSG_REFUSED": "No entry was approved (see the results).",
+  "MSG_VALIDATION_REQUEST": "The selection could not be processed. Please select between 1 and 50 entries.",
+  "MSG_APPROVE_CONFIRM": "Bạn có muốn phê duyệt nội dung chấm công không?"
  }
 }

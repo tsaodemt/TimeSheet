@@ -279,6 +279,8 @@ def field_schema_xml(spec: dict, lookup_list_id: Optional[str] = None) -> str:
         attrs["Format"] = "DateOnly" if spec.get("dateOnly") else "DateTime"
     if t == "Number" and spec.get("decimals") is not None:
         attrs["Decimals"] = str(spec["decimals"])
+    if t == "Text" and spec.get("maxLength"):
+        attrs["MaxLength"] = str(spec["maxLength"])
     if t == "Note":
         attrs["RichText"] = "FALSE"
     if t == "Lookup":

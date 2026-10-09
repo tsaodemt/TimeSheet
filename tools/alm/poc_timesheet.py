@@ -23,7 +23,9 @@ REF = {"Phases": 2, "WorkTypes": 2, "Shifts": 1, "HourTypes": 1}
 PROJECT_ROWS = {"Projects": 1, "ProjectPhases": 2}
 APPROVED_INDEXES = {"OwnerUpn", "WorkDate", "LegacyId", "Employee", "Project", "EmployeeItemId", "PeriodKey", "DisciplineCode"}
 FORBIDDEN_COLUMNS = {"ApprovalStatus", "IsDeleted", "RequestKey"}
-GATED_COLUMNS = {"LegacyModifiedBy", "SortOrder", "ApprovedBy", "ApprovedOn", "LegacyApprovalInfo", "DataQualityFlags"}
+# ApprovedBy / ApprovedOn left the gated set with S07.2 (provisioned by TS-Approve's schema step); POC-TIMESHEET-01 evidence
+# predates them, so the Phase 1 evidence check below still compares against its own expectedColumns
+GATED_COLUMNS = {"LegacyModifiedBy", "SortOrder", "LegacyApprovalInfo", "DataQualityFlags"}
 STATUS_CHOICES = ["Draft", "Approved", "Deleted"]
 NEVER = {"DeleteListItems", "ManageLists", "ManagePermissions", "FullMask"}
 SERVICE_ENTRY_RIGHTS = {"ViewListItems", "AddListItems", "EditListItems"}

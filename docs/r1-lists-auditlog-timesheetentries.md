@@ -74,7 +74,8 @@ Phase 1 readiness:
 | Group | Columns |
 |---|---|
 | Created by an R1 Phase 1 | 23 columns |
-| Gated (not created) | `LegacyModifiedBy` (ENV-D2), `SortOrder` (S06.7), `ApprovedBy` / `ApprovedOn` (G5), `LegacyApprovalInfo` / `DataQualityFlags` (EPIC 08) |
+| Added by S07.2 (G5 PASS) | `ApprovedBy` — single line of text (255), the trusted approver UPN, **not** a Person column (project owner 2026-10-09); `ApprovedOn` — date and time, the server UTC instant. Written only by TS-Approve; empty while Draft and on legacy rows |
+| Gated (not created) | `LegacyModifiedBy` (ENV-D2), `SortOrder` (S06.7), `LegacyApprovalInfo` / `DataQualityFlags` (EPIC 08) |
 
 - `EntryStatus`:
   - Choice Draft / Approved / Deleted, default Draft;

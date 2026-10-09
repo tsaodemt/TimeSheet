@@ -44,12 +44,18 @@ class TimesheetEntries(unittest.TestCase):
         self.assertEqual(list(created()), ["Title", "LegacyId", "LegacyModifiedOn", "MigrationBatch", "IsLegacyPlaceholder", "LegacyOrigin",
                                            "Employee", "EmployeeItemId", "DisciplineCode", "OwnerUpn", "ActorUpn", "IsOnBehalf", "WorkDate",
                                            "PeriodKey", "Shift", "HourType", "Hours", "Project", "Phase", "WorkType", "Remark",
-                                           "EntryStatus", "CorrelationId"])
+                                           "EntryStatus", "CorrelationId", "ApprovedBy", "ApprovedOn"])
         self.assertEqual({n: f["gate"] for n, f in fields().items() if f.get("gate")},
                          {"LegacyModifiedBy": "CONFIDENTIAL / ENV-D2: not provisioned on operational lists", "SortOrder": "S06.7 reorder",
-                          "ApprovedBy": "EPIC 07 / gate G5", "ApprovedOn": "EPIC 07 / gate G5",
                           "LegacyApprovalInfo": "EPIC 08 migration", "DataQualityFlags": "EPIC 08 migration"})
         self.assertEqual(fields()["Hours"]["validationFormula"], "=AND([Hours]>0,[Hours]<=24)")
+
+    def test_TE01b_approved_by_text_upn_not_person(self):
+        f = fields()
+        self.assertEqual((f["ApprovedBy"]["type"], f["ApprovedBy"]["maxLength"], f["ApprovedBy"]["required"], f["ApprovedBy"]["indexed"]),
+                         ("Text", 255, False, False))
+        self.assertEqual((f["ApprovedOn"]["type"], f["ApprovedOn"]["dateOnly"], f["ApprovedOn"]["required"]), ("DateTime", False, False))
+        self.assertNotIn("User", {x["type"] for x in f.values()}, "no Person column on TimesheetEntries")
 
     def test_TE02_owner_upn_indexed_security_key(self):
         f = fields()["OwnerUpn"]

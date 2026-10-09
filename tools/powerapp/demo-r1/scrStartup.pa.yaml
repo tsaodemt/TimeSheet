@@ -3,19 +3,31 @@ Screens:
   scrStartup:
     Properties:
       OnVisible: |-
-        =Set(varBusy, true);
+        =Set(varRoute, false);
+        Set(varBusy, true);
         Set(varOpen, 'TS-AppOpen'.Run("canvas-demo"));
         Set(varBusy, false);
-        If(varOpen.ok = "true" && varOpen.configstatus = "OK",
-            Set(varCfg, ParseJSON(varOpen.config));
-            Set(varStartDay, Value(Text(varCfg.settings.PayPeriodStartDay)));
-            Set(varWarnEntry, Value(Text(varCfg.settings.MaxHoursPerEntryWarn)));
-            Set(varWarnDay, Value(Text(varCfg.settings.MaxHoursPerDayWarn)));
-            Navigate(scrMyTimesheets, ScreenTransition.None),
-            Set(varDeniedCode, If(varOpen.ok = "true", "MSG_" & varOpen.configstatus, varOpen.messagecode));
-            Set(varDeniedRef, varOpen.correlationid);
-            Navigate(scrAccessDenied, ScreenTransition.None))
+        Set(varRoute, true)
     Children:
+    - tmrRoute:
+        Control: Timer@2.1.0
+        Properties:
+          Duration: =1
+          Start: =varRoute
+          AutoStart: =false
+          Repeat: =false
+          Visible: =false
+          OnTimerEnd: |-
+            =Set(varRoute, false);
+            If(varOpen.ok = "true" && varOpen.configstatus = "OK",
+                Set(varCfg, ParseJSON(varOpen.config));
+                Set(varStartDay, Value(Text(varCfg.settings.PayPeriodStartDay)));
+                Set(varWarnEntry, Value(Text(varCfg.settings.MaxHoursPerEntryWarn)));
+                Set(varWarnDay, Value(Text(varCfg.settings.MaxHoursPerDayWarn)));
+                Navigate(scrMyTimesheets, ScreenTransition.None),
+                Set(varDeniedCode, If(varOpen.ok = "true", "MSG_" & varOpen.configstatus, varOpen.messagecode));
+                Set(varDeniedRef, varOpen.correlationid);
+                Navigate(scrAccessDenied, ScreenTransition.None))
     - lblTitle:
         Control: Label@2.5.1
         Properties:
