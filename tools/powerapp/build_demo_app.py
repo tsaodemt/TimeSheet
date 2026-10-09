@@ -251,15 +251,16 @@ def screens() -> dict:
                                OnSelect="Set(varConfirm, true)")},
             {"btnTeamRefresh": ctl("Classic/Button@2.2.0", Text='"Refresh"', X="600", Y="130", Width="120",
                                    OnSelect="Clear(colSel); Set(varTeamAfter, Blank());\n" + TEAM_READ)},
+            # the confirm row must not overlap the gallery (live STAGING: the gallery intercepted clicks on Yes)
             {"lblConfirm": ctl("Label@2.5.1", Text=MSG % '"MSG_APPROVE_CONFIRM"', X="20", Y="175", Width="560", Height="30", Visible="varConfirm",
                                FontWeight="FontWeight.Bold")},
-            {"btnConfirmYes": ctl("Classic/Button@2.2.0", Text='"Yes"', X="600", Y="175", Width="90", Visible="varConfirm",
+            {"btnConfirmYes": ctl("Classic/Button@2.2.0", Text='"Yes"', X="600", Y="175", Width="90", Height="40", Visible="varConfirm",
                                   DisplayMode="If(varApproving, DisplayMode.Disabled, DisplayMode.Edit)", OnSelect=APPROVE_ONSELECT)},
-            {"btnConfirmNo": ctl("Classic/Button@2.2.0", Text='"No"', X="700", Y="175", Width="90", Visible="varConfirm",
+            {"btnConfirmNo": ctl("Classic/Button@2.2.0", Text='"No"', X="700", Y="175", Width="90", Height="40", Visible="varConfirm",
                                  OnSelect="Set(varConfirm, false)")},
             {"galTeam": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
                 "Items": _f("SortByColumns(colTeam, \"workDate\", SortOrder.Descending, \"id\", SortOrder.Descending)"),
-                "X": "=20", "Y": "=220", "Width": "=Parent.Width - 40", "Height": "=Parent.Height - 470", "TemplateSize": "=70"},
+                "X": "=20", "Y": "=240", "Width": "=Parent.Width - 40", "Height": "=Parent.Height - 490", "TemplateSize": "=70"},
                 "Children": [
                     {"btnSel": ctl("Classic/Button@2.2.0", Text='If(ThisItem.id in colSel.id, "[x]", "[ ]")', X="5", Y="15", Width="60",
                                    OnSelect="If(ThisItem.id in colSel.id, ClearCollect(colSelTmp, Filter(colSel, id <> ThisItem.id)); ClearCollect(colSel, colSelTmp), Collect(colSel, {id: ThisItem.id, etag: ThisItem.etag}))")},

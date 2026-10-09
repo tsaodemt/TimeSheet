@@ -112,6 +112,7 @@ Screens:
           X: =600
           Y: =175
           Width: =90
+          Height: =40
           Visible: =varConfirm
           DisplayMode: =If(varApproving, DisplayMode.Disabled, DisplayMode.Edit)
           OnSelect: |-
@@ -146,6 +147,7 @@ Screens:
           X: =700
           Y: =175
           Width: =90
+          Height: =40
           Visible: =varConfirm
           OnSelect: =Set(varConfirm, false)
     - galTeam:
@@ -154,9 +156,9 @@ Screens:
         Properties:
           Items: =SortByColumns(colTeam, "workDate", SortOrder.Descending, "id", SortOrder.Descending)
           X: =20
-          Y: =220
+          Y: =240
           Width: =Parent.Width - 40
-          Height: =Parent.Height - 470
+          Height: =Parent.Height - 490
           TemplateSize: =70
         Children:
         - btnSel:

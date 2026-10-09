@@ -149,6 +149,9 @@ class DemoApp(unittest.TestCase):
         self.assertIn("'TS-ReadTeam'.Run(", ap[ap.index("'TS-Approve'"):], "the queue is re-read after approving")
         self.assertNotIn("Unapprove", json.dumps(app.screens()), "no unapprove in S07.2")
         self.assertIn("MSG_APPROVE_CONFIRM", app.MESSAGES)
+        num = lambda c, k: int(c[k]["Properties"]["Y"].lstrip("="))  # noqa: E731
+        bottom = int(c["btnConfirmYes"]["Properties"]["Y"].lstrip("=")) + int(c["btnConfirmYes"]["Properties"]["Height"].lstrip("="))
+        self.assertLess(bottom, num(c, "galTeam"), "confirm buttons must not overlap the gallery (live finding)")
         for k in ("MSG_PARTIAL", "MSG_REFUSED", "MSG_VALIDATION_REQUEST", "MSG_ROW_APPROVED"):
             self.assertIn(k, app.MESSAGES)
         lst = {k: v for x in app.screens()["scrMyTimesheets"]["Children"] for k, v in x.items()}
