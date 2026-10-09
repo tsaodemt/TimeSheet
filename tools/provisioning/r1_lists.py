@@ -92,8 +92,11 @@ _ENTRY_FIELDS = [
     F("EntryStatus", "Status", "Choice", True, False, choices=["Draft", "Approved", "Deleted"], default="Draft",
       reservedChoices=["Rejected"]),
     F("CorrelationId", "Correlation ID", "Text"),
-    F("ApprovedBy", "Approved by", "User", gate="EPIC 07 / gate G5"),
-    F("ApprovedOn", "Approved on", "DateTime", dateOnly=False, gate="EPIC 07 / gate G5"),
+    # S07.2 (gate G5 PASS; project owner 2026-10-09): ApprovedBy is the trusted approver UPN as single line of text, NOT a
+    # Person column (same as OwnerUpn / ActorUpn / AuditLog.ActorUpn; no ensureuser, no Person-field resolution).
+    # ApprovedOn is the server-generated UTC instant. Both are written only by TS-Approve; empty while Draft / legacy.
+    F("ApprovedBy", "Approved by", "Text", maxLength=255),
+    F("ApprovedOn", "Approved on", "DateTime", dateOnly=False),
     F("LegacyApprovalInfo", "Legacy approval info", "Text", gate="EPIC 08 migration"),
     F("DataQualityFlags", "DQ flags", "Text", gate="EPIC 08 migration"),
 ]

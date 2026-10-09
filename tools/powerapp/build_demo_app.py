@@ -1,7 +1,8 @@
 """R1 demo Canvas app source (Power Apps YAML, `*.pa.yaml`) — generic; no tenant, site, list GUID or account.
 
 Screens: scrStartup (TS-AppOpen), scrAccessDenied (identity / config error), scrMyTimesheets (TS-ReadOwn, bounded current
-pay period), scrEntry (new / edit own Draft via TS-SaveEntry). Protected lists (TimesheetEntries, AuditLog) are never data
+pay period), scrEntry (new / edit own Draft via TS-SaveEntry), scrTeamApproval (S07.2: Draft queue of the current pay
+period via TS-ReadTeam, multi-select, per-row approval via TS-Approve; no unapprove). Protected lists (TimesheetEntries, AuditLog) are never data
 sources: every read and write of entries goes through the flows. Reference lists (Projects, ProjectPhases, Phases,
 WorkTypes, Shifts, HourTypes) are read-only SharePoint data sources bound per environment when the app is added to the
 solution (the employee group has Read on them).
@@ -19,6 +20,7 @@ import sys
 import yaml
 
 FLOW_APPOPEN, FLOW_READ, FLOW_SAVE = "'TS-AppOpen'", "'TS-ReadOwn'", "'TS-SaveEntry'"
+FLOW_TEAM, FLOW_APPROVE = "'TS-ReadTeam'", "'TS-Approve'"  # S07.2 team approval (guarded; no direct entry access)
 REFERENCE_SOURCES = ("Projects", "ProjectPhases", "Phases", "WorkTypes", "Shifts", "HourTypes")
 PROTECTED_LISTS = ("TimesheetEntries", "AuditLog", "Employees", "AppSettings")
 PAGE_SIZE = 100
@@ -56,6 +58,13 @@ MESSAGES = {
     "WARN_DUPLICATE": "Note: a similar entry already exists for this day.",
     "WARN_RELOAD_REQUIRED": "Saved. Your entries were reloaded before further changes.",
     "AUDIT_DEGRADED": "Saved. A background record could not be written; the administrator has been notified. Do not save again.",
+    # S07.2 team approval
+    "MSG_APPROVE_OK": "The selected entries were approved.",
+    "MSG_ROW_APPROVED": "Approved.",
+    "MSG_PARTIAL": "Some entries were approved; the others were refused (see the results).",
+    "MSG_REFUSED": "No entry was approved (see the results).",
+    "MSG_VALIDATION_REQUEST": "The selection could not be processed. Please select between 1 and 50 entries.",
+    "MSG_APPROVE_CONFIRM": "Bạn có muốn phê duyệt nội dung chấm công không?",
 }
 
 
@@ -99,7 +108,8 @@ If(varRead.ok = "true",
 
 APP_ONSTART = """
 ClearCollect(colMessages, %s);
-Set(varBusy, false); Set(varSaving, false); Set(varReloadRequired, false)
+Set(varBusy, false); Set(varSaving, false); Set(varReloadRequired, false); Set(varNoTeam, false); Set(varApproving, false);
+Set(varConfirm, false)
 """ % _table(MESSAGES)
 
 # Power Apps Studio rejects Navigate in the start screen's OnVisible ("would automatically always navigate away"):
@@ -145,6 +155,44 @@ If(varSave.ok = "true",
     If(varSave.resultcode = "CONFLICT", Set(varEdit, Blank()); Navigate(scrMyTimesheets, ScreenTransition.None)))
 """ % {"F": FLOW_SAVE, "OK": MSG % '"MSG_OK"', "W": MSG % "w", "ERR": MSG % "varSave.messagecode"}
 
+# S07.2 team approval queue: the guarded backend decides access (AppStart grants nothing); ROLE_NOT_ALLOWED hides the
+# navigation button for the session. The period key of the current pay period is the month of its last day (BR-DATE-02).
+TEAM_READ = """
+Set(varBusy, true);
+Set(varTeam, %(F)s.Run(varTeamPeriod, If(IsBlank(varTeamAfter), "", Text(varTeamAfter)), "%(N)d"));
+Set(varBusy, false);
+If(varTeam.ok = "true",
+    If(IsBlank(varTeamAfter), Clear(colTeam));
+    Collect(colTeam, ForAll(Table(ParseJSON(varTeam.rows)), {
+        id: Value(ThisRecord.Value.id), ownerName: Text(ThisRecord.Value.ownerName), ownerCode: Text(ThisRecord.Value.ownerCode),
+        workDate: DateValue(Text(ThisRecord.Value.workDate)), projectId: Value(ThisRecord.Value.projectId),
+        phaseId: Value(ThisRecord.Value.phaseId), hours: Value(ThisRecord.Value.hours), remark: Text(ThisRecord.Value.remark),
+        status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag)}));
+    Set(varTeamNext, varTeam.nextafterid),
+    If(varTeam.resultcode = "ROLE_NOT_ALLOWED", Set(varNoTeam, true));
+    Notify(%(MSG)s & " (" & varTeam.correlationid & ")", NotificationType.Error))
+""" % {"F": FLOW_TEAM, "N": PAGE_SIZE, "MSG": MSG % "varTeam.messagecode"}
+
+TEAM_ONVISIBLE = """
+Set(varTeamPeriod, Text(Coalesce(varTo, Today()), "yyyy-mm"));
+Set(varTeamAfter, Blank());
+Clear(colSel);
+""" + TEAM_READ
+
+# per-row approval of the selected rows (1-50); the server re-checks role, scope, self, status and ETag for every row
+APPROVE_ONSELECT = """
+Set(varConfirm, false);
+Set(varApproving, true);
+Set(varAppr, %(F)s.Run(JSON(ForAll(colSel, {itemId: id, etag: etag}), JSONFormat.Compact), ""));
+Set(varApproving, false);
+ClearCollect(colApprRes, ForAll(Table(ParseJSON(varAppr.results)), {itemid: Text(ThisRecord.Value.itemid),
+    resultcode: Text(ThisRecord.Value.resultcode), messagecode: Text(ThisRecord.Value.messagecode)}));
+Notify(If(varAppr.resultcode = "OK", %(OK)s, %(MSG)s) & " (" & varAppr.correlationid & ")",
+       If(varAppr.resultcode = "OK", NotificationType.Success, varAppr.resultcode = "PARTIAL", NotificationType.Warning, NotificationType.Error));
+Clear(colSel);
+Set(varTeamAfter, Blank());
+""" % {"F": FLOW_APPROVE, "OK": MSG % '"MSG_APPROVE_OK"', "MSG": MSG % "varAppr.messagecode"} + TEAM_READ
+
 PHASES_FOR_PROJECT = ("Filter(Phases, IsActive, ID in ForAll(Filter(ProjectPhases, ProjectItemId = ddProject.Selected.ID, IsActive), Phase.Id))")
 
 
@@ -172,6 +220,8 @@ def screens() -> dict:
                            OnSelect="Set(varEdit, Blank()); Navigate(scrEntry, ScreenTransition.None)")},
             {"btnRefresh": ctl("Classic/Button@2.2.0", Text='"Refresh"', X="200", Y="130",
                                OnSelect="Set(varAfter, Blank());\n" + READ)},
+            {"btnTeam": ctl("Classic/Button@2.2.0", Text='"Team approval"', X="380", Y="130", Width="200", Visible="!varNoTeam",
+                            OnSelect="Navigate(scrTeamApproval, ScreenTransition.None)")},
             {"galEntries": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
                 "Items": _f("SortByColumns(colRows, \"workDate\", SortOrder.Descending, \"id\", SortOrder.Descending)"),
                 "X": "=20", "Y": "=180", "Width": "=Parent.Width - 40", "Height": "=Parent.Height - 260", "TemplateSize": "=70"},
@@ -187,6 +237,50 @@ def screens() -> dict:
             {"btnMore": ctl("Classic/Button@2.2.0", Text='"Load more"', X="20", Y="Parent.Height - 70",
                             Visible="!IsBlank(varNextAfter) && varNextAfter <> \"\" && varNextAfter <> \"0\"",  # contract: nextafterid 0 = no more pages
                             OnSelect="Set(varAfter, Value(varNextAfter));\n" + READ)}]},
+        "scrTeamApproval": {"Properties": {"OnVisible": _f(TEAM_ONVISIBLE)}, "Children": [
+            {"lblTeamTitle": hdr("Team approval")},
+            {"lblTeamBusy": ctl("Label@2.5.1", Text='If(varBusy || varApproving, "Working…", "")', X="20", Y="60", Width="400", Height="30")},
+            {"lblTeamPeriod": ctl("Label@2.5.1", Text='"Pay period " & varTeamPeriod & "  ·  Draft entries waiting for approval: " & CountRows(colTeam)',
+                                  X="20", Y="90", Width="800", Height="30")},
+            {"btnTeamBack": ctl("Classic/Button@2.2.0", Text='"Back"', X="20", Y="130", Width="120",
+                                OnSelect="Navigate(scrMyTimesheets, ScreenTransition.None)")},
+            {"btnSelAll": ctl("Classic/Button@2.2.0", Text='"Select all on page"', X="160", Y="130", Width="200",
+                              OnSelect="ClearCollect(colSel, ForAll(colTeam, {id: id, etag: etag}))")},
+            {"btnApprove": ctl("Classic/Button@2.2.0", Text='"Phê duyệt (" & CountRows(colSel) & ")"', X="380", Y="130", Width="200",
+                               DisplayMode="If(varApproving || varBusy || CountRows(colSel) = 0 || CountRows(colSel) > 50, DisplayMode.Disabled, DisplayMode.Edit)",
+                               OnSelect="Set(varConfirm, true)")},
+            {"btnTeamRefresh": ctl("Classic/Button@2.2.0", Text='"Refresh"', X="600", Y="130", Width="120",
+                                   OnSelect="Clear(colSel); Set(varTeamAfter, Blank());\n" + TEAM_READ)},
+            # the confirm row must not overlap the gallery (live STAGING: the gallery intercepted clicks on Yes)
+            {"lblConfirm": ctl("Label@2.5.1", Text=MSG % '"MSG_APPROVE_CONFIRM"', X="20", Y="175", Width="560", Height="30", Visible="varConfirm",
+                               FontWeight="FontWeight.Bold")},
+            {"btnConfirmYes": ctl("Classic/Button@2.2.0", Text='"Yes"', X="600", Y="175", Width="90", Height="40", Visible="varConfirm",
+                                  DisplayMode="If(varApproving, DisplayMode.Disabled, DisplayMode.Edit)", OnSelect=APPROVE_ONSELECT)},
+            {"btnConfirmNo": ctl("Classic/Button@2.2.0", Text='"No"', X="700", Y="175", Width="90", Height="40", Visible="varConfirm",
+                                 OnSelect="Set(varConfirm, false)")},
+            {"galTeam": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
+                "Items": _f("SortByColumns(colTeam, \"workDate\", SortOrder.Descending, \"id\", SortOrder.Descending)"),
+                "X": "=20", "Y": "=240", "Width": "=Parent.Width - 40", "Height": "=Parent.Height - 490", "TemplateSize": "=70"},
+                "Children": [
+                    {"btnSel": ctl("Classic/Button@2.2.0", Text='If(ThisItem.id in colSel.id, "[x]", "[ ]")', X="5", Y="15", Width="60",
+                                   OnSelect="If(ThisItem.id in colSel.id, ClearCollect(colSelTmp, Filter(colSel, id <> ThisItem.id)); ClearCollect(colSel, colSelTmp), Collect(colSel, {id: ThisItem.id, etag: ThisItem.etag}))")},
+                    {"lblTeam1": ctl("Label@2.5.1", X="80", Y="5", Width="Parent.TemplateWidth - 90", Height="30",
+                                     Text='ThisItem.ownerName & " (" & ThisItem.ownerCode & ")  ·  " & Text(ThisItem.workDate, "dd/mm/yyyy") & "  ·  " & %s & " / " & %s & "  ·  " & Text(ThisItem.hours) & " h"'
+                                     % (lookup("Projects", "ThisItem.projectId", "ProjectCode"), lookup("Phases", "ThisItem.phaseId", "PhaseCode")))},
+                    {"lblTeam2": ctl("Label@2.5.1", X="80", Y="35", Width="Parent.TemplateWidth - 90", Height="30",
+                                     Text='"#" & ThisItem.id & "  ·  " & ThisItem.status & "  ·  " & ThisItem.remark')}]}},
+            {"btnTeamMore": ctl("Classic/Button@2.2.0", Text='"Load more"', X="20", Y="Parent.Height - 240",
+                                Visible="!IsBlank(varTeamNext) && varTeamNext <> \"\" && varTeamNext <> \"0\"",
+                                OnSelect="Set(varTeamAfter, Value(varTeamNext));\n" + TEAM_READ)},
+            {"lblResTitle": ctl("Label@2.5.1", Text='If(CountRows(colApprRes) > 0, "Last approval results", "")', X="20", Y="Parent.Height - 195",
+                                Width="600", Height="30", FontWeight="FontWeight.Bold")},
+            {"galResults": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
+                "Items": _f("colApprRes"), "X": "=20", "Y": "=Parent.Height - 160", "Width": "=Parent.Width - 40", "Height": "=150",
+                "TemplateSize": "=30"},
+                "Children": [
+                    {"lblRes": ctl("Label@2.5.1", X="5", Y="0", Width="Parent.TemplateWidth - 10", Height="30",
+                                   Text='"#" & ThisItem.itemid & ": " & If(ThisItem.resultcode = "OK", %s, %s)'
+                                   % (MSG % '"MSG_ROW_APPROVED"', MSG % "ThisItem.messagecode"))}]}}]},
         "scrEntry": {"Children": [
             {"lblTitle": ctl("Label@2.5.1", Text='If(IsBlank(varEdit), "New entry", "Edit draft")', X="20", Y="10", Width="600", Height="50",
                              Size="20", FontWeight="FontWeight.Bold")}, {"lblBusy": busy},

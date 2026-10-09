@@ -102,6 +102,11 @@ class Pack(unittest.TestCase):
         m = pack.build(copy.deepcopy(CONFIG), out)
         self.assertEqual(m["sitesReferenced"], [SITE])
         self.assertEqual(sorted(m["flows"]), ["TS-AppOpen", "TS-ReadOwn", "TS-SaveEntry"])
+        out2 = os.path.join(out, "with-approval")
+        m2 = pack.build(dict(copy.deepcopy(CONFIG), approvalRoleGroups=[["TL", "00000000-0000-4000-8000-0000000000e2"]]), out2)
+        self.assertEqual(sorted(m2["flows"]), ["TS-AppOpen", "TS-Approve", "TS-ReadOwn", "TS-ReadTeam", "TS-SaveEntry"])
+        self.assertEqual({k: m2["flows"][k] for k in m["flows"]}, m["flows"], "R1 flows unchanged by the approval flows")
+        self.assertEqual(m2["sitesReferenced"], [CONFIG["siteUrl"]])
         self.assertTrue(os.path.exists(os.path.join(out, "app", "scrEntry.pa.yaml")))
         self.assertEqual(m["architecture"]["dataverse"], "REJECTED")
 

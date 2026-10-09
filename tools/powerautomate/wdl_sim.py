@@ -412,14 +412,26 @@ class Run:
         elif t == "SetVariable":
             self.vars[a["inputs"]["name"]] = self.value(a["inputs"]["value"])
             self.results[name] = {"status": "Succeeded", "outputs": None, "body": None}
+        elif t == "AppendToArrayVariable":
+            self.vars[a["inputs"]["name"]] = self.vars[a["inputs"]["name"]] + [self.value(a["inputs"]["value"])]
+            self.results[name] = {"status": "Succeeded", "outputs": None, "body": None}
         elif t == "Foreach":
             for it in self.value(a["foreach"]):
                 self.loop_items[name] = it
-                for k in a["actions"]:
+                for k in _nested_names(a["actions"]):  # every iteration starts clean, nested If branches included
                     self.results.pop(k, None)
                 self.run(a["actions"])
             self.loop_items.pop(name, None)
             self.results[name] = {"status": "Succeeded", "outputs": None, "body": None}
+        elif t in ("Select", "Query") and (a.get("metadata") or {}).get("failOnError"):
+            # a non-array source or an item expression error fails the action, as in Power Automate (only where a flow handles it)
+            try:
+                src = self.value(a["inputs"]["from"])
+                if not isinstance(src, list):
+                    raise WdlError("from is not an array")
+                self._exec(name, dict(a, metadata={}))
+            except (WdlError, ValueError, TypeError, KeyError) as e:
+                self.results[name] = {"status": "Failed", "outputs": None, "body": None, "error": str(e)}
         elif t == "Select":
             src = self.value(a["inputs"]["from"])
             out = []
@@ -462,6 +474,13 @@ class Run:
             self.results[name] = {"status": "Succeeded", "outputs": v, "body": None}
         else:
             raise WdlError("unsupported action type %s" % t)
+
+
+def _nested_names(actions):
+    for k, a in actions.items():
+        yield k
+        yield from _nested_names(a.get("actions") or {})
+        yield from _nested_names((a.get("else") or {}).get("actions") or {})
 
 
 _GET = re.compile(r"getbytitle\('([^']*)'\)/items\?.*\$filter=(\w+) eq '((?:[^']|'')*)'&\$top=(\d+)")

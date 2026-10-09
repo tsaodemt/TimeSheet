@@ -82,6 +82,15 @@ Screens:
                     remark: Text(ThisRecord.Value.remark), status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag)}));
                 Set(varNextAfter, varRead.nextafterid),
                 Notify(Coalesce(LookUp(colMessages, code = varRead.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text)) & " (" & varRead.correlationid & ")", NotificationType.Error))
+    - btnTeam:
+        Control: Classic/Button@2.2.0
+        Properties:
+          Text: ="Team approval"
+          X: =380
+          Y: =130
+          Width: =200
+          Visible: =!varNoTeam
+          OnSelect: =Navigate(scrTeamApproval, ScreenTransition.None)
     - galEntries:
         Control: Gallery@2.15.0
         Variant: Vertical
@@ -125,7 +134,7 @@ Screens:
           Text: ="Load more"
           X: =20
           Y: =Parent.Height - 70
-          Visible: =!IsBlank(varNextAfter) && varNextAfter <> ""
+          Visible: =!IsBlank(varNextAfter) && varNextAfter <> "" && varNextAfter <> "0"
           OnSelect: |-
             =Set(varAfter, Value(varNextAfter));
 

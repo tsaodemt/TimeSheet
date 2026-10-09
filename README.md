@@ -30,7 +30,7 @@ docs/
   identity-resolution.md              Identity-resolution contract (fail-closed), session behaviour, portability
   role-model.md                       Target roles and capabilities
   approval-capability-rules.md        Approved approve / unapprove matrix (gate G5), immutability and audit contract
-  approve-contract.md                 TS-Approve / TS-ReadTeam implementation contract (S07.2 design, not built)
+  approve-contract.md                 TS-Approve / TS-ReadTeam contract (S07.2 DONE, STAGING live-proven; ApprovedBy = text UPN)
   runbook-identity-jml.md             Joiner / mover / leaver guidance (group propagation)
   roadmap.md                          Epic structure
 tools/powerautomate/
@@ -50,6 +50,9 @@ tools/identity/
 tools/approval/
   approval_rules.py                   Approval capability matrix and check order over the existing guard (reference)
   test_approval_rules.py              AP-R01–AP-R25 (synthetic data; python -m unittest)
+  approve_entries.py                  TS-Approve / TS-ReadTeam reference (per-row approval, ETag, self / scope rules, queue)
+  test_approve_flow.py                AQ01–AQ26, AQ-EQ, RT01–RT12: reference vs generated flows in the WDL simulator
+tools/powerautomate/build_approval_flows.py   TS-Approve and TS-ReadTeam flow definitions (S07.2)
 ```
 
 ## Confidentiality

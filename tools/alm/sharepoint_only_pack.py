@@ -7,6 +7,7 @@ pack manifest. It refuses to build unless the site URL equals the approved stagi
 PRODUCTION. Business settings stay in SharePoint AppSettings (read at run time by the flows).
 
 config: {"siteUrl", "approvedSiteUrl", "domain", "environmentLabel", "roleGroups": [[key, groupObjectId]],
+         "approvalRoleGroups": [[key, groupObjectId]] (optional, S07.2: TL / APR / EXE),
          "registry": {...}, "overlay": {...}}  — never committed (tenant values).
 """
 from __future__ import annotations
@@ -21,6 +22,7 @@ for d in ("..\\powerautomate", "..\\config", "..\\powerapp", "."):
     sys.path.insert(0, os.path.normpath(os.path.join(HERE, d)))
 import architecture_scope as scope  # noqa: E402
 import build_appstart_flow as baf  # noqa: E402
+import build_approval_flows as apf  # noqa: E402
 import build_r1_flows as r1  # noqa: E402
 import build_read_flow as base  # noqa: E402
 
@@ -75,6 +77,11 @@ def flows(config: dict) -> dict:
     guarded = dict(common, scope_config=SCOPE_CONFIG, role_groups=[tuple(x) for x in config["roleGroups"]], conf_audit_list="ConfidentialAuditLog")
     out = {"TS-AppOpen": baf.appstart_actions(**common), "TS-ReadOwn": r1.read_own_actions(**guarded),
            "TS-SaveEntry": r1.save_draft_actions(**guarded)}
+    if config.get("approvalRoleGroups"):
+        # S07.2: TS-Approve / TS-ReadTeam (capability TS.Approve; Team Leader, Approver and Executive groups)
+        approval = dict(common, role_groups=[tuple(x) for x in config["approvalRoleGroups"]], conf_audit_list="ConfidentialAuditLog")
+        out["TS-ReadTeam"] = apf.read_team_actions(**approval)
+        out["TS-Approve"] = apf.approve_actions(**approval)
     out = {k: add_site_guard(_plain(v), config["approvedSiteUrl"]) for k, v in out.items()}
     p = scope.check_artifacts(out)
     if p:
