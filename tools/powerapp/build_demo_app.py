@@ -289,7 +289,7 @@ REG_CELL_EDIT = "LookUp(colRegEdit, k = %s)" % REG_CELL
 REG_ONVISIBLE = """
 Set(varRegLeave, false); Set(varRegSwitch, false);
 ClearCollect(colRegYears, {y: "All"});
-Collect(colRegYears, ForAll(Sort(Distinct(Filter(Projects, !IsBlank(ProjectYear)), ProjectYear), Value), {y: Text(Value)}));
+Collect(colRegYears, ForAll(Sequence(34, 2017), {y: Text(Value)}));  // legacy F-REG-01: All + 2017..2050 (fixed list)
 If(!IsBlank(varRegPid), """ + REG_READ.strip() + """)
 """
 
@@ -427,11 +427,12 @@ def screens() -> dict:
             {"btnRegBack": ctl("Classic/Button@2.2.0", Text='"Back"', X="20", Y="100", Width="120",
                                OnSelect="If(CountRows(%s) > 0, Set(varRegLeave, true), Navigate(scrMyTimesheets, ScreenTransition.None))" % REG_DIRTY)},
             {"ddRegYear": ctl("Classic/DropDown@2.3.1", X="160", Y="100", Width="140", Items="colRegYears", **{"Items.Value": "y"})},
-            {"ddRegProject": ctl("Classic/DropDown@2.3.1", X="320", Y="100", Width="600",
-                                 Items='SortByColumns(AddColumns(If(ddRegYear.Selected.y = "All", Projects, Filter(Projects, ProjectYear = Value(ddRegYear.Selected.y))), "Label", ProjectCode & " — " & Title), "Label", SortOrder.Ascending)',
-                                 Default="If(IsBlank(varRegPid), Blank(), LookUp(Projects, ID = varRegPid).Title)",
+            {"ddRegProject": ctl("Classic/DropDown@2.3.1", X="320", Y="100", Width="260",
+                                 Items='SortByColumns(If(ddRegYear.Selected.y = "All", Projects, Filter(Projects, ProjectYear = Value(ddRegYear.Selected.y))), "ProjectCode", SortOrder.Ascending)',
+                                 Default='If(IsBlank(varRegPid), "", LookUp(Projects, ID = varRegPid).ProjectCode)', AllowEmptySelection="true",
                                  OnChange="If(CountRows(%s) > 0, Set(varRegSwitch, true), %s)" % (REG_DIRTY, "Set(varRegPid, ddRegProject.Selected.ID); Clear(colRegEdit);\n" + REG_READ.strip()),
-                                 **{"Items.Value": "Label"})},
+                                 **{"Items.Value": "ProjectCode"})},
+            {"lblRegProject": ctl("Label@2.5.1", Text="ddRegProject.Selected.Title", X="600", Y="100", Width="330", Height="40")},
             {"btnRegReload": ctl("Classic/Button@2.2.0", Text='"Tải lại"', X="940", Y="100", Width="120",
                                  DisplayMode="If(IsBlank(varRegPid) || varBusy || varSaving, DisplayMode.Disabled, DisplayMode.Edit)",
                                  OnSelect="If(CountRows(%s) > 0, Set(varRegSwitch, true), %s)" % (REG_DIRTY, REG_READ.strip()))},
@@ -462,7 +463,7 @@ def screens() -> dict:
                     {"lblRegPhase": ctl("Label@2.5.1", X="0", Y="5", Width="270", Height="40",
                                         Text='Text(ThisItem.n) & ".  " & ThisItem.code & "  ·  " & ThisItem.name')},
                     {"galRegCells": {"Control": "Gallery@2.15.0", "Variant": "Horizontal", "Properties": {
-                        "Items": _f('AddColumns(colRegDiscs, "phid", ThisItem.id)'), "X": "=280", "Y": "=0", "Width": "=Parent.TemplateWidth - 290",
+                        "Items": _f('AddColumns(colRegDiscs, phid, ThisItem.id)'), "X": "=280", "Y": "=0", "Width": "=Parent.TemplateWidth - 290",
                         "Height": "=50", "TemplateSize": "=100"},
                         "Children": [
                             {"txtRegCell": ctl("Classic/TextInput@2.3.2", X="2", Y="5", Width="92", Height="40", Align="Align.Center",

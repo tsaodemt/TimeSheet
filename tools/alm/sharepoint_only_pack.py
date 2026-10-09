@@ -8,6 +8,7 @@ PRODUCTION. Business settings stay in SharePoint AppSettings (read at run time b
 
 config: {"siteUrl", "approvedSiteUrl", "domain", "environmentLabel", "roleGroups": [[key, groupObjectId]],
          "approvalRoleGroups": [[key, groupObjectId]] (optional, S07.2 / S07.3: TL / APR / EXE),
+         "registrationRoleGroups": [[key, groupObjectId]] (optional, R3 M1 S12.5: roles granted REG.View / REG.Edit),
          "registry": {...}, "overlay": {...}}  — never committed (tenant values).
 """
 from __future__ import annotations
@@ -24,6 +25,7 @@ import architecture_scope as scope  # noqa: E402
 import build_appstart_flow as baf  # noqa: E402
 import build_approval_flows as apf  # noqa: E402
 import build_r1_flows as r1  # noqa: E402
+import build_registration_flows as rgf  # noqa: E402
 import build_read_flow as base  # noqa: E402
 
 LISTS = {"emp_list": "Employees", "audit_list": "AuditLog"}
@@ -83,6 +85,12 @@ def flows(config: dict) -> dict:
         out["TS-ReadTeam"] = apf.read_team_actions(**approval)
         out["TS-Approve"] = apf.approve_actions(**approval)
         out["TS-Unapprove"] = apf.unapprove_actions(**approval)  # S07.3
+    if config.get("registrationRoleGroups"):
+        # R3 M1 S12.5 Hour Registration: REG-ReadMatrix (REG.View) / REG-SaveMatrix (REG.Edit)
+        reg = dict(site=config["siteUrl"], domain=config["domain"], environment=config["environmentLabel"], refs=PLAIN,
+                   role_groups=[tuple(x) for x in config["registrationRoleGroups"]], conf_audit_list="ConfidentialAuditLog", **LISTS)
+        out["REG-ReadMatrix"] = rgf.read_matrix_actions(**reg)
+        out["REG-SaveMatrix"] = rgf.save_matrix_actions(**reg)
     out = {k: add_site_guard(_plain(v), config["approvedSiteUrl"]) for k, v in out.items()}
     p = scope.check_artifacts(out)
     if p:

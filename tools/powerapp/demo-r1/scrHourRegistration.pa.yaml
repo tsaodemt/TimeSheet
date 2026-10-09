@@ -5,7 +5,7 @@ Screens:
       OnVisible: |-
         =Set(varRegLeave, false); Set(varRegSwitch, false);
         ClearCollect(colRegYears, {y: "All"});
-        Collect(colRegYears, ForAll(Sort(Distinct(Filter(Projects, !IsBlank(ProjectYear)), ProjectYear), Value), {y: Text(Value)}));
+        Collect(colRegYears, ForAll(Sequence(34, 2017), {y: Text(Value)}));  // legacy F-REG-01: All + 2017..2050 (fixed list)
         If(!IsBlank(varRegPid), Set(varBusy, true);
         Set(varReg, 'REG-ReadMatrix'.Run(Text(varRegPid)));
         Set(varBusy, false);
@@ -61,9 +61,10 @@ Screens:
         Properties:
           X: =320
           Y: =100
-          Width: =600
-          Items: =SortByColumns(AddColumns(If(ddRegYear.Selected.y = "All", Projects, Filter(Projects, ProjectYear = Value(ddRegYear.Selected.y))), "Label", ProjectCode & " — " & Title), "Label", SortOrder.Ascending)
-          Default: =If(IsBlank(varRegPid), Blank(), LookUp(Projects, ID = varRegPid).Title)
+          Width: =260
+          Items: =SortByColumns(If(ddRegYear.Selected.y = "All", Projects, Filter(Projects, ProjectYear = Value(ddRegYear.Selected.y))), "ProjectCode", SortOrder.Ascending)
+          Default: =If(IsBlank(varRegPid), "", LookUp(Projects, ID = varRegPid).ProjectCode)
+          AllowEmptySelection: =true
           OnChange: |-
             =If(CountRows(Filter(colRegEdit As e, e.t <> Coalesce(LookUp(colRegCells, k = e.k).value, ""))) > 0, Set(varRegSwitch, true), Set(varRegPid, ddRegProject.Selected.ID); Clear(colRegEdit);
             Set(varBusy, true);
@@ -81,7 +82,15 @@ Screens:
                 Clear(colRegPhases); Clear(colRegDiscs); Clear(colRegCells);
                 If(varReg.resultcode = "ROLE_NOT_ALLOWED", Set(varNoReg, true));
                 Notify(If(varReg.resultcode = "ROLE_NOT_ALLOWED", Coalesce(LookUp(colMessages, code = "REG_NO_ACCESS", text), LookUp(colMessages, code = "MSG_ERROR", text)), Coalesce(LookUp(colMessages, code = varReg.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text))) & " (" & varReg.correlationid & ")", NotificationType.Error)))
-          Items.Value: =Label
+          Items.Value: =ProjectCode
+    - lblRegProject:
+        Control: Label@2.5.1
+        Properties:
+          Text: =ddRegProject.Selected.Title
+          X: =600
+          Y: =100
+          Width: =330
+          Height: =40
     - btnRegReload:
         Control: Classic/Button@2.2.0
         Properties:
@@ -247,7 +256,7 @@ Screens:
             Control: Gallery@2.15.0
             Variant: Horizontal
             Properties:
-              Items: =AddColumns(colRegDiscs, "phid", ThisItem.id)
+              Items: =AddColumns(colRegDiscs, phid, ThisItem.id)
               X: =280
               Y: =0
               Width: =Parent.TemplateWidth - 290

@@ -537,7 +537,7 @@ class HourRegistration(_Both):
         for fl in (READ, SAVE):
             src = json.dumps(fl)
             self.assertNotRegex(src, r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-            self.assertNotIn("firstgreen", src.lower())
+            self.assertNotRegex(src, r"@[a-z0-9-]+\.(?!invalid\b)[a-z]{2,}")  # only the test placeholder domain; no tenant domain / UPN
         src = open(os.path.join(HERE, "hour_registration.py"), encoding="utf-8").read() + open(os.path.join(HERE, "registration_rules.py"), encoding="utf-8").read()
         self.assertNotRegex(src, r"@[a-z0-9-]+\.(vn|com)")
 
@@ -596,6 +596,60 @@ class HourRegistration(_Both):
                 self.assertEqual(self.save([(6, 1, "value", "abc", "")])["code"], "REFUSED", mode)
         finally:
             wdl_sim.BRANCH_MODE = prev
+
+    def test_HR33_sharepoint_float_numbers(self):
+        """Live STAGING: SharePoint returns Number columns as floats (PhaseItemId 1.0) and Power Automate does not match
+        them with integer ids (read showed cells [] for 65 stored items). Both flows compare ids as integers."""
+        class FloatStore(Store):
+            def item_rows(self, pid):
+                return [dict(r, ProjectItemId=float(r["ProjectItemId"]), PhaseItemId=float(r["PhaseItemId"]),
+                             DisciplineItemId=float(r["DisciplineItemId"])) for r in super().item_rows(pid)]
+
+        def strict_eq(self, a, b):
+            if isinstance(a, bool) != isinstance(b, bool) or (isinstance(a, float) != isinstance(b, float)
+                                                               and isinstance(a, (int, float)) and isinstance(b, (int, float))):
+                return False
+            return a == b
+
+        def strict_contains(self, coll, x):
+            if isinstance(coll, list):
+                return any(strict_eq(self, y, x) for y in coll)
+            return x in coll
+        old = (wdl_sim.Run.f_equals, wdl_sim.Run.f_contains)
+        wdl_sim.Run.f_equals, wdl_sim.Run.f_contains = strict_eq, strict_contains
+        try:
+            st = FloatStore(items=[(6, 1, 0), (5, 3, 2.5), (4, 4, 7)])
+            r = self.read(store=st)
+            self.assertEqual({(c["phaseId"], c["disciplineId"]): c["value"] for c in r["cells"]}, {(6, 1): "0", (5, 3): "2.5", (4, 4): "7"})
+            f = self.save([(5, 3, "value", "3", '"1"'), (4, 4, "blank", "", '"1"'), (6, 1, "value", "0", '"1"')], store=st)
+            self.assertEqual((f["code"], self.codes(f)), ("OK", ["OK", "OK", "NO_CHANGE"]))
+            self.assertEqual(sorted(m for m, _, _ in self.ctx["writes"]), ["MERGE", "MERGE"], "existing items updated, never re-created")
+            stale = FloatStore(items=[(6, 1, 4), (1, 2, 9)], removed=(1,))
+            f = self.save([(6, 1, "value", "5", '"1"')], store=stale)
+            self.assertEqual((f["code"], f["clearedStale"]), ("OK", 1))
+        finally:
+            wdl_sim.Run.f_equals, wdl_sim.Run.f_contains = old
+    def test_HR34_parallel_loops_fit_power_apps_wait(self):
+        """Power Apps waits 120 s for the response; 100 cells (MAX_CHANGES) must not run as 100 sequential writes."""
+        def loops(defn, out):
+            for k, a in defn.items():
+                if a.get("type") == "Foreach":
+                    out[k] = a
+                for sub in ("actions",):
+                    if isinstance(a.get(sub), dict):
+                        loops(a[sub], out)
+                if isinstance(a.get("else"), dict):
+                    loops(a["else"].get("actions", {}), out)
+            return out
+        found = loops(SAVE["actions"] if "actions" in SAVE else SAVE, {})
+        self.assertEqual(sorted(found), ["Pre_loop", "Writes"])
+        for name, lp in found.items():
+            reps = lp["runtimeConfiguration"]["concurrency"]["repetitions"]
+            self.assertGreaterEqual(reps, 20, name)
+            self.assertLessEqual(-(-H.MAX_CHANGES // reps) * 3, 60, "worst-case write rounds x ~3 s stay well under 120 s")
+            body = json.dumps(lp["actions"])
+            sets = re.findall(r'"type": "SetVariable"[^}]*"value": ([^}]*)}', body)
+            self.assertTrue(all(v.strip() in ("true", '"true"') for v in sets), sets)  # only the constant Degraded flag
 
 
 if __name__ == "__main__":

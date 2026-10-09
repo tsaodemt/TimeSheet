@@ -1,8 +1,9 @@
 ## ADDED Requirements
 
 ### Requirement: Project selection
-The Hour Registration screen SHALL let a user with `REG.View` filter projects by year ("All" by default; years taken
-from project data, not a hard-coded list) and select one project through a single picker that shows code and name and
+The Hour Registration screen SHALL let a user with `REG.View` filter projects by year ("All" by default followed by
+the fixed legacy list 2017–2050, F-REG-01 / LHR-03 legacy parity per owner directive 2026-10-10; the list SHALL NOT be
+derived by scanning Projects, so it is complete regardless of the project-list size) and select one project through a single picker that shows code and name and
 is keyed by project id. Duplicate project codes SHALL NOT cause another project's data to be shown or saved (LHR-03,
 LHR-05, LHR-06). A year with no projects SHALL clear the selection and the matrix (LHR-04). All projects SHALL be
 listed and editable regardless of the target project status (OD-07 = legacy parity: the legacy project master has no
@@ -17,6 +18,10 @@ status); assignment scoping SHALL follow the existing switch (OD-06).
 - **GIVEN** two projects share the code "X" with different phase lists
 - **WHEN** the user selects the second project
 - **THEN** the matrix shows the second project's phases and a save writes only items keyed by the second project's id
+
+#### Scenario: Year list is the legacy list
+- **WHEN** the user opens the year filter
+- **THEN** it offers exactly "All", 2017, 2018, …, 2050 in that order, independent of the projects stored
 
 #### Scenario: Empty year
 - **WHEN** the user picks a year that has no projects

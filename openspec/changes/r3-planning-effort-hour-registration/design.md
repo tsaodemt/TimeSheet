@@ -147,7 +147,7 @@ Soft delete only (D-7). No hard delete by any service.
 | Delegation | Canvas never queries the list; flows return ≤ 78 cells per project | flows page ≤ 500 |
 | Lookups per list | 3 (≤ 12 limit) | ≤ 5 |
 | Indexes | `RegKey` (unique), `ProjectItemId`, `LegacyId` (unique) | ≤ 6 each (limit 20) |
-| Batch | sequential MERGE/POST per changed cell, ≤ 100 REG cells per Save call (covers current 13 × 6 = 78 design); no `$batch` | EPIC17 approval may retain ≤ 50 items per approval call |
+| Batch | one MERGE/POST per changed cell, cell loops run 20 in parallel (Power Apps waits ≤ 120 s for the flow response; live STAGING 65 sequential writes → 504 at 122 s, parallel → 38 s), ≤ 100 REG cells per Save call (covers current 13 × 6 = 78 design); no `$batch` | EPIC17 approval may retain ≤ 50 items per approval call |
 | Growth | small | moderate; within thresholds with indexed filters |
 | Power BI | reads via service/report identity, unpivoted rows are star-schema ready | same |
 | Version history | on (audit of values) | on |
@@ -161,7 +161,7 @@ SharePoint is suitable: small volumes, keyed access, no cross-list transactions 
 ### 7.1 Hour Registration (S12.5)
 - **Navigation:** Time Sheet / Planning group → "Đăng ký công" (LHR-01); hidden when the server refuses `REG.View`
   (same silent-hide pattern as the EPIC 07 pending count).
-- **Selection:** year filter (All + years present in Projects, LHR-03), single searchable project picker showing
+- **Selection:** year filter = "All" + fixed 2017–2050 (legacy F-REG-01 / LHR-03 parity, owner directive 2026-10-10; local `Sequence`, no Projects scan → no delegation dependency), single searchable project picker showing
   code — name, keyed by project id (LHR-05/06); empty filter result clears the grid (LHR-04).
 - **Matrix:** rows = the project's phases in project order (OD-02 resolved). STT, phase name and code are read-only (LHR-11);
   columns = every discipline of the master ordered by SortOrder (no active filter; legacy parity). Values on phases removed from the project are not returned to the UI (legacy: hidden, not editable) and are cleared by the next successful save of the project (OD-08 = legacy parity). Built as nested galleries over a local collection loaded from `REG-ReadMatrix`.

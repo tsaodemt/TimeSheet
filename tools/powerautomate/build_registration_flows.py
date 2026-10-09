@@ -40,8 +40,20 @@ def _digits_only(x):
     return "and(not(empty(%s)), empty(%s))" % (x, r1._digits_removed(x))
 
 
+# Power Apps waits at most 120 s for a flow response (live STAGING: 65 sequential cell writes, ~2 s each -> 504 at 122 s).
+# Both per-cell loops run in parallel; loop bodies only Append / Increment shared variables (atomic) or set Degraded to a
+# constant true, so the outcome does not depend on iteration order (result order may differ; the Canvas keys by cell).
+LOOP_CONCURRENCY = 20
+
+
 def _safe_int(x):
     return "int(if(%s, %s, '0'))" % (_digits_only(x), x)
+
+
+def _rq(x):
+    """A requested id as an integer. SharePoint returns Number columns as floats (1.0), which do not match
+    integer ids in Power Automate comparisons (live STAGING: cells []); both sides are compared as int."""
+    return _safe_int("string(%s)" % x)
 
 
 def _value_ok(v):
@@ -103,16 +115,16 @@ def read_matrix_actions(*, role_groups, site, domain, emp_list, audit_list, conf
     ok = "equals(outputs('Final_code'), 'OK')"
     g["Phases"] = {"type": "Select", "runAfter": S("Final_code"), "inputs": {
         "from": "@if(%s, %s, createArray())" % (ok, _rows("Get_phases")),
-        "select": {"id": "@item()?['PhaseId']", "code": "@item()?['Phase']?['PhaseCode']", "name": "@item()?['Phase']?['Title']"}}}
+        "select": {"id": "@int(item()?['PhaseId'])", "code": "@item()?['Phase']?['PhaseCode']", "name": "@item()?['Phase']?['Title']"}}}
     g["Phase_ids"] = {"type": "Select", "runAfter": S("Phases"), "inputs": {"from": "@body('Phases')", "select": "@item()?['id']"}}
     g["Discs"] = {"type": "Select", "runAfter": S("Phase_ids"), "inputs": {
         "from": "@if(%s, %s, createArray())" % (ok, _rows("Get_discs")),
-        "select": {"id": "@item()?['Id']", "code": "@item()?['DisciplineCode']", "name": "@item()?['Title']"}}}
+        "select": {"id": "@int(item()?['Id'])", "code": "@item()?['DisciplineCode']", "name": "@item()?['Title']"}}}
     g["Current"] = {"type": "Query", "runAfter": S("Discs"), "inputs": {
         "from": "@if(%s, %s, createArray())" % (ok, _rows("Get_items")),
-        "where": "@contains(body('Phase_ids'), item()?['PhaseItemId'])"}}
+        "where": "@contains(body('Phase_ids'), int(item()?['PhaseItemId']))"}}
     g["Cells"] = {"type": "Select", "runAfter": S("Current"), "inputs": {"from": "@body('Current')", "select": {
-        "phaseId": "@item()?['PhaseItemId']", "disciplineId": "@item()?['DisciplineItemId']",
+        "phaseId": "@int(item()?['PhaseItemId'])", "disciplineId": "@int(item()?['DisciplineItemId'])",
         "state": "@if(equals(item()?['ManDays'], null), 'BLANK', 'VALUE')",
         "value": "@%s" % nz("item()?['ManDays']"), "etag": "@item()?['odata.etag']"}}}
     P = _ab("Get_project")
@@ -144,11 +156,11 @@ def _pre_loop(project_legacy):
     ph, dc, st, v, et = ("%s?['%s']" % (X, k) for k in ("phaseId", "disciplineId", "state", "value", "etag"))
     a = {}
     a["Find"] = {"type": "Query", "runAfter": {}, "inputs": {"from": "@%s" % _rows("Get_items"), "where":
-                 "@and(equals(item()?['PhaseItemId'], %s), equals(item()?['DisciplineItemId'], %s))" % (ph, dc)}}
+                 "@and(equals(int(item()?['PhaseItemId']), %s), equals(int(item()?['DisciplineItemId']), %s))" % (_rq(ph), _rq(dc))}}
     a["Find_phase"] = {"type": "Query", "runAfter": S("Find"), "inputs": {"from": "@%s" % _rows("Get_phases"),
-                       "where": "@equals(item()?['PhaseId'], %s)" % ph}}
+                       "where": "@equals(int(item()?['PhaseId']), %s)" % _rq(ph)}}
     a["Find_disc"] = {"type": "Query", "runAfter": S("Find_phase"), "inputs": {"from": "@%s" % _rows("Get_discs"),
-                      "where": "@equals(item()?['Id'], %s)" % dc}}
+                      "where": "@equals(int(item()?['Id']), %s)" % _rq(dc)}}
     F = "first(body('Find'))"
     stored_val = nz("%s?['ManDays']" % F)
     stored_etag = nz("%s?['odata.etag']" % F)
@@ -274,7 +286,7 @@ def save_matrix_actions(*, role_groups, site, domain, emp_list, audit_list, conf
                       % (G("ResultCode"), G("ResultCode"), shape_ok), S("Ch_keys"))
     reads = _data_reads(o("Pid"))
     reads["Pre_loop"] = {"type": "Foreach", "runAfter": S("Get_items"), "foreach": "@%s" % _ab("Ch_norm"),
-                         "runtimeConfiguration": {"concurrency": {"repetitions": 1}},
+                         "runtimeConfiguration": {"concurrency": {"repetitions": LOOP_CONCURRENCY}},
                          "actions": _pre_loop(nz("%s?['LegacyId']" % _ab("Get_project")))}
     g["If_ok"] = {"type": "If", "runAfter": S("Pre_code"), "expression": {"equals": ["@outputs('Pre_code')", "OK"]},
                   "actions": reads, "else": {"actions": {}}}
@@ -283,12 +295,12 @@ def save_matrix_actions(*, role_groups, site, domain, emp_list, audit_list, conf
     g["Bad"] = {"type": "Query", "runAfter": S("Read_code"), "inputs": {"from": "@variables('Pre')",
                 "where": "@not(or(equals(item()?['code'], 'WRITE'), equals(item()?['code'], 'NO_CHANGE')))"}}
     g["Pre_ok"] = c("@and(equals(outputs('Read_code'), 'OK'), equals(length(body('Bad')), 0))", S("Bad"))
-    g["Phase_ids"] = {"type": "Select", "runAfter": S("Pre_ok"), "inputs": {"from": "@%s" % _rows("Get_phases"), "select": "@item()?['PhaseId']"}}
+    g["Phase_ids"] = {"type": "Select", "runAfter": S("Pre_ok"), "inputs": {"from": "@%s" % _rows("Get_phases"), "select": "@int(item()?['PhaseId'])"}}
     g["Stale_rows"] = {"type": "Query", "runAfter": S("Phase_ids"), "inputs": {
         "from": "@if(outputs('Pre_ok'), %s, createArray())" % _rows("Get_items"),
-        "where": "@and(not(contains(body('Phase_ids'), item()?['PhaseItemId'])), not(equals(item()?['ManDays'], null)))"}}
+        "where": "@and(not(contains(body('Phase_ids'), int(item()?['PhaseItemId']))), not(equals(item()?['ManDays'], null)))"}}
     g["Stale_plan"] = {"type": "Select", "runAfter": S("Stale_rows"), "inputs": {"from": "@body('Stale_rows')", "select": {
-        "phaseId": "@item()?['PhaseItemId']", "disciplineId": "@item()?['DisciplineItemId']", "state": "blank", "value": "",
+        "phaseId": "@int(item()?['PhaseItemId'])", "disciplineId": "@int(item()?['DisciplineItemId'])", "state": "blank", "value": "",
         "etag": "@item()?['odata.etag']", "code": "WRITE", "itemId": "@item()?['Id']", "stored": "@item()?['odata.etag']",
         "old": "@%s" % nz("item()?['ManDays']"), "regkey": "@item()?['RegKey']", "stale": True}}}
     write_loop = _write_loop(o("Pid"), audit_list=audit_list, conf_audit_list=conf_audit_list, environment=environment, source_flow=source_flow)
@@ -297,7 +309,7 @@ def save_matrix_actions(*, role_groups, site, domain, emp_list, audit_list, conf
                          "Get_type": _sp({}, "GET", "_api/web/lists/getbytitle('%s')?$select=ListItemEntityTypeFullName" % LIST),
                          "Writes": {"type": "Foreach", "runAfter": S("Get_type"),
                                     "foreach": "@union(variables('Pre'), body('Stale_plan'))",
-                                    "runtimeConfiguration": {"concurrency": {"repetitions": 1}}, "actions": write_loop}},
+                                    "runtimeConfiguration": {"concurrency": {"repetitions": LOOP_CONCURRENCY}}, "actions": write_loop}},
                      "else": {"actions": {}}}
     F = "variables('Failed')"
     g["Final_code"] = c("@if(not(equals(outputs('Read_code'), 'OK')), outputs('Read_code'), if(not(outputs('Pre_ok')), 'REFUSED', "

@@ -100,7 +100,8 @@ class HourRegistrationCanvas(unittest.TestCase):
     def test_HC11_all_projects_listed_any_status(self):
         items = P("ddRegProject", "Items")
         self.assertNotIn("Status", items, "OD-07: no status filter")
-        self.assertIn('ProjectCode & " — " & Title', items)
+        self.assertEqual(P("ddRegProject", "Items.Value"), "ProjectCode")
+        self.assertEqual(P("lblRegProject", "Text"), "ddRegProject.Selected.Title")
         self.assertIn("ProjectYear", items)
 
     def test_HC12_result_handling_keeps_unsaved_cells(self):
@@ -114,6 +115,29 @@ class HourRegistrationCanvas(unittest.TestCase):
         for k in ("REG_OK", "REG_REFUSED", "REG_PARTIAL", "REG_INVALID", "REG_LEAVE", "REG_NO_ACCESS"):
             self.assertIn(k, app.MESSAGES)
             self.assertNotRegex(app.MESSAGES[k], r"(?i)sharepoint|list|flow|http|stack")
+
+    def test_HC14_picker_uses_data_columns_only(self):
+        # a calculated (AddColumns) display column renders empty in the classic drop-down on the live player
+        self.assertNotIn("AddColumns(", P("ddRegProject", "Items"))
+        self.assertIn("AddColumns(colRegDiscs, phid, ThisItem.id)", P("galRegCells", "Items"))
+        self.assertNotRegex(SRC, r'AddColumns\((?:[^()]|\([^()]*(?:\([^()]*\))*[^()]*\))*?,\s*\\"\w+\\"\s*,')
+
+    def test_HC15_project_picker_starts_empty_and_matches_label(self):
+        # a classic drop-down auto-selects its first item without OnChange; start empty so every project choice loads the matrix
+        self.assertEqual(P("ddRegProject", "AllowEmptySelection"), "true")
+        self.assertIn("LookUp(Projects, ID = varRegPid).ProjectCode", P("ddRegProject", "Default"))
+
+    def test_HC16_year_selector_is_all_plus_2017_to_2050(self):
+        # legacy F-REG-01 year list; deterministic (no Projects scan -> no delegation dependency)
+        ov = SCR["scrHourRegistration"]["Properties"]["OnVisible"]
+        m = re.search(r'ClearCollect\(colRegYears, \{y: "All"\}\);\s*Collect\(colRegYears, ForAll\(Sequence\((\d+), (\d+)\), \{y: Text\(Value\)\}\)\);', ov)
+        self.assertIsNotNone(m)
+        n, start = int(m.group(1)), int(m.group(2))
+        years = ["All"] + [str(start + i) for i in range(n)]  # Power Fx Sequence(n, start) = start .. start+n-1
+        self.assertEqual(years, ["All"] + [str(y) for y in range(2017, 2051)])
+        self.assertEqual(len(re.findall(r"colRegYears", ov)), 2)
+        self.assertNotRegex(ov.split("If(!IsBlank(varRegPid)")[0], r"Projects|Distinct\(")
+        self.assertEqual(P("ddRegYear", "Items"), "colRegYears")
 
 
 if __name__ == "__main__":
