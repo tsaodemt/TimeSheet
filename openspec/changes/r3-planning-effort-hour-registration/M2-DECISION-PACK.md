@@ -2,8 +2,9 @@
 
 Status 2026-10-10: **DECISION CLOSURE — NO IMPLEMENTATION.** M1 / S12.5 Hour Registration is DONE (legacy parity) and is
 not reopened. Owner decisions recorded 2026-10-10: **OD-14 = MAN_DAY**, **OD-19 = TIMESHEETENTRIES**,
-**OD-40 = BLANK_NOT_REGISTERED / ZERO_EXPLICIT** (RESOLVED_OWNER_DECISION); **OD-41 = NOT_APPLICABLE**.
-**M2_IMPLEMENTATION_GATE = BLOCKED** on five external decisions. A "recommendation" below is evidence-based advice, not
+**OD-40 = BLANK_NOT_REGISTERED / ZERO_EXPLICIT**, **OD-44 = MIN_0 / NEGATIVE_DENY / NO_BUSINESS_MAX**
+(RESOLVED_OWNER_DECISION); precision rejection above 2 decimals confirmed; **OD-41 = NOT_APPLICABLE**; OD-33 promoted to
+BLOCKING M2; EPIC 17 unit = OD-45 (OPEN_FOR_M3). **M2_IMPLEMENTATION_GATE = BLOCKED** on six external decisions. A "recommendation" below is evidence-based advice, not
 an approval; an unanswered decision means **BLOCK / DO NOT GUESS**.
 Vietnamese meeting summary: `M2-DECISION-SUMMARY.md`. Register: `decisions.md`. Checker: `tools/spec/check_r3_open_spec.py`.
 
@@ -18,7 +19,7 @@ Evidence classes: **LEGACY_FACT** · **CUSTOMER_REQUIREMENT** · **OWNER_DECISIO
 | Same document, numbering | "mục I.3" = **A.I.3** (upper-Roman sections, decimal items) — structural fact; what the ceiling means stays OD-15 (M3) | CUSTOMER_REQUIREMENT (structure) |
 | Same document | **A.I names no approver, no lock, no phase, no period, no unit other than the word "công"** (verified absence) | CUSTOMER_REQUIREMENT (absence) |
 | Customer decision pack §F (EFF-F-1..10) | All answers blank — no customer decision recorded | OPEN_DECISION |
-| Owner decisions 2026-10-10 (task R3-M2-EPIC16-APPLY-OWNER-DECISIONS) | OD-14, OD-19, OD-40 decided; OD-41 not applicable | OWNER_DECISION |
+| Owner decisions 2026-10-10 (tasks R3-M2-EPIC16-APPLY-OWNER-DECISIONS, R3-M2-EPIC16-FINAL-OWNER-RULES) | OD-14, OD-19, OD-40, OD-44 decided; precision behaviour confirmed; OD-41 not applicable; OD-19 = source only; OD-14 = EPIC 16 only | OWNER_DECISION |
 | Legacy data dictionary: project master E05, assignment E08 | E05 has **no PM / manager field**; E08 employee↔project assignment carries **no role**, has 7 rows, all for locked employees (unused) | LEGACY_FACT |
 | Target data model / STAGING `Projects` | no PM / owner person field; `ProjectAssignments` mirrors E08; `ProjectAssignmentScoping` = Off | LEGACY_FACT / PROPOSED_DESIGN |
 | Legacy reports and E14 | "Công đăng ký" (E14) and "Công thực hiện" (timesheet hours ÷ 8) are both man-days; the timesheet module is named "Chấm công" | LEGACY_FACT |
@@ -30,21 +31,28 @@ M1 decisions were used **only** as dependencies (OD-25 separation). No EPIC 16 s
 ## 2. Current M2 gate (derived, not copied)
 
 Derived by the checker from the register's Blocking column after the owner decisions of 2026-10-10:
-**OD-16, OD-22, OD-23, OD-24, OD-37** (5); no conditional blocker (OD-41 NOT_APPLICABLE).
+**OD-16, OD-22, OD-23, OD-24, OD-33, OD-37** (6); no conditional blocker (OD-41 NOT_APPLICABLE).
+
+**Why OD-33 blocks M2 (YES):** OD-19 fixed only the actual-effort source. M2 acceptance AC-EFF16-04 requires
+"man-days = hours of the rows counted under OD-33 ÷ `HoursPerManDay` in the contract", the project-effort scenario
+"Actual effort is converted, not stored" asserts an actual-effort total for a project, and M2 task 2.4 builds that
+reporting/query calculation. That is an authoritative actual-effort total, which cannot be built while the row-inclusion
+rule is open; no APPROVED_ONLY is inferred from earlier owner wording.
 
 | Class | Decisions |
 |---|---|
-| CUSTOMER_REQUIRED | OD-16, OD-22, OD-23 |
+| CUSTOMER_REQUIRED | OD-16, OD-22, OD-23, OD-33 |
 | CUSTOMER_AND_SECURITY_REQUIRED | OD-24, OD-37 |
 
 ## 3. Owner decisions applied 2026-10-10 (not reopened)
 
 | ID | Decision | Effect on EPIC 16 |
 |---|---|---|
-| OD-14 | **MAN_DAY** — RESOLVED_OWNER_DECISION | Project Effort business/storage unit = man-day; ≤ 2 decimals; conversion from Timesheet hours via the approved `HoursPerManDay`; own schema (no `HourRegistrations` storage/schema inherited); later reporting normalises explicitly; no EPIC 18 authorisation |
-| OD-19 | **TIMESHEETENTRIES** — RESOLVED_OWNER_DECISION | Actual effort derived from existing `TimesheetEntries`; no new actual-effort list, duplicate workflow or employee entry screen; existing Timesheet actor identity, business owner / Employee relationship, authorised on-behalf editing, entry status semantics and security model preserved; nothing in the live Timesheet is restricted; actual man-days = approved Timesheet hours ÷ `HoursPerManDay` per the reporting/query contract (status set OD-33, M3) |
+| OD-14 | **MAN_DAY** — RESOLVED_OWNER_DECISION | Project Effort business/storage unit = man-day; ≤ 2 decimals, more is **rejected** with `VALIDATION_VALUE` (no rounding / truncation / normalisation); conversion from Timesheet hours via the approved `HoursPerManDay`; own schema (no `HourRegistrations` storage/schema inherited); later reporting normalises explicitly; no EPIC 18 authorisation; **EPIC 16 only** — EPIC 17 unit is OD-45 (OPEN_FOR_M3) |
+| OD-19 | **TIMESHEETENTRIES** — RESOLVED_OWNER_DECISION | Actual effort derived from existing `TimesheetEntries`; no new actual-effort list, duplicate workflow or employee entry screen; existing Timesheet actor identity, business owner / Employee relationship, authorised on-behalf editing, entry status semantics and security model preserved; nothing in the live Timesheet is restricted; **source only**: which rows count is OD-33 (BLOCKING M2, not inferred); actual man-days = hours of the counted rows ÷ `HoursPerManDay` per the reporting/query contract, built only after OD-33 |
 | OD-40 | **BLANK_NOT_REGISTERED / ZERO_EXPLICIT** — RESOLVED_OWNER_DECISION | Blank and 0 are distinct business states; blank never coerced to 0; storage designed in the EPIC 16 schema, not inferred from M1 (not an inheritance of OD-01) |
 | OD-41 | **NOT_APPLICABLE** (consequence of OD-19) | No new actual-entry ownership rule; existing Timesheet rules apply unchanged |
+| OD-44 | **MIN_0 / NEGATIVE_DENY / NO_BUSINESS_MAX** — RESOLVED_OWNER_DECISION (new; no M2 bounds decision existed, M1 OD-42 not inherited) | Minimum 0; negative → `VALIDATION_VALUE`; no business maximum (no 999.9 / 9999 / 9999.99-style limit); server-side validation. TECHNICAL_LIMIT only: SharePoint Number / Power Fx are IEEE-754 doubles (about 15 significant digits), no column maximum configured |
 
 Previous evidence and recommendations for these decisions are kept in the register as rationale only.
 
@@ -56,9 +64,10 @@ Previous evidence and recommendations for these decisions are kept in the regist
 | OD-22 | Phase dimension of A.I | project × recipient, **no** phase dimension | CUSTOMER_REQUIRED | yes |
 | OD-23 | Period of A.I | project-lifetime value with change history/audit | CUSTOMER_REQUIRED | yes |
 | OD-24 | Who is "the project's PM" | one authoritative PM per project, maintained by PMO, validated server-side | CUSTOMER_AND_SECURITY_REQUIRED | yes |
+| OD-33 | Which Timesheet rows count as actual effort | none — customer choice (approved only / all / both shown); not inferred | CUSTOMER_REQUIRED | yes (also M3) |
 | OD-37 | Who may view A.I | project's PM, PMO, Executive; not inherited from M1 OD-05; TL / QLP in later decisions | CUSTOMER_AND_SECURITY_REQUIRED | yes |
 
-Recommended order of asking: **OD-24 → OD-22 → OD-23 → OD-16 → OD-37** (who and what first; visibility last because it
+Recommended order of asking: **OD-24 → OD-22 → OD-23 → OD-16 → OD-33 → OD-37** (who and what first; visibility last because it
 depends on the PM model).
 
 ## 5. Decision cards (remaining)
@@ -103,6 +112,16 @@ depends on the PM model).
 - **Impact:** business — PMO maintains a PM per project; data — new authoritative PM attribute (person key) on the project or assignment; workflow — PM change audited; security — new project scope in the guard (design + tests); migration — PM values must be supplied (no legacy source); reporting — "PM's projects" for B.II; EPIC 17 — none directly.
 - **Decider:** CUSTOMER_AND_SECURITY_REQUIRED (CEO + PMO; security owner for the scope model). **Default if unanswered:** BLOCK.
 
+### OD-33 — Which Timesheet rows count as actual effort
+- **Business question:** when actual project effort is computed from `TimesheetEntries`, are only Approved rows counted, Draft rows too, or are both shown separately?
+- **Why it blocks M2:** OD-19 fixed only the source. M2 acceptance (AC-EFF16-04), the project-effort scenario "Actual effort is converted, not stored" and task 2.4 compute an actual-effort total; an unresolved inclusion rule would make that total a guess.
+- **Exact evidence:** legacy reports count unapproved hours — LEGACY_FACT; rev01 A.III.2 "Người phê duyệt: Chủ trì => khóa công thực hiện" — CUSTOMER_REQUIREMENT; EPIC 07 approval states on `TimesheetEntries` — TARGET_SECURITY_REQUIREMENT. The word "approved" in earlier owner wording about hours is **not** read as APPROVED_ONLY — OPEN_DECISION.
+- **OpenSpec state:** BLOCKING M2 and M3; project-effort and reporting-contract specs compute actuals only "once OD-33 is decided".
+- **Options:** a) Approved only; b) all rows (Draft + Approved); c) both, shown separately.
+- **Recommendation:** none (genuine business choice; it also shapes the A.III lock in M3).
+- **Impact:** business — meaning of "công thực hiện" in every comparison; data — none (filter only); workflow — none in M2; security — none; migration — none; reporting — actual totals and variance; EPIC 17 — A.III lock semantics (M3).
+- **Decider:** CUSTOMER_REQUIRED (CEO + PMO). **Default if unanswered:** BLOCK (no actual-effort total is built).
+
 ### OD-37 — Visibility of EPIC 16 data
 - **Business question:** who may view project planned effort (A.I) and actual effort per project?
 - **Why it blocks M2:** no `EFF.*` view capability is granted today; read flows cannot be built without it.
@@ -120,14 +139,14 @@ depends on the PM model).
 
 ## 7. Contract EPIC 17 needs from EPIC 16 (definition only)
 
-- **Exposed fact:** planned project effort per **project × recipient** (recipient = Quản lý phòng, PM, or a discipline), value in **man-days** (≤ 2 dp) with its blank / explicit-zero state; phase/period keys only if OD-22/OD-23 add them.
+- **Exposed fact:** planned project effort per **project × recipient** (recipient = Quản lý phòng, PM, or a discipline), value in **man-days** (≤ 2 dp, ≥ 0, no business maximum) with its blank / explicit-zero state; phase/period keys only if OD-22/OD-23 add them.
 - **Consumed by A.II:** the discipline recipients' values (A.I.3) as the reference of the ceiling.
-- **Still open (M3):** ceiling scope (OD-15), ≤ vs = (OD-32), order A.I-final-before-A.II (OD-27), behaviour of a ceiling on a blank allocation, concurrency counter, EPIC 17 storage unit design.
+- **Still open (M3):** ceiling scope (OD-15), ≤ vs = (OD-32), order A.I-final-before-A.II (OD-27), behaviour of a ceiling on a blank allocation, concurrency counter, EPIC 17 unit (**OD-45, OPEN_FOR_M3** — OD-14 is not propagated; rev01 requires comparability with A.I.3, not an identical storage unit).
 - **Stable now:** recipient categories (source wording), man-day unit, blank ≠ 0, separation from `HourRegistrations`, no A.I approval state, actual effort from the existing timesheet.
 
 ## 8. Data model review (`ProjectEffortAllocations`, candidate)
 
-- Settled dimensions: **Project + RecipientCategory (QLP / PM / Discipline) + Discipline (for the discipline category)** + `Effort` in man-days (≤ 2 dp) with an explicit not-registered state distinct from 0 (representation designed in this schema).
+- Settled dimensions: **Project + RecipientCategory (QLP / PM / Discipline) + Discipline (for the discipline category)** + `Effort` in man-days (≤ 2 dp, more rejected; ≥ 0; no business maximum) with an explicit not-registered state distinct from 0 (representation designed in this schema).
 - Conditional only: `PhaseLegacyId` (OD-22), `PeriodKey` (OD-23), `SourceRef` (OD-16).
 - Stable business key (environment independent): `<ProjectLegacyId>|<RecipientKey>` with `RecipientKey` = `QLP` / `PM` / `D:<DisciplineLegacyId>` (+ phase/period segments only if decided). SharePoint item ids are local helpers, never the canonical identity.
 - Not added: status/approval, cost, salary, rate, evaluation, EPIC 17/18 fields, any `HourRegistrations` field or link, any actual-effort list (OD-19).
@@ -136,14 +155,14 @@ depends on the PM model).
 ## 9. Reporting boundary
 
 Allowed now (contract only): planned-effort fact in man-days; actual effort from `TimesheetEntries` hours converted in
-the query (hours ÷ `HoursPerManDay`), never stored back; reconciliation = Σ planned per project/recipient equals stored
+the query (hours of the OD-33 counted rows ÷ `HoursPerManDay`, only after OD-33), never stored back; reconciliation = Σ planned per project/recipient equals stored
 rows. Not in scope: Power BI, EPIC 18 dashboards, evaluation, ranking, salary/cost analytics (OD-20, OD-21).
 
 ## 10. Customer question minimisation
 
 Not asked: who registers A.I (PM — the identity question is OD-24 only), recipients (QLP, PM, four named disciplines),
 A.I approval (none, OD-26), what "mục I.3" points to (A.I.3), separation from legacy Hour Registration (OD-25), unit
-(OD-14), actual source (OD-19), blank vs 0 (OD-40), actual-entry ownership (OD-41, not applicable). Remaining questions
+(OD-14), precision and bounds (OD-14, OD-44), actual source (OD-19), blank vs 0 (OD-40), actual-entry ownership (OD-41, not applicable). Remaining questions
 are genuine business or security choices the source does not answer.
 
 ## 11. Follow-ups (documentation only, no decision)
@@ -152,4 +171,4 @@ are genuine business or security choices the source does not answer.
   timesheet, existing on-behalf semantics) at the next backlog re-baseline (task 0.5); it must not narrow the live
   Timesheet.
 - After answers: record each in `decisions.md` §C (decision, answer, source, class, affected requirements, milestone),
-  then re-run the checker; the M2 gate turns empty only when OD-16, OD-22, OD-23, OD-24 and OD-37 are answered.
+  then re-run the checker; the M2 gate turns empty only when OD-16, OD-22, OD-23, OD-24, OD-33 and OD-37 are answered.

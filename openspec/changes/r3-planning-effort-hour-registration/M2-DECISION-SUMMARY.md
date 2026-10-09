@@ -1,12 +1,12 @@
 # M2 — EPIC 16 Đăng ký công dự án (rev01 mục A.I và A.III): CÂU HỎI CÒN LẠI
 
 Ngày 2026-10-10. **Chỉ chốt quyết định — chưa triển khai.** M1 (màn hình Đăng ký công cũ, S12.5) đã XONG và giữ nguyên.
-Cổng M2: **BLOCKED — CHỜ KHÁCH HÀNG / PHỤ TRÁCH BẢO MẬT QUYẾT ĐỊNH 5 câu hỏi dưới đây.** Chưa có câu trả lời = **không làm,
+Cổng M2: **BLOCKED — CHỜ KHÁCH HÀNG / PHỤ TRÁCH BẢO MẬT QUYẾT ĐỊNH 6 câu hỏi dưới đây.** Chưa có câu trả lời = **không làm,
 không đoán**. Mọi "khuyến nghị" **chưa được phê duyệt**. Chi tiết bằng chứng: `M2-DECISION-PACK.md`.
 
 Chủ dự án đã chốt, **không hỏi lại**: đơn vị công dự án = **ngày công** (quy đổi từ giờ chấm công theo số giờ/ngày công
-đã duyệt, tối đa 2 số lẻ); **công thực hiện lấy từ bảng chấm công hiện có** (không thêm màn hình/danh sách nhập riêng, giữ
-nguyên quy tắc chấm công và nhập thay hiện tại); **ô trống = chưa đăng ký, 0 = đăng ký bằng 0**. Đã rõ từ rev01: người đăng
+đã duyệt; nhập quá 2 số lẻ bị **từ chối**, không làm tròn; nhỏ nhất 0, số âm bị từ chối, **không** giới hạn trên); **công thực hiện lấy từ bảng chấm công hiện có** (không thêm màn hình/danh sách nhập riêng, giữ
+nguyên quy tắc chấm công và nhập thay hiện tại — chỉ chốt **nguồn**, chưa chốt dòng nào được tính, xem OD-33); **ô trống = chưa đăng ký, 0 = đăng ký bằng 0**. Đã rõ từ rev01: người đăng
 ký A.I là PM; đối tượng nhận công = Quản lý phòng, PM, bộ môn điện, lạnh, nước, BIM; mục A.I **không có** phê duyệt/khóa;
 Đăng ký công cũ (M1) là chức năng riêng, không gộp, không lấy số cũ làm số ban đầu.
 
@@ -18,9 +18,10 @@ ký A.I là PM; đối tượng nhận công = Quản lý phòng, PM, bộ môn 
 | OD-22 | Công dự án (A.I) đăng ký theo **dự án** hay theo **từng giai đoạn**? | Theo dự án × đối tượng, **không** theo giai đoạn | Khách hàng (PMO + Kế toán) | Có |
 | OD-23 | Công dự án tính **cả đời dự án**, theo năm, tháng hay kỳ lương? | **Cả đời dự án**; mọi thay đổi được lưu vết | Khách hàng (PMO) | Có |
 | OD-16 | Số liệu "bảng phân bổ sản lượng dự án" vào hệ thống thế nào? | PM **nhập tay** công dự án; không công thức, không nhập file (trừ khi yêu cầu riêng) | Khách hàng (PMO + Kế toán) | Có |
+| OD-33 | Công thực hiện tính từ các dòng chấm công **đã duyệt**, **cả dòng chưa duyệt**, hay hiển thị cả hai? | Chưa có khuyến nghị — khách hàng chọn (cần cho tổng công thực hiện ở M2) | Khách hàng (CEO + PMO) | Có |
 | OD-37 | Ai được **xem** công dự án? | PM của dự án, PMO, Ban điều hành; **không** dùng lại quyền xem của màn hình Đăng ký công cũ | Khách hàng (CEO + PMO) **và** phụ trách bảo mật | Có |
 
-Thứ tự hỏi đề xuất: **OD-24 → OD-22 → OD-23 → OD-16 → OD-37**.
+Thứ tự hỏi đề xuất: **OD-24 → OD-22 → OD-23 → OD-16 → OD-33 → OD-37**.
 
 ## Thẻ câu hỏi
 
@@ -39,6 +40,11 @@ cho cả đời dự án; mọi thay đổi có nhật ký/lịch sử. **Chưa 
 
 **OD-16 — Nguồn số liệu A.I.** rev01 ghi "từ bảng phân bổ sản lượng dự án" nhưng không mô tả bảng. Khuyến nghị: PM nhập tay
 công dự án (có thể ghi chú tham chiếu bảng); không thêm công thức hay nhập file Excel nếu không có yêu cầu riêng.
+
+**OD-33 — Dòng chấm công nào được tính.** Đã chốt công thực hiện lấy từ chấm công, nhưng chưa chốt tính dòng nào: a) chỉ dòng
+đã duyệt; b) tất cả (cả nháp); c) hiển thị cả hai. Báo cáo cũ tính cả giờ chưa duyệt; rev01 yêu cầu Chủ trì duyệt/khóa
+công thực hiện. Tiêu chí nghiệm thu M2 có tính tổng công thực hiện, nên phải chốt trước khi làm M2. Không tự suy ra
+"chỉ đã duyệt". **Chưa có khuyến nghị.**
 
 **OD-37 — Quyền xem.** Khuyến nghị: XEM = PM của dự án (theo OD-24), PMO, Ban điều hành; các vai trò khác không xem. Không
 dùng lại quyền xem của màn hình Đăng ký công cũ. Quyền xem của Trưởng bộ môn / Quản lý phòng thuộc các quyết định sau (khi

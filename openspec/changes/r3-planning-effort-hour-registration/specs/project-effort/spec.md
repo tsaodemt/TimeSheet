@@ -9,15 +9,26 @@ The system SHALL let the project's PM register project effort for the recipient 
 - **THEN** the response is SCOPE_NOT_ALLOWED and nothing is written
 
 ### Requirement: Project effort unit is the man-day (OD-14)
-Project Effort SHALL be stored and handled in man-days (business and storage unit; OD-14 resolved by owner decision 2026-10-10) with at most 2 decimal places. A value with more than 2 decimal places SHALL be refused server-side, not silently rounded. Conversion from Timesheet hours SHALL use the approved `HoursPerManDay` setting. EPIC 16 SHALL use its own schema; the man-day unit SHALL NOT be a reason to reuse the M1 schema or storage. This requirement does not authorise EPIC 18 implementation.
+Project Effort SHALL be stored and handled in man-days (business and storage unit; OD-14 resolved by owner decision 2026-10-10) with at most 2 decimal places. Input with more than 2 decimal places SHALL be rejected with the typed validation error `VALIDATION_VALUE` and SHALL NOT be rounded, truncated or silently normalised. OD-14 applies to EPIC 16 only; it SHALL NOT set the EPIC 17 unit (OD-45). Conversion from Timesheet hours SHALL use the approved `HoursPerManDay` setting. EPIC 16 SHALL use its own schema; the man-day unit SHALL NOT be a reason to reuse the M1 schema or storage. This requirement does not authorise EPIC 18 implementation.
 
 #### Scenario: Unit is explicit
 - **WHEN** an allocation is saved
 - **THEN** it is stored in man-days with at most 2 decimals and the unit `man-day` is exposed to the reporting contract
 
-#### Scenario: Excess precision is refused
+#### Scenario: Excess precision is rejected
 - **WHEN** the PM saves 1.255 for a recipient
+- **THEN** the response is VALIDATION_VALUE, nothing is written and no rounded or truncated value (1.25 / 1.26) is stored
+
+### Requirement: Project effort value bounds (OD-44)
+Project Effort SHALL accept numeric values with minimum 0 (OD-44 resolved by owner decision 2026-10-10). Negative values SHALL be denied with the typed validation error `VALIDATION_VALUE`. There SHALL be no business maximum; no arbitrary upper limit SHALL be configured or validated. Validation SHALL run server-side (client-side validation is a convenience only). The platform numeric range (IEEE-754 double, about 15 significant digits, in SharePoint Number columns and Power Fx) is a TECHNICAL_LIMIT, not a business rule.
+
+#### Scenario: Negative value denied
+- **WHEN** the PM saves -1 for a recipient
 - **THEN** the response is VALIDATION_VALUE and nothing is written
+
+#### Scenario: Zero and large values accepted
+- **WHEN** the PM saves 0 for one recipient and 250000.5 for another
+- **THEN** both are stored exactly as entered
 
 ### Requirement: Allocation blank and zero (OD-40)
 A recipient allocation SHALL distinguish BLANK (not registered) from numeric 0 (explicitly registered zero) as distinct business states (OD-40 resolved by owner decision 2026-10-10). Blank SHALL NOT be coerced to 0 on save, read, display or contract export. The storage representation SHALL be designed in the EPIC 16 schema and SHALL NOT be inferred from legacy Hour Registration (OD-01 is a separate decision).
@@ -54,14 +65,14 @@ require a new explicit decision and spec delta.
 - **THEN** no project effort allocation changes
 
 ### Requirement: Actual project effort from existing timesheet entries (NR-EFF-05, OD-19)
-Actual project effort SHALL be derived from the existing `TimesheetEntries` (OD-19 resolved by owner decision 2026-10-10). R3 SHALL NOT create a new actual-effort entry list, a duplicate actual-effort workflow or a new employee actual-effort entry screen. The existing Timesheet semantics SHALL be preserved unchanged: trusted actor identity, the business owner / Employee relationship, existing authorised on-behalf editing, existing entry status semantics and the existing security model; no existing Timesheet function SHALL be restricted. Caller-supplied owner identity SHALL never be trusted. Actual effort in man-days SHALL be computed by the approved reporting/query contract as Timesheet hours ÷ `HoursPerManDay` over the entry statuses fixed by OD-33 (M3); `TimesheetEntries` SHALL NOT be rewritten. OD-41 is NOT_APPLICABLE.
+Actual project effort SHALL be derived from the existing `TimesheetEntries` (OD-19 resolved by owner decision 2026-10-10). R3 SHALL NOT create a new actual-effort entry list, a duplicate actual-effort workflow or a new employee actual-effort entry screen. The existing Timesheet semantics SHALL be preserved unchanged: trusted actor identity, the business owner / Employee relationship, existing authorised on-behalf editing, existing entry status semantics and the existing security model; no existing Timesheet function SHALL be restricted. Caller-supplied owner identity SHALL never be trusted. OD-19 fixes the source only. Which Timesheet rows count (status inclusion rule) SHALL follow OD-33 (BLOCKING M2); until OD-33 is decided no actual-effort total SHALL be implemented and no inclusion rule (such as approved-only) SHALL be assumed. Once OD-33 is decided, actual effort in man-days SHALL be computed by the reporting/query contract as the hours of the counted rows ÷ `HoursPerManDay`; `TimesheetEntries` SHALL NOT be rewritten. OD-41 is NOT_APPLICABLE.
 
 #### Scenario: Forged owner is never trusted
 - **WHEN** a caller submits another person's identity as an actual-effort owner claim
 - **THEN** the server ignores that claim and resolves the business owner from the existing server-side Timesheet ownership/scope rule; it never writes merely because the client supplied the identity
 
 #### Scenario: Actual effort is converted, not stored
-- **GIVEN** 20 counted Timesheet hours on project A and `HoursPerManDay` = 8
+- **GIVEN** OD-33 is decided and the rows it counts on project A total 20 Timesheet hours, with `HoursPerManDay` = 8
 - **WHEN** the contract computes actual effort for project A
 - **THEN** the result is 2.50 man-days and no `TimesheetEntries` item is created or changed
 

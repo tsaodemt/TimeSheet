@@ -2,7 +2,7 @@
 
 ### Requirement: Discipline effort registration (NR-EFF-02)
 Discipline staff (employees and the Chủ trì) SHALL register discipline effort per project and task through a guarded
-flow, only for their own discipline. Task meaning (OD-29), ownership grain (OD-30), unit (OD-14) and period (OD-23)
+flow, only for their own discipline. Task meaning (OD-29), ownership grain (OD-30), unit (OD-45, OPEN_FOR_M3; not taken from OD-14) and period (OD-23)
 SHALL be implemented as decided; until then BLOCKED (M3).
 
 #### Scenario: Other discipline denied

@@ -108,7 +108,8 @@ def check(d=DEFAULT):
         if os.path.basename(f).startswith("REVIEW-FIXES"):
             continue
         for bad in (r"(?<!ENV-)\bD2\b", r"already established", r"RESOLVED_RECORDED", r"RESOLVED_DEFERRED_CURRENT_SCOPE",
-                    r"migration preserves both states", r"null excluded from counts, treated 0 in sums"):
+                    r"migration preserves both states", r"null excluded from counts, treated 0 in sums",
+                    r"approved Timesheet hours", r"EPIC 17 storage unit is designed at M3"):
             if re.search(bad, txt):
                 errs.append("%s contains stale wording /%s/" % (os.path.relpath(f, d), bad))
     tr = read(d, "traceability.md")
@@ -129,7 +130,7 @@ def check(d=DEFAULT):
             errs.append("%s does not reference OD-31" % nid)
     m2_state = {o: ("RESOLVED" if o in resolved else "NOT_APPLICABLE" if o in not_applicable else
                     "BLOCKING" if o in blocking else "CONDITIONAL" if o in conditional else "NON_BLOCKING")
-                for o in M2_DECISIONS}
+                for o in M2_DECISIONS + (EPIC17_UNIT,)}
     errs += check_m2(d, dec, blocking, conditional, resolved, not_applicable, derived["M2"])
     return errs, {"blocking": sorted(blocking), "conditional": sorted(conditional), "nonblocking": sorted(nonblocking),
                   "resolved": sorted(resolved), "not_applicable": sorted(not_applicable),
@@ -147,16 +148,23 @@ M2_TOPICS = {
     "PM": ("OD-24", r"project's PM"),
     "visibility": ("OD-37", r"\b(view|visible|visibility)\b"),
     "blank/zero": ("OD-40", r"\b(blank|zero|null)\b"),
+    "actual row inclusion": ("OD-33", r"\b(counted|counts|status|approved-only|draft)\b"),
 }
 
 
-# Every decision that was in the M2 gate at the M2 decision review (2026-10-10); state is derived from the register.
-M2_DECISIONS = ("OD-14", "OD-16", "OD-19", "OD-22", "OD-23", "OD-24", "OD-37", "OD-40", "OD-41")
-# Once resolved, the project-effort spec must state the answer unconditionally: decision -> (answer in §C, spec pattern).
+# Every decision that was in (or entered) the M2 gate during the M2 decision work (2026-10-10), plus the M2 value-bounds
+# decision; state is derived from the register.
+M2_DECISIONS = ("OD-14", "OD-16", "OD-19", "OD-22", "OD-23", "OD-24", "OD-33", "OD-37", "OD-40", "OD-41", "OD-44")
+EPIC17_UNIT = "OD-45"  # OD-14 is EPIC 16 only; the EPIC 17 unit stays its own M3 decision
+# Once resolved, the project-effort spec must state the answer unconditionally: decision -> (answer in §C, spec patterns).
 M2_RESOLVED_RULES = {
-    "OD-14": (r"MAN_DAY", r"stored and handled in man-days"),
-    "OD-19": (r"TIMESHEETENTRIES", r"derived from the existing `TimesheetEntries`"),
-    "OD-40": (r"BLANK_NOT_REGISTERED / ZERO_EXPLICIT", r"distinguish BLANK \(not registered\) from numeric 0"),
+    "OD-14": (r"MAN_DAY", (r"stored and handled in man-days",
+                           r"more than 2 decimal places SHALL be rejected with the typed validation error",
+                           r"SHALL NOT be rounded, truncated or silently normalised")),
+    "OD-19": (r"TIMESHEETENTRIES", (r"derived from the existing `TimesheetEntries`", r"OD-19 fixes the source only")),
+    "OD-40": (r"BLANK_NOT_REGISTERED / ZERO_EXPLICIT", (r"distinguish BLANK \(not registered\) from numeric 0",)),
+    "OD-44": (r"MIN_0 / NEGATIVE_DENY / NO_BUSINESS_MAX", (r"minimum 0", r"Negative values SHALL be denied",
+                                                            r"no business maximum", r"TECHNICAL_LIMIT, not a business rule")),
 }
 
 
@@ -164,12 +172,33 @@ def check_m2(d, dec, blocking, conditional, resolved, not_applicable, m2_gate):
     errs = []
     open_ids = set(blocking) | set(conditional)
     spec = read(d, "specs", "project-effort", "spec.md")
-    for oid, (answer, pat) in M2_RESOLVED_RULES.items():
+    for oid, (answer, pats) in M2_RESOLVED_RULES.items():
         if oid in resolved:
             if not re.search(answer, resolution(dec, oid)):
                 errs.append("%s resolution does not record %s" % (oid, answer))
-            if not re.search(pat, spec):
-                errs.append("%s resolved but project-effort spec does not state /%s/" % (oid, pat))
+            for pat in pats:
+                if not re.search(pat, spec):
+                    errs.append("%s resolved but project-effort spec does not state /%s/" % (oid, pat))
+    # No business maximum: no arbitrary upper limit (999.9, 9999, 9999.99, ...) in the EPIC 16 spec.
+    if "OD-44" in resolved and re.search(r"\b9{3,}(\.9+)?\b", spec):
+        errs.append("project-effort spec contains an arbitrary maximum although OD-44 = NO_BUSINESS_MAX")
+    # OD-19 decides the source only; the row-inclusion rule is OD-33. If M2 acceptance needs an actual-effort total
+    # (HoursPerManDay conversion in an EPIC 16 criterion), an open OD-33 must block M2.
+    acc = read(d, "acceptance.md")
+    eff16 = [l for l in acc.splitlines() if l.startswith("| AC-EFF16-")]
+    if "OD-33" not in resolved and any("HoursPerManDay" in l for l in eff16) and "OD-33" not in m2_gate:
+        errs.append("M2 acceptance computes an actual-effort total but open OD-33 is not in the M2 gate")
+    # EPIC 17 unit: own open decision, no hidden dependency on OD-14.
+    if EPIC17_UNIT not in blocking or "M3" not in blocking.get(EPIC17_UNIT, ()):
+        errs.append("%s (EPIC 17 unit) must stay an open M3 blocker until decided" % EPIC17_UNIT)
+    disc = read(d, "specs", "discipline-effort", "spec.md")
+    if EPIC17_UNIT not in disc or re.search(r"unit \(OD-14\)", disc):
+        errs.append("discipline-effort unit must cite %s, not OD-14" % EPIC17_UNIT)
+    tr = read(d, "traceability.md")
+    for nid in ("NR-EFF-02", "NR-EFF-03"):
+        line = [l for l in tr.splitlines() if l.startswith("| %s |" % nid)][0]
+        if "OD-14" in line or EPIC17_UNIT not in line:
+            errs.append("%s must depend on %s (EPIC 17 unit), not OD-14" % (nid, EPIC17_UNIT))
     # OD-41 only exists for a separate/hybrid actual-entry path (OD-19 = b/c).
     od19 = resolution(dec, "OD-19")
     if "TIMESHEETENTRIES" in od19 and "OD-41" not in not_applicable:
