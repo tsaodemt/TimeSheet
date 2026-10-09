@@ -1,6 +1,6 @@
 # R3 decision register (OPEN_DECISION items)
 
-Status 2026-10-09: rows in sections A/B are **OPEN_DECISION** unless explicitly marked otherwise. Owner accepted OD-01, OD-02, OD-04, OD-09 = A and decided OD-42 on 2026-10-09 (moved to §C). A "recommended default" is evidence-based advice for the reviewer; it is **not approved** and nothing may be implemented on it before the decision owner records an answer (date, owner, source).
+Status 2026-10-09: rows in sections A/B are **OPEN_DECISION** unless explicitly marked otherwise. Owner accepted OD-01, OD-02, OD-04, OD-09 = A, decided OD-42, and closed OD-25, OD-07, OD-08, OD-05 under the legacy-parity directive on 2026-10-09 (moved to §C). **M1_IMPLEMENTATION_GATE = APPROVED.** A "recommended default" is evidence-based advice for the reviewer; it is **not approved** and nothing may be implemented on it before the decision owner records an answer (date, owner, source).
 
 Resolved scope/source decisions discovered during review are moved to section C and are not counted as open blockers.
 
@@ -17,10 +17,7 @@ requirement rows (`traceability.md` §1). Legacy facts are from the decompiled l
 
 | ID | Question | Why it matters | Options | Recommended default (NOT approved) | Risk if wrong | Affects | Blocking | Owner |
 |---|---|---|---|---|---|---|---|---|
-| OD-05 | Who may view the matrix; data classification | Legacy VERIFIED (permission data, module TS.Đăng ký công): Write = CEO, Secretary, PM; Read = Manager, Leader, **IT**, HRD; Hide = Member, AD. The legacy→target role map (Manager→Approver, Leader→Team Leader, HRD→HR, CEO→Executive/Approver, Secretary/PM→PMO, IT→split: IT Support technical part (candidate for IT's read access), App Administrator, HR, Salary Viewer) is **prepared, not signed**; the `REG.View` seed (incl. AppAdmin) is unapproved; classification conflicts (legacy INTERNAL vs a target note "Confidential (budget)") | a) view TL, APR, EXE, PMO, HR; deny AppAdmin and IT Support; INTERNAL; a2) a) + IT Support view (legacy IT read kept); b) + AppAdmin; c) classify confidential (ENV-D2) | (a) — denying IT Support is a deliberate TARGET SECURITY HARDENING / DEVIATION from legacy IT read access and needs approval here; not resolved by evidence | Leak of budget data or blocked readers | guard, read flow, site placement | **BLOCKING M1** — CUSTOMER_OR_SECURITY_OWNER_REQUIRED | Security owner (project owner) + HR; customer if the role map or the IT deviation is contested |
 | OD-06 | Project list scoping by assignment | Legacy scopes by the person loaded elsewhere and in practice shows all projects (LHR-07); target switch `ProjectAssignmentScoping` = Off (engineering interim, B-03 open) | a) follow the existing switch; b) always all; c) always assigned | (a) | Wrong visibility | read flow filter | NON_BLOCKING (switch exists) | Project owner |
-| OD-07 | Are inactive / closed projects listed and editable? | Legacy filter was a UI flag, effectively all projects listed and editable (LHR-09) | a) all listed, editable (legacy); b) active editable, others read-only; c) active only | (a) legacy semantics | Edits to closed budgets or hidden history | read/save validation | **BLOCKING M1** — CUSTOMER | PMO |
-| OD-08 | Values on a phase removed from the project or an inactive discipline | Legacy hides stale lines and silently drops them on the next save, while one report still sums them (LHR-13/14) | a) keep, show read-only and flagged, excluded from editing; b) keep hidden; c) remove | (a) never delete silently | Silent data loss or inconsistent totals | read model, reports, migration (1 stale line) | **BLOCKING M1** | PMO |
 | OD-10 | Multi-cell clear / spreadsheet paste (UD-06) | Legacy Delete/Backspace clears all selected cells (LHR-17); nested galleries edit one cell at a time | a) single-cell clear + "clear row" action; b) Excel-like grid (SPFx, new tech) | (a) | Productivity gap | UI only | NON_BLOCKING | PMO |
 | OD-11 | Migrate legacy E14 values (199 filled cells, Σ 8,648 man-days; orphan file 9 blank lines) in R3? | Needed for reports to match legacy | a) migrate with the R3 release; b) with the historical migration epic; c) not at all | (a) or (b); orphan file excluded (0 values lost) | Empty budgets at go-live | migration plan | NON_BLOCKING for M1, **BLOCKING GL** | PMO + project owner |
 | OD-12 | Per-year budget? | Legacy registration is lifetime per project; the year only filters the project list (LHR-23) | a) lifetime (legacy); b) per year | (a) | Semantics change | schema | NON_BLOCKING (default = legacy) | PMO |
@@ -40,7 +37,6 @@ requirement rows (`traceability.md` §1). Legacy facts are from the decompiled l
 | OD-22 | **EFF-F-9** Phase rules (which phases; closing; effect on registration) | A.I has no phase; legacy registration is per phase | per phase or not | none | Wrong granularity | schema | **BLOCKING M2** | PMO + Finance |
 | OD-23 | **EFF-F-10** Registration period and open/close (project lifetime, month, week) | Time dimension of plans and actuals | lifetime; month; pay period (26→25) | none | Wrong schema | schema, reports | **BLOCKING M2** | PMO |
 | OD-24 | Who is "the project's PM"? (PM is a legacy role; no project-manager field or assignment role exists; the guard has no project scope) | S16.2 AC "only the project's PM can register" cannot be enforced today | a) PMO role, company scope; b) per-project PM field/assignment + new project scope | none | Any PMO edits any project, or no one can | security, schema (Projects / ProjectAssignments), guard | **BLOCKING M2** | CEO + PMO |
-| OD-25 | Relationship of legacy E14 / S12.5 to rev01 A.I (PM project effort) | Same name, actor and discipline columns; rev01 is classified as a new requirement; nothing decides whether A.I replaces, extends or is seeded from E14 | a) separate (S12.5 = legacy budget; A.I new); b) A.I replaces S12.5; c) A.I extends E14 (same entity) | none — the spec keeps them separate until decided | Building S12.5 twice or migrating into the wrong entity | M1 scope, schema, migration | **BLOCKING M1, M2** | CEO + PMO |
 | OD-27 | Approval order (A.I final before A.II? registration approved before actuals?) | Ceiling depends on A.I values | sequential; independent | none | Ceiling against a moving number | state machine, validation | **BLOCKING M3** | PMO |
 | OD-28 | Self-approval for effort (Chủ trì registers and approves own discipline) | UD-04 (blocked) covers timesheet entries only | a) deny own rows; b) allow; c) deny own person rows only | none (timesheet precedent: deny) | Segregation-of-duties gap or deadlock | guard | **BLOCKING M3** | CEO |
 | OD-29 | Meaning of "Chọn công việc thực hiện" in A.II: phase or work type? | Granularity of discipline registration | phase; work type; free text | none | Wrong schema | schema, UI | **BLOCKING M3** | PMO |
@@ -66,28 +62,49 @@ requirement rows (`traceability.md` §1). Legacy facts are from the decompiled l
 | OD-04 | **RESOLVED_BY_EVIDENCE — owner accepted 2026-10-09 = A** | Legacy VERIFIED writers CEO, Secretary, PM (+ technical Admin bypass); mapped to Executive and PMO; owner rule: technical admin gets no business authority | `REG.Edit` = Executive, PMO; AppAdmin DENY (seed to be corrected at implementation) |
 | OD-09 | **RESOLVED_BY_EVIDENCE — owner accepted 2026-10-09 = A** | D-7 (no Delete right, soft delete only) excludes item deletion; a soft-delete flag would duplicate "blank" | Clear keeps the item and sets `ManDays = null` (BLANK, per OD-01); history in versions and audit |
 | OD-42 | **RESOLVED — OWNER_DECISION 2026-10-09** (value bounds, split from OD-03) | Owner decision; legacy had no bounds (negative numbers parsed, no maximum); data 2–200 | Minimum 0; negative values refused; **no business maximum**; precision ≤ 2 decimals (OD-03); numeric validation server-side (and client-side). TECHNICAL_LIMIT (not a business rule): SharePoint Number columns and Power Fx numbers are IEEE-754 doubles (about 15 significant digits); no explicit column maximum is configured |
+| OD-25 | **RESOLVED — OWNER_DECISION 2026-10-09 = A** | Owner directive: legacy business parity, no scope change | Legacy "Đăng ký công" (S12.5) stays its own capability; rev01 A.I is EPIC 16 (M2); entities and workflows are not collapsed |
+| OD-07 | **RESOLVED — OWNER_DECISION 2026-10-09 = A (LEGACY_PARITY)** | Legacy VERIFIED: the legacy project master has **no status field**; the Hour Registration project list filters only by year and assignment (the `Checked` flag is UI state, true for all 195 projects); every listed project is editable | All projects are listed (year + OD-06 assignment switch) and editable regardless of the target project status; no closed/paused restriction is introduced |
+| OD-08 | **RESOLVED — OWNER_DECISION 2026-10-09 = LEGACY_PARITY (exact legacy semantics)** | Legacy VERIFIED (load, save, reports): a value stored for a phase that is no longer in the project's phase set **survives in storage**; it is **not shown** in the matrix and **not editable** (rows come only from the project's current phases); it **is still counted** by the per-project registered total (RPT-07 sums every stored line) and by the per-phase figure where report rows exist for that phase (RPT-06); the **next save** of that project's matrix rewrites the file with current phases only, so the value is **silently discarded**. If the phase is re-added before that save, the value reappears. Disciplines: legacy shows **every** discipline of the master (no active filter) | Target: stale cells hidden, not editable, included in the project-total contract until the next successful save of the project; on that save the server clears them (value → empty, item kept, OD-09/D-7; no hard delete), without a user warning. Documented deviations: no physical deletion (D-7); each clear is audited (target security). Columns = all disciplines of the master by sort order |
+| OD-05 | **RESOLVED — OWNER_DECISION 2026-10-09 = LEGACY_PARITY** | Legacy VERIFIED read = Manager, Leader, IT, HRD; write = CEO, Secretary, PM; hide = Member, AD | VIEW: Team Leader, Approver, Executive, PMO, HR, **IT Support** (legacy IT read kept); DENY: Employee, Finance, Salary Viewer, App Administrator, Confidential Owner, Migration Owner. Classification INTERNAL (legacy). Role table below |
 | OD-21 / EFF-F-8 | **RESOLVED_BY_EVIDENCE — DEFERRED_CURRENT_SCOPE** | project-owner current-scope directive of 2026-10-09 (R3 Open Spec task scope: KPI, Evaluation, salary review, bonus/reward and advanced employee scoring/ranking are deferred / out of current implementation scope) | No evaluation formula is designed or implemented in R3; NR-EFF-09 stays a future-phase requirement (not removed). No customer decision is pending for the current scope |
 | OD-26 | **RESOLVED_BY_EVIDENCE — NO_A_I_APPROVAL** | NR-EFF-01 source/traceability states no approval/lock for A.I; inventing one would add a workflow absent from the requirement | EPIC 16 A.I save is effective after a successful guarded write; no `EFF.ProjectApprove` flow/capability in current scope |
 | OD-38 | **RESOLVED_BY_EVIDENCE — DOCUMENTATION_SYNC_ONLY** | Same owner directive as OD-21. The repository decision pack and `docs/roadmap.md` do not yet carry it; recording it there is a documentation task (`tasks.md` 0.4), not a decision | No customer decision pending; sync only |
 
 ## Tally
 
-Unconditional BLOCKING (any milestone M1–M3 or GL): OD-05, 07, 08, 11 (GL), 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 27, 28, 29, 30, 32, 33, 34, 37, 40 → **23**. Of these, blocking **M1 (S12.5)**: OD-05, 07, 08, 25 → **4**.
+Unconditional BLOCKING (any milestone M1–M3 or GL): OD-11 (GL), 14, 15, 16, 17, 18, 19, 22, 23, 24, 27, 28, 29, 30, 32, 33, 34, 37, 40 → **19**. Of these, blocking **M1 (S12.5)**: none → **0**.
 
 CONDITIONAL BLOCKING: OD-41 → **1** (only if OD-19 selects a separate/hybrid actual-entry path).
 
 NON_BLOCKING for R3 build: OD-06, 10, 12, 13, 20, 31, 35, 36, 39 → **9** (OD-20 and OD-31 become blocking for M4/reporting scope).
 
-Open decisions total: **33**. Resolved in §C: **9** (OD-01 and OD-42 by owner decision; OD-02, OD-03, OD-04, OD-09 by evidence accepted by the owner; OD-21, OD-26, OD-38 by evidence).
+Open decisions total: **29**. Resolved in §C: **13** (OD-01, OD-05, OD-07, OD-08, OD-25 and OD-42 by owner decision; OD-02, OD-03, OD-04, OD-09 by evidence accepted by the owner; OD-21, OD-26, OD-38 by evidence).
 
-Changes since the V3 baseline (2026-10-09, M1 decision cleanup): OD-01, 02, 04, 09 resolved by the owner (−4 blocking); OD-03 resolved by evidence for precision (−1) and its unresolved bounds split into new OD-42 (+1). Then OD-42 resolved by the owner (−1). Net blocking 28 → 23; open 38 → 33.
+Changes since the V3 baseline (2026-10-09, M1 decision cleanup): OD-01, 02, 04, 09 resolved by the owner (−4 blocking); OD-03 resolved by evidence for precision (−1) and its unresolved bounds split into new OD-42 (+1). Then OD-42 resolved by the owner (−1). Then OD-25, OD-07, OD-08, OD-05 resolved by owner decision (legacy parity) (−4). Net blocking 28 → 19; open 38 → 29.
 
 Milestone gate sets (derived from the Blocking column above; checked by `tools/spec/check_r3_open_spec.py`):
 
 | Gate | BLOCKING decisions | Conditional |
 |---|---|---|
-| M1 | OD-05, OD-07, OD-08, OD-25 | – |
-| M2 | OD-14, OD-16, OD-19, OD-22, OD-23, OD-24, OD-25, OD-37, OD-40 | OD-41 (if OD-19 = b/c) |
+| M1 | none (all M1 decisions resolved 2026-10-09) | – |
+| M2 | OD-14, OD-16, OD-19, OD-22, OD-23, OD-24, OD-37, OD-40 | OD-41 (if OD-19 = b/c) |
 | M3 | OD-15, OD-17, OD-18, OD-19, OD-27, OD-28, OD-29, OD-30, OD-32, OD-33, OD-34 (+ M2 gate satisfied) | OD-41 (if OD-19 = b/c) |
 | GL | OD-11 | – |
 | M4 (later release, outside R3) | OD-20, OD-31 (non-blocking for R3) | – |
+
+### OD-05 role / capability table (legacy parity, owner decision 2026-10-09)
+
+| Legacy role (`Admin_Soft`) | Legacy TS.Đăng ký công | Target mapped role (role map) | VIEW (`REG.View`) | EDIT / CLEAR / SAVE (`REG.Edit`) | Source / evidence |
+|---|---|---|---|---|---|
+| CEO (0) | Write | Executive (BOD) / Approver (design leads, per person) | ALLOW | Executive ALLOW (OD-04); Approver DENY | legacy permission data; role map; OD-04 |
+| Manager (1) | Read | Approver | ALLOW | DENY | legacy permission data; role map |
+| Leader (2) | Read | Team Leader | ALLOW | DENY | legacy permission data; role map |
+| Member (3) | Hide | Employee | DENY | DENY | legacy permission data |
+| Secretary (4) | Write | PMO | ALLOW | ALLOW (OD-04) | legacy permission data; role map; OD-04 |
+| PM (5) | Write | PMO | ALLOW | ALLOW (OD-04) | legacy permission data; role map; OD-04 |
+| IT (6) | Read | split: **IT Support** (technical, candidate for IT's read) · App Administrator (permission editing) · HR (user lock) · Salary Viewer (salary visibility) | IT Support **ALLOW** (legacy parity); App Administrator **DENY** (technical role, no business data authority — owner decision); HR ALLOW (via HRD); Salary Viewer DENY (salary-visibility split only) | DENY | legacy permission data; role map; owner decision OD-05 |
+| HRD (7) | Read | HR | ALLOW | DENY | legacy permission data; role map |
+| AD (8) | Hide | Finance | DENY | DENY | legacy permission data |
+| Director (9) | – (no row) | retired (G5) | – | – | G5 |
+| Admin (10) | bypass (technical) | App Administrator | DENY | DENY | owner rule: technical privilege ≠ business authority; OD-04/OD-05 |
+| – (new target roles) | – | Confidential Owner, Migration Owner | DENY | DENY | no legacy equivalent; no broadening |

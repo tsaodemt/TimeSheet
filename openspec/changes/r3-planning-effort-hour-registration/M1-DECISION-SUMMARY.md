@@ -1,5 +1,14 @@
 # M1 — S12.5 Đăng ký công: GÓI QUYẾT ĐỊNH BÊN NGOÀI (bản cuối)
 
+> **CẬP NHẬT 2026-10-09 — ĐÃ CHỐT TOÀN BỘ M1 (chỉ thị chủ dự án: GIỮ NGUYÊN NGHIỆP VỤ LEGACY, không đổi phạm vi).**
+> OD-25 = A (Đăng ký công cũ là chức năng riêng; A.I thuộc EPIC 16) · OD-07 = A (legacy không có trạng thái dự án → mọi dự án
+> hiện và sửa được) · OD-08 = đúng hành vi legacy (giá trị trên giai đoạn bị gỡ: vẫn lưu, ẩn, không sửa, vẫn tính vào tổng
+> dự án tới lần lưu kế tiếp; lần lưu đó xóa trống giá trị — giữ bản ghi, có audit — không cảnh báo; thêm lại giai đoạn trước
+> đó thì hiện lại) · OD-05 = legacy parity (XEM: Team Leader, Approver, Executive, PMO, HR, **IT Support**; KHÔNG: Employee,
+> Finance, Salary Viewer, AppAdmin, Confidential Owner, Migration Owner). **Quyết định M1 còn mở: 0. M1_IMPLEMENTATION_GATE =
+> APPROVED.** Nội dung bên dưới là bản hỏi trước khi chốt, giữ lại để truy vết.
+
+
 Đặc tả R3 V3 đã duyệt. Đã chốt: OD-01, OD-02, OD-04, OD-09, OD-42 (chủ dự án) và OD-03 (bằng chứng).
 Còn **4** quyết định trước khi làm màn hình **Đăng ký công** (ma trận công đăng ký theo giai đoạn × bộ môn).
 Chưa có câu trả lời = **không làm, không đoán**. Không đề xuất nào dưới đây là đã được phê duyệt.

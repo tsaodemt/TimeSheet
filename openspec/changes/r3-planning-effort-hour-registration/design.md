@@ -105,7 +105,7 @@ keys); ETag = SharePoint `odata.etag`; version history on.
 | `Phase` / `PhaseItemId` | LU → Phases / Num | Y | N | N | must belong to the project's phase list (OD-02 resolved = legacy parity) |
 | `Discipline` / `DisciplineItemId` | LU → Disciplines / Num | Y | N | N | |
 | `ManDays` | Number, ≥ 0, at most 2 decimals, no business maximum (OD-03, OD-42 resolved) | **N** | N | N | null = BLANK, 0 = explicit VALUE 0 (OD-01 resolved = A) |
-| `Status` | Choice `Active` | Y | N | N | no workflow (§4.1); `Deleted` only if a project deletion rule requires it (OD-08/09) |
+| `Status` | Choice `Active` | Y | N | N | no workflow (§4.1); no other value used in M1 (clear = empty value, OD-09) |
 | `ActorUpn`, `CorrelationId` | SL | – | N | N | trusted writer; run id |
 | `LegacyId` | SL | Y | Y | **Y** | immutable row identifier generated for every target item; migration may derive it deterministically from the canonical `RegKey` for repeatable loads |
 
@@ -164,7 +164,7 @@ SharePoint is suitable: small volumes, keyed access, no cross-list transactions 
 - **Selection:** year filter (All + years present in Projects, LHR-03), single searchable project picker showing
   code — name, keyed by project id (LHR-05/06); empty filter result clears the grid (LHR-04).
 - **Matrix:** rows = the project's phases in project order (OD-02 resolved). STT, phase name and code are read-only (LHR-11);
-  columns are dynamic and ordered by SortOrder; active/editable vs inactive/stale discipline/phase presentation follows OD-08 and SHALL NOT silently discard stored values. Under OD-08 option (a), stale/inactive values are shown read-only and flagged. Built as nested galleries over a local collection loaded from `REG-ReadMatrix`.
+  columns = every discipline of the master ordered by SortOrder (no active filter; legacy parity). Values on phases removed from the project are not returned to the UI (legacy: hidden, not editable) and are cleared by the next successful save of the project (OD-08 = legacy parity). Built as nested galleries over a local collection loaded from `REG-ReadMatrix`.
 - **Cell states (OD-01 resolved = A):** BLANK (empty input, placeholder "—"), VALUE (number, including explicit 0 shown as "0"), DIRTY and ERROR.
 - **Editing:** numeric input ≥ 0, at most 2 decimals, no business maximum (OD-03, OD-42); inline validation message; clear = empty input or a clear (×) button per cell;
   "clear row" optional (OD-10).
@@ -199,8 +199,8 @@ client decoys (`OwnerUpn, Role, Scope, DisciplineCode, ProjectItemId-as-claim, A
 
 | Flow | Purpose | Inputs | Authorization | Validation | Reads / writes | Concurrency / batch | Replay safety / dedup | Audit | Response | Typed errors |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `REG-ReadMatrix` | load one project's matrix | `ProjectItemId` | `REG.View` (scope per OD-05/06) | project exists, listed per OD-07 | read Projects (phase list), Phases, Disciplines, HourRegistrations (`ProjectItemId eq`) | – | read-only | AuthorizationAllow/Deny + ReadProxy | `phases[]`, `disciplines[]`, `cells[] {phaseId, disciplineId, state: BLANK\|VALUE, value, etag}`, `canEdit`, `stale[]` | ROLE_NOT_ALLOWED, NOT_FOUND, VALIDATION_LOOKUP |
-| `REG-SaveMatrix` | save changed cells | `ProjectItemId`, `Changes` JSON `[{phaseId, disciplineId, state, value, etag}]` (1–100), `ClientRequestId` | `REG.Edit` | preflight **all** cells before any write: phase belongs to the project (OD-02), discipline allowed by OD-08/current master state, value domain (numeric, ≥ 0, ≤ 2 decimals, no business maximum; OD-03, OD-42), project editable (OD-07), no duplicate key in request, ETag matches current (or "new" when no item); server resolves stable Project/Phase/Discipline LegacyIds before constructing `RegKey` | per cell: POST new item (unique `RegKey`) or MERGE `ManDays` with `If-Match` | §9 | `ClientRequestId` is correlation only; state equality may return `NO_CHANGE`; stale ETag returns `CONFLICT`; unique RegKey prevents duplicate cell items | WriteProxy per committed changed cell (Create / Update / Clear) | `resultcode` OK / PARTIAL / REFUSED, `results[] {phaseId, disciplineId, resultcode, etag}` | VALIDATION_REQUEST, VALIDATION_VALUE, CONFLICT, LOCKED (n/a for S12.5), ROLE_NOT_ALLOWED |
+| `REG-ReadMatrix` | load one project's matrix | `ProjectItemId` | `REG.View` (OD-05 legacy parity; assignment switch OD-06) | project exists (any status, OD-07) | read Projects (phase list), Phases, Disciplines, HourRegistrations (`ProjectItemId eq`) | – | read-only | AuthorizationAllow/Deny + ReadProxy | `phases[]`, `disciplines[]`, `cells[] {phaseId, disciplineId, state: BLANK\|VALUE, value, etag}` for current phases only, `canEdit` | ROLE_NOT_ALLOWED, NOT_FOUND, VALIDATION_LOOKUP |
+| `REG-SaveMatrix` | save changed cells | `ProjectItemId`, `Changes` JSON `[{phaseId, disciplineId, state, value, etag}]` (1–100), `ClientRequestId` | `REG.Edit` | preflight **all** cells before any write: phase belongs to the project (OD-02), discipline exists in the master (OD-08), value domain (numeric, ≥ 0, ≤ 2 decimals, no business maximum; OD-03, OD-42), project exists (any status, OD-07); stale cells of the project (phase no longer in its set, value not empty) are added to the write set as Clear (OD-08 legacy parity), no duplicate key in request, ETag matches current (or "new" when no item); server resolves stable Project/Phase/Discipline LegacyIds before constructing `RegKey` | per cell: POST new item (unique `RegKey`) or MERGE `ManDays` with `If-Match` | §9 | `ClientRequestId` is correlation only; state equality may return `NO_CHANGE`; stale ETag returns `CONFLICT`; unique RegKey prevents duplicate cell items | WriteProxy per committed changed cell (Create / Update / Clear) | `resultcode` OK / PARTIAL / REFUSED, `results[] {phaseId, disciplineId, resultcode, etag}` | VALIDATION_REQUEST, VALIDATION_VALUE, CONFLICT, LOCKED (n/a for S12.5), ROLE_NOT_ALLOWED |
 | `EFF-ReadProjectAllocation` / `EFF-SaveProjectAllocation` | A.I | analogous | `EFF.ProjectView` / `EFF.ProjectEdit` + project scope (OD-24) | unit/period/phase/source/blank-zero per OD-14/22/23/16/40 | `ProjectEffortAllocations` | §9 | same replay-safe model; no request-id exactly-once claim | WriteProxy | same shape | + OUT_OF_PERIOD |
 | `EFF-ReadDisciplineEffort` | own / discipline / queue modes | `ProjectItemId`, `Mode` | `EFF.DisciplineView` | – | `DisciplineEffortRegistrations` | paging ≤ 500 | – | ReadProxy | rows + `remainingCeiling` | – |
 | `EFF-SaveDisciplineEffort` | register / change / clear Draft | changes JSON | `EFF.DisciplineEdit`, discipline scope; ownership grain/resolution per OD-30 | ceiling (OD-15), period open (OD-23), Draft only | same | §9.3 counter | replay-safe semantics per §9.4 | WriteProxy | per row | OVER_CEILING, LOCKED, CONFLICT |
@@ -272,7 +272,7 @@ Rules: legacy HourRegistration source remains man-days; new EFF source unit foll
 - **S12.5:** legacy E14 = 20 project files (+ an empty temp file), 94 lines, 470 cells: 199 filled (195 non-zero,
   4 zero) and 271 blank; Σ 8,648 man-days; integers 2–200; no decimals, negatives, text, duplicates or unknown
   phase/discipline ids; one orphan file (deleted project, 9 lines, all blank → excluded, 0 values lost; corrects the
-  earlier "45 orphan cells" note); one stale line (phase no longer on the project, OD-08); 3 duplicate project codes
+  earlier "45 orphan cells" note); one stale line (phase no longer on the project; all its cells blank, so nothing to keep or clear under OD-08); 3 duplicate project codes
   (16 projects) → key by project id (LHR-06). Mapping (OD-01 = A, OD-09 = A): each filled legacy cell → one item (195 non-zero values, 4 explicit zeros kept as 0); each blank cell → no item; target 199 items; Σ per project reconciles to the legacy total (8,648 overall); stale lines per OD-08; timing per OD-11.
 - **EPIC 16/17:** new requirements, **no historical data** exists to migrate (unless OD-25 seeds A.I from E14).
 - No live migration in this change.
@@ -303,7 +303,7 @@ Rules: legacy HourRegistration source remains man-days; new EFF source unit foll
 Implementation of a milestone may start only when **all** hold for that milestone: legacy evidence mapped (done for
 S12.5: 39/39); NR-EFF mapped (14/14); the milestone's BLOCKING decisions answered and recorded with date/owner
 (gate sets are defined once, in the "Milestone gate sets" table of `decisions.md`, derived from its Blocking column and
-checked by `tools/spec/check_r3_open_spec.py`: **M1** 4 decisions, **M2** 9 + OD-41 conditional, **M3** 11 + OD-41
+checked by `tools/spec/check_r3_open_spec.py`: **M1** 0 open decisions (gate APPROVED 2026-10-09), **M2** 8 + OD-41 conditional, **M3** 11 + OD-41
 conditional and the M2 gate satisfied, **GL** OD-11); data model, security model, flow contracts and UX reviewed
 and accepted by the project owner; test strategy and acceptance criteria approved; migration impact known (OD-11 for
 GL); dependencies confirmed (Projects / ProjectPhases / Disciplines lists live on STAGING; guard framework; AuditLog);
@@ -338,7 +338,7 @@ matrix.
 
 ## 16. Risks / Trade-offs
 
-- [Decisions arrive late] → S12.5 first (4 open decisions), EPIC 16/17 behind the workshop; schedule risk stated, not hidden.
+- [Decisions arrive late] → S12.5 first (M1 decisions closed 2026-10-09), EPIC 16/17 behind the workshop; schedule risk stated, not hidden.
 - [A.I later declared to replace E14 (OD-25)] → S12.5 entity designed with an optional link; asked before M1.
 - [No transactions in SharePoint] → preflight all-or-nothing + per-cell ETag + explicit PARTIAL.
 - [Ceiling race] → counter item with ETag (EPIC 17), proven by a concurrency test.
@@ -349,4 +349,4 @@ matrix.
 
 ## 17. Open questions
 
-Open questions are the 33 OPEN_DECISION items of `decisions.md` (23 unconditional BLOCKING, 1 conditional blocker, 9 NON_BLOCKING). Nine decisions are resolved in `decisions.md` §C (OD-01 and OD-42 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence).
+Open questions are the 29 OPEN_DECISION items of `decisions.md` (19 unconditional BLOCKING, 1 conditional blocker, 9 NON_BLOCKING). Thirteen decisions are resolved in `decisions.md` §C (OD-01, 05, 07, 08, 25, 42 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence).

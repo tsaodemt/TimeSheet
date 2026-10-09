@@ -4,8 +4,14 @@
 The Hour Registration screen SHALL let a user with `REG.View` filter projects by year ("All" by default; years taken
 from project data, not a hard-coded list) and select one project through a single picker that shows code and name and
 is keyed by project id. Duplicate project codes SHALL NOT cause another project's data to be shown or saved (LHR-03,
-LHR-05, LHR-06). A year with no projects SHALL clear the selection and the matrix (LHR-04). Listing of inactive or
-closed projects SHALL follow OD-07; assignment scoping SHALL follow OD-06.
+LHR-05, LHR-06). A year with no projects SHALL clear the selection and the matrix (LHR-04). All projects SHALL be
+listed and editable regardless of the target project status (OD-07 = legacy parity: the legacy project master has no
+status); assignment scoping SHALL follow the existing switch (OD-06).
+
+#### Scenario: Paused or closed project stays editable
+- **GIVEN** a project whose target status is not Active
+- **WHEN** an editor opens it in Hour Registration
+- **THEN** it is listed and its matrix can be edited and saved
 
 #### Scenario: Duplicate code resolves by id
 - **GIVEN** two projects share the code "X" with different phase lists
@@ -17,10 +23,10 @@ closed projects SHALL follow OD-07; assignment scoping SHALL follow OD-06.
 - **THEN** the project picker is empty and no matrix is shown
 
 ### Requirement: Matrix structure
-Rows SHALL be the selected project's phases in the project's phase order (OD-02 resolved = legacy parity, LHR-10); a save for a phase outside the project SHALL be refused. The matrix SHALL show read-only sequence, phase name and phase code, and one editable column per active discipline ordered by discipline sort order, without a hard-coded discipline count (LHR-10..12). Values on removed phases or inactive disciplines SHALL be handled per OD-08 and SHALL NOT be deleted silently.
+Rows SHALL be the selected project's phases in the project's phase order (OD-02 resolved = legacy parity, LHR-10); a save for a phase outside the project SHALL be refused. The matrix SHALL show read-only sequence, phase name and phase code, and one editable column per discipline of the Disciplines master ordered by discipline sort order, without an active filter and without a hard-coded discipline count (LHR-10..12; legacy parity, OD-08).
 
 #### Scenario: Project with six phases
-- **GIVEN** a project with 6 phases and 5 active disciplines
+- **GIVEN** a project with 6 phases and 5 disciplines in the master
 - **WHEN** the matrix loads
 - **THEN** 6 rows × 5 editable cells are shown in the stored phase order
 
@@ -39,6 +45,27 @@ A cell SHALL be in exactly one state, BLANK or VALUE, and an explicit 0 SHALL be
 #### Scenario: Clear round-trip
 - **WHEN** the user clears a cell holding 12 and saves
 - **THEN** the cell is BLANK after reload, the item still exists and its stored value is null
+
+### Requirement: Values on a phase removed from the project (OD-08, legacy parity)
+A stored value whose phase is no longer in the project's phase set SHALL be kept in storage, SHALL NOT be shown or be
+editable in the matrix, and SHALL be counted in the per-project registered total until the next successful save of that
+project's matrix; that save SHALL clear it (value empty, item kept; no hard delete) and audit the clear, without a user
+warning. If the phase is re-added to the project before that save, the value SHALL be shown again.
+
+#### Scenario: Phase removed, then reload
+- **GIVEN** a value 12 saved for phase P of project X
+- **WHEN** P is removed from X's phase set and the matrix is reloaded
+- **THEN** no row for P is shown, P's value cannot be edited, and the per-project registered total of X still includes 12
+
+#### Scenario: Next save clears the stale value
+- **GIVEN** project X still stores 12 for removed phase P
+- **WHEN** an editor saves any change to X's matrix
+- **THEN** P's value becomes empty (item kept), a Clear audit row is written, and X's registered total no longer includes 12
+
+#### Scenario: Phase re-added before the next save
+- **GIVEN** project X still stores 12 for removed phase P
+- **WHEN** P is added back to X's phase set and the matrix is reloaded
+- **THEN** the row for P shows 12
 
 ### Requirement: Value validation
 The system SHALL accept only numeric values with at most 2 decimal places (OD-03 resolved by evidence: legacy parses
