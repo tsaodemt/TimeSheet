@@ -8,7 +8,7 @@
 | 04 Remaining Master Data | Projects, phases, work/hour types, holidays, settings | Planned |
 | 05 Application UI Foundation | Power Platform environment and ALM; app shell; guard-flow framework; audit | Planned |
 | 06 Timesheet Core | Entry, pay-period engine, summary, timesheet guard flows | Planned |
-| 07 Approval & Locking | Approve / unapprove flows; immutability; direct-edit monitor | Planned |
+| 07 Approval & Locking | Approve / unapprove flows; immutability; direct-edit monitor; lock visual and pending count; role / rule tests | Done (2026-10-09, STAGING; S07.1–S07.6 done; delete / reorder business paths not built yet) |
 | 08 Historical Migration | Decision closure; loaders; reconciliation; timed delta rehearsal | Planned |
 | 09 KPI | KPI sheets, scoring stages, folder-scoped security | Planned |
 | 10 Salary & Finance | Rates and project finance in the confidential container | Planned |
@@ -20,6 +20,8 @@
 | 16 Project Effort Registration | New requirement: project effort registration and actual effort | Captured; decisions open |
 | 17 Discipline Effort Planning & Approval | New requirement: discipline plan, allocation ceiling, approval and lock | Captured; decisions open |
 | 18 Effort Analytics & Resource Evaluation | New requirement: registered vs actual, cost and resource evaluation | Captured; decisions open |
+
+New epics and business areas start with an Open Spec, not with code (`delivery-process.md`). Next: Open Spec for R3 Planning & Effort (Hour Registration S12.5, EPIC 16, EPIC 17); no implementation before spec approval.
 
 Tenant portability: the system must be rebuildable in another Microsoft 365 tenant (configuration-driven URLs and IDs, stable business keys, old→new UPN mapping, provisioning scripts, solution export, restore runbook). This is tracked as an administration story.
 

@@ -116,7 +116,7 @@ If(varRead.ok = "true",
 APP_ONSTART = """
 ClearCollect(colMessages, %s);
 Set(varBusy, false); Set(varSaving, false); Set(varReloadRequired, false); Set(varNoTeam, false); Set(varApproving, false);
-Set(varConfirm, false); Set(varTeamMode, ""); Set(varNoUnapprove, false); Set(varUnConfirm, false)
+Set(varConfirm, false); Set(varTeamMode, ""); Set(varNoUnapprove, false); Set(varUnConfirm, false); Set(varPendingCount, Blank())
 """ % _table(MESSAGES)
 
 # Power Apps Studio rejects Navigate in the start screen's OnVisible ("would automatically always navigate away"):
@@ -142,7 +142,22 @@ If(varOpen.ok = "true" && varOpen.configstatus = "OK",
     Navigate(scrAccessDenied, ScreenTransition.None))
 """
 
-LIST_ONVISIBLE = RANGE + ";\nSet(varAfter, Blank());\n" + READ
+# S07.5 Home pending count: the SAME guarded TS-ReadTeam Pending read as the queue (role, scope, self exclusion, Draft and
+# period are decided server-side), first page of at most PENDING_PAGE rows; a further page is shown as "500+". Silent: a role
+# without TS.Approve gets ROLE_NOT_ALLOWED, the count stays hidden and the Team approval button hides for the session.
+# Never a client-side count of entries.
+PENDING_PAGE = 500
+PENDING_COUNT = """
+If(!varNoTeam,
+    Set(varPend, %(F)s.Run(Text(Coalesce(varTo, Today()), "yyyy-mm"), "", "%(N)d", {text_7: ""}));
+    If(varPend.ok = "true",
+        Set(varPendingCount, CountRows(Table(ParseJSON(varPend.rows))));
+        Set(varPendingMore, !IsBlank(varPend.nextafterid) && varPend.nextafterid <> "" && varPend.nextafterid <> "0"),
+        Set(varPendingCount, Blank());
+        If(varPend.resultcode = "ROLE_NOT_ALLOWED", Set(varNoTeam, true))))
+""" % {"F": FLOW_TEAM, "N": PENDING_PAGE}
+
+LIST_ONVISIBLE = RANGE + ";\nSet(varAfter, Blank());\n" + READ + ";\n" + PENDING_COUNT
 
 SAVE_ONSELECT = """
 Set(varSaving, true);
@@ -201,6 +216,7 @@ ClearCollect(colApprRes, ForAll(Table(ParseJSON(varAppr.results)), {itemid: Text
 Notify(If(varAppr.resultcode = "OK", %(OK)s, %(MSG)s) & " (" & varAppr.correlationid & ")",
        If(varAppr.resultcode = "OK", NotificationType.Success, varAppr.resultcode = "PARTIAL", NotificationType.Warning, NotificationType.Error));
 Clear(colSel);
+If(Value(varAppr.approvedcount) > 0, Set(varPendingCount, Blank()));  // S07.5: a stale Home count is never shown; Home re-reads
 Set(varTeamAfter, Blank());
 """ % {"F": FLOW_APPROVE, "OK": MSG % '"MSG_APPROVE_OK"', "MSG": MSG % "varAppr.messagecode"} + TEAM_READ
 
@@ -214,6 +230,7 @@ ClearCollect(colApprRes, {itemid: Text(varUnRow.id), resultcode: varUn.resultcod
 Notify(If(varUn.resultcode = "OK", %(OK)s, %(MSG)s) & " (" & varUn.correlationid & ")",
        If(varUn.resultcode = "OK", NotificationType.Success, NotificationType.Error));
 Set(varUnRow, Blank());
+If(varUn.resultcode = "OK", Set(varPendingCount, Blank()));  // S07.5: a stale Home count is never shown; Home re-reads
 Set(varTeamAfter, Blank());
 """ % {"F": FLOW_UNAPPROVE, "OK": MSG % '"MSG_UNAPPROVE_OK"', "MSG": MSG % "varUn.messagecode"} + TEAM_READ
 
@@ -224,6 +241,16 @@ def _mode(label, value):
 
 
 PHASES_FOR_PROJECT = ("Filter(Phases, IsActive, ID in ForAll(Filter(ProjectPhases, ProjectItemId = ddProject.Selected.ID, IsActive), Phase.Id))")
+
+
+LOCK_FILL = 'If(ThisItem.status = "Approved", RGBA(242, 242, 242, 1), RGBA(0, 0, 0, 0))'  # neutral read-only fill; meaning carried by the icon
+
+
+def lock_icon(x):
+    """Approved = locked: lock icon at the row start (legacy row-header lock, F-APPR-04 / BR-APPR-06); Draft rows show none.
+    Driven only by the status returned by the guarded read."""
+    return ctl("Classic/Icon@2.5.0", Icon="Icon.Lock", X=x, Y="20", Width="24", Height="24", Visible='ThisItem.status = "Approved"',
+               Tooltip='"Đã phê duyệt"', AccessibleLabel='"Đã phê duyệt"')
 
 
 def screens() -> dict:
@@ -252,18 +279,23 @@ def screens() -> dict:
                                OnSelect="Set(varAfter, Blank());\n" + READ)},
             {"btnTeam": ctl("Classic/Button@2.2.0", Text='"Team approval"', X="380", Y="130", Width="200", Visible="!varNoTeam",
                             OnSelect="Navigate(scrTeamApproval, ScreenTransition.None)")},
+            {"lblPending": ctl("Label@2.5.1", X="600", Y="130", Width="400", Height="40", FontWeight="FontWeight.Bold",
+                               Visible="!varNoTeam && !IsBlank(varPendingCount)",
+                               Text='"Chờ phê duyệt: " & If(varPendingMore, "%d+", Text(varPendingCount))' % PENDING_PAGE)},
             {"galEntries": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
                 "Items": _f("SortByColumns(colRows, \"workDate\", SortOrder.Descending, \"id\", SortOrder.Descending)"),
-                "X": "=20", "Y": "=180", "Width": "=Parent.Width - 40", "Height": "=Parent.Height - 260", "TemplateSize": "=70"},
+                "X": "=20", "Y": "=180", "Width": "=Parent.Width - 40", "Height": "=Parent.Height - 260", "TemplateSize": "=70",
+                "TemplateFill": _f(LOCK_FILL)},
                 "Children": [
-                    {"lblLine1": ctl("Label@2.5.1", X="10", Y="5", Width="Parent.TemplateWidth - 20", Height="30",
+                    {"lblLine1": ctl("Label@2.5.1", X="44", Y="5", Width="Parent.TemplateWidth - 164", Height="30",
                                      Text='Text(ThisItem.workDate, "dd/mm/yyyy") & "  ·  " & %s & " / " & %s & "  ·  " & Text(ThisItem.hours) & " h  ·  " & ThisItem.status'
                                      % (lookup("Projects", "ThisItem.projectId", "ProjectCode"), lookup("Phases", "ThisItem.phaseId", "PhaseCode")))},
-                    {"lblLine2": ctl("Label@2.5.1", X="10", Y="35", Width="Parent.TemplateWidth - 20", Height="30",
+                    {"lblLine2": ctl("Label@2.5.1", X="44", Y="35", Width="Parent.TemplateWidth - 54", Height="30",
                                      Text='%s & "  ·  " & ThisItem.remark' % lookup("WorkTypes", "ThisItem.workTypeId", "Title"))},
                     {"btnEdit": ctl("Classic/Button@2.2.0", Text='"Edit"', X="Parent.TemplateWidth - 110", Y="15", Width="90",
                                     Visible='ThisItem.status = "Draft"',
-                                    OnSelect="Set(varEdit, ThisItem); Navigate(scrEntry, ScreenTransition.None)")}]}},
+                                    OnSelect="Set(varEdit, ThisItem); Navigate(scrEntry, ScreenTransition.None)")},
+                    {"icoLock": lock_icon("10")}]}},
             {"btnMore": ctl("Classic/Button@2.2.0", Text='"Load more"', X="20", Y="Parent.Height - 70",
                             Visible="!IsBlank(varNextAfter) && varNextAfter <> \"\" && varNextAfter <> \"0\"",  # contract: nextafterid 0 = no more pages
                             OnSelect="Set(varAfter, Value(varNextAfter));\n" + READ)}]},
@@ -300,7 +332,8 @@ def screens() -> dict:
                                  OnSelect="Set(varConfirm, false)")},
             {"galTeam": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
                 "Items": _f("SortByColumns(colTeam, \"workDate\", SortOrder.Descending, \"id\", SortOrder.Descending)"),
-                "X": "=20", "Y": "=240", "Width": "=Parent.Width - 40", "Height": "=Parent.Height - 490", "TemplateSize": "=70"},
+                "X": "=20", "Y": "=240", "Width": "=Parent.Width - 40", "Height": "=Parent.Height - 490", "TemplateSize": "=70",
+                "TemplateFill": _f(LOCK_FILL)},
                 "Children": [
                     {"btnSel": ctl("Classic/Button@2.2.0", Text='If(ThisItem.id in colSel.id, "[x]", "[ ]")', X="5", Y="15", Width="60",
                                    Visible='varTeamMode <> "Approved"',
@@ -313,7 +346,8 @@ def screens() -> dict:
                     {"btnUnapprove": ctl("Classic/Button@2.2.0", Text='"Hủy phê duyệt"', X="Parent.TemplateWidth - 190", Y="15", Width="170",
                                          Visible='varTeamMode = "Approved" && ThisItem.status = "Approved"',
                                          DisplayMode="If(varApproving || varBusy, DisplayMode.Disabled, DisplayMode.Edit)",
-                                         OnSelect="Set(varUnRow, ThisItem); Set(varUnConfirm, true)")}]}},
+                                         OnSelect="Set(varUnRow, ThisItem); Set(varUnConfirm, true)")},
+                    {"icoTeamLock": lock_icon("30")}]}},
             {"btnTeamMore": ctl("Classic/Button@2.2.0", Text='"Load more"', X="20", Y="Parent.Height - 240",
                                 Visible="!IsBlank(varTeamNext) && varTeamNext <> \"\" && varTeamNext <> \"0\"",
                                 OnSelect="Set(varTeamAfter, Value(varTeamNext));\n" + TEAM_READ)},
