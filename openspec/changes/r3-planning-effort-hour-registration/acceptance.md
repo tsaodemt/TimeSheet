@@ -6,14 +6,14 @@ Each criterion is observable and traceable (requirement / legacy row / decision)
 
 | AC | Criterion (measurable) | Trace |
 |---|---|---|
-| AC-REG-01 | For a synthetic 13 × 5 matrix and a real-shape 6 × 5 matrix containing BLANK, explicit 0, integers and 2-decimal values (within OD-42 bounds), save + reload returns every cell in the same state and value (0 differences) | S12.5 AC, OD-01, OD-03 |
+| AC-REG-01 | For a synthetic 13 × 5 matrix and a real-shape 6 × 5 matrix containing BLANK, explicit 0, integers and 2-decimal values and a large value (no business maximum, OD-42), save + reload returns every cell in the same state and value (0 differences) | S12.5 AC, OD-01, OD-03 |
 | AC-REG-02 | A first successful user Save containing k genuinely changed cells (1 ≤ k ≤ 100; current designed maximum 13 × 6 = 78) is submitted in one guarded flow call and produces exactly one WriteProxy row per committed changed cell; unchanged cells have unchanged ETags | LHR-18, planning-audit |
 | AC-REG-03 | A request with any invalid or unauthorised cell writes 0 items (REFUSED) | design §9.2 |
 | AC-REG-04 | Two editors changing the same cell: the second Save is REFUSED at preflight with that cell CONFLICT and 0 cells written, and the stored value equals the first editor's; editors changing different cells are both stored; a change landing between preflight and write yields PARTIAL with the affected cell CONFLICT | LHR-29, design §9.2–9.3 |
 | AC-REG-05 | Every role in the approved matrix gets the approved REG.View / REG.Edit result live (0 unexpected allow / deny); viewers have no Save and a forged save returns ROLE_NOT_ALLOWED | LHR-24/25, OD-04/05 |
 | AC-REG-06 | Duplicate project codes: opening and saving each project touches only the selected project's stable-key/lookup rows, never another same-code project | LHR-06 |
 | AC-REG-07 | Matrix rows equal the project's phases in project order (OD-02); a save on a phase outside the project is refused; discipline columns follow the approved active/stale discipline rule; stale values follow OD-08 with 0 silent deletions | LHR-10/12/14 |
-| AC-REG-08 | Non-numeric input, more than 2 decimals and values outside the OD-42 bounds are rejected client-side and server-side with a typed message | LHR-15/16, OD-03, OD-42 |
+| AC-REG-08 | Non-numeric input, more than 2 decimals and negative values are rejected client-side and server-side with a typed message; 0 and large values are accepted (no business maximum; only the platform numeric range applies as a TECHNICAL_LIMIT) | LHR-15/16, OD-03, OD-42 |
 | AC-REG-09 | No protected planning list is a Canvas data source; an ordinary user's direct SharePoint REST **read and write** are denied while guarded read/write flows enforce capability | planning-security |
 | AC-REG-10 | If migrated (OD-11): 199 items (195 non-zero + 4 explicit zeros stored as 0; 271 blank cells → no item; orphan file excluded with 0 values), Σ per project equals the legacy total (8,648 overall), stale rows per OD-08, 0 silent loss | design §12, OD-01, OD-09 |
 

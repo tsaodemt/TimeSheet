@@ -49,7 +49,7 @@ Spec ownership: `project-effort` NR-EFF-01, -05; `discipline-effort` NR-EFF-02, 
 
 Classification: REPLICATE · REPLACE · FIX_LEGACY_DEFECT · SECURITY_HARDENING · NOT_APPLICABLE · OPEN_DECISION.
 Where a row says OPEN_DECISION the matching OD-nn in `decisions.md` governs (LHR-07→OD-06, LHR-09→OD-07, LHR-10→OD-02,
-LHR-13/14→OD-08, LHR-15/16→OD-03 (resolved: 2-dp precision) + OD-42 (bounds), LHR-17→OD-10, LHR-21→OD-01 (resolved = A), LHR-23→OD-12, LHR-26→retired role (G5), LHR-33→OD-13,
+LHR-13/14→OD-08, LHR-15/16→OD-03 (resolved: 2-dp precision) + OD-42 (resolved: ≥ 0, no business maximum), LHR-17→OD-10, LHR-21→OD-01 (resolved = A), LHR-23→OD-12, LHR-26→retired role (G5), LHR-33→OD-13,
 LHR-38→OD-11). LHR-26 (legacy Director): resolved by the closed gate G5 — Director is retired with no target mapping.
 
 | ID | Feature / rule | Legacy evidence | Legacy behaviour | Target classification | Rationale | Test requirement |

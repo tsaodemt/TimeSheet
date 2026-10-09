@@ -44,12 +44,17 @@ A cell SHALL be in exactly one state, BLANK or VALUE, and an explicit 0 SHALL be
 The system SHALL accept only numeric values with at most 2 decimal places (OD-03 resolved by evidence: legacy parses
 decimals and reports 2 decimals) and SHALL reject non-numeric input or more than 2 decimals with a typed message before
 saving, client-side and again server-side (LHR-15, LHR-16). A typed decimal comma SHALL be normalised to the stored
-decimal value. Minimum and maximum bounds SHALL follow OD-42 (BLOCKING M1; no bound is assumed). No value SHALL be
+decimal value. Values SHALL be ≥ 0 and negative values SHALL be refused; there SHALL be no business maximum (OD-42
+resolved); only the platform numeric range applies (TECHNICAL_LIMIT, not a business rule). No value SHALL be
 silently changed.
 
-#### Scenario: Invalid text or precision
-- **WHEN** the user types "abc" or "1.234" in a cell
+#### Scenario: Invalid text, precision or negative
+- **WHEN** the user types "abc", "1.234" or "-3" in a cell
 - **THEN** the cell is marked invalid, Save is disabled, and a direct flow call with that value returns VALIDATION_VALUE without any write
+
+#### Scenario: No business maximum
+- **WHEN** the user saves 12500 in a cell
+- **THEN** the value is accepted and stored as 12500
 
 ### Requirement: Changed-cell save
 Save SHALL send only cells whose state or value changed since load, with each cell's load ETag, through `REG-SaveMatrix` (1–100 cells per call). The server SHALL validate and authorise every cell before writing any (preflight); then write

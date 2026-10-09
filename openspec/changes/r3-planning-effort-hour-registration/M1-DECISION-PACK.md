@@ -1,13 +1,13 @@
 # Gói quyết định M1 — S12.5 Đăng ký công (Hour Registration)
 
 Trạng thái (2026-10-09): **CHUẨN BỊ QUYẾT ĐỊNH — CHƯA TRIỂN KHAI.** Open Spec V3 đã duyệt (R3-G0 = APPROVED).
-READY_FOR_IMPLEMENTATION = NO. Cổng M1 **BLOCKED** cho tới khi 5 quyết định còn mở có câu trả lời ghi nhận.
+READY_FOR_IMPLEMENTATION = NO. Cổng M1 **BLOCKED** cho tới khi 4 quyết định còn mở có câu trả lời ghi nhận.
 Chưa có câu trả lời: **BLOCK / KHÔNG ĐOÁN**. Đề xuất bên dưới chưa được phê duyệt.
 
 Nhãn bằng chứng: **LEGACY_FACT** · **TARGET_SECURITY_REQUIREMENT** · **OWNER_PROVIDED_REQUIREMENT** ·
 **PROPOSED_MODERNIZATION** · **OPEN_BUSINESS_DECISION**.
 
-## 0. Tình trạng 9 + 1 quyết định M1
+## 0. Tình trạng 10 quyết định M1 (9 ban đầu + OD-42 tách từ OD-03)
 
 | ID | Nội dung | Tình trạng | Ai |
 |---|---|---|---|
@@ -19,20 +19,20 @@ Nhãn bằng chứng: **LEGACY_FACT** · **TARGET_SECURITY_REQUIREMENT** · **OW
 | OD-25 | Màn hình cũ vs rev01 A.I | **MỞ** — hỏi **đầu tiên** | Khách hàng (CEO + PMO) |
 | OD-07 | Dự án ngưng/đóng | **MỞ** | Khách hàng (PMO) |
 | OD-08 | Số trên giai đoạn bị gỡ | **MỞ** | Khách hàng (PMO) |
-| OD-05 | Ai được xem; phân loại | **MỞ** — CUSTOMER_OR_SECURITY_OWNER_REQUIRED | Chủ dự án (vai trò chủ bảo mật) + HR |
-| OD-42 | Giới hạn min/max của giá trị (tách từ OD-03) | **MỞ** | Chủ dự án nội bộ (+ PMO) |
+| OD-05 | Ai được xem; phân loại | **MỞ** — CUSTOMER_OR_SECURITY_OWNER_REQUIRED | Chủ bảo mật + khách hàng (BOTH) |
+| OD-42 | Giới hạn min/max của giá trị (tách từ OD-03) | **ĐÃ CHỐT** (chủ dự án, 2026-10-09): tối thiểu 0, cấm số âm, không có tối đa nghiệp vụ | – |
 
-**Còn chặn M1: 5** — OD-25, OD-07, OD-08, OD-05, OD-42.
+**Còn chặn M1: 4** — OD-25, OD-07, OD-08, OD-05. Bản hỏi bên ngoài cuối cùng: `M1-DECISION-SUMMARY.md`.
 
 ## 1. Thứ tự & phụ thuộc
 
 ```text
 OD-25 ← hỏi TRƯỚC
   ├─ (a) tách riêng / (c) mở rộng → các quyết định S12.5 (đã chốt và còn mở) áp dụng cho M1
-  └─ (b) A.I thay thế S12.5 → OD-07, OD-08, OD-42 và các mục đã chốt OD-01/02/03/09 không còn áp dụng cho M1
+  └─ (b) A.I thay thế S12.5 → OD-07, OD-08 và các mục đã chốt OD-01/02/03/09/42 không còn áp dụng cho M1
        (M1 phải đặc tả lại theo A.I và chờ quyết định M2); OD-04/OD-05 (quyền) vẫn cần cho màn hình thay thế
 OD-08 chỉ có nghĩa vì dòng = giai đoạn của dự án (OD-02 = A)
-OD-05, OD-07, OD-42: độc lập với nhau
+OD-05, OD-07: độc lập với nhau
 ```
 
 ---
@@ -45,6 +45,7 @@ OD-05, OD-07, OD-42: độc lập với nhau
 | OD-02 | A — dòng = giai đoạn của dự án, theo thứ tự của dự án | LEGACY_FACT đã kiểm chứng; không có yêu cầu khách hàng thay đổi; chủ dự án chấp thuận |
 | OD-03 | Chỉ nhận số; cho phép số lẻ; **tối đa 2 chữ số thập phân**; nhập dấu phẩy được chuẩn hóa | LEGACY_FACT: phần mềm cũ đọc số lẻ (dấu chấm), **không giới hạn độ chính xác khi nhập**, mọi đầu ra (tổng báo cáo) hiển thị **2 chữ số thập phân**; dữ liệu thực tế chỉ có số nguyên. Giữ 2 chữ số không làm mất gì người dùng từng thấy. Chữ/ký tự rác bị mất âm thầm ở legacy → sửa lỗi (từ chối có thông báo). **Không** chốt giới hạn trên/dưới (→ OD-42) |
 | OD-04 | A — `REG.Edit` = Executive + PMO; AppAdmin bị từ chối | LEGACY_FACT: quyền ghi CEO, Thư ký, PM (+ Admin bỏ qua kỹ thuật); OWNER_PROVIDED_REQUIREMENT: quản trị kỹ thuật không có quyền nghiệp vụ; chủ dự án chấp thuận |
+| OD-42 | Tối thiểu 0; số âm bị từ chối; **không có tối đa nghiệp vụ**; tối đa 2 chữ số thập phân (OD-03); kiểm tra số ở máy chủ (và máy người dùng). Giới hạn nền tảng (số thực ~15 chữ số có nghĩa của SharePoint/Power Fx) là TECHNICAL_LIMIT, không phải quy tắc nghiệp vụ | OWNER decision 2026-10-09 |
 | OD-09 | A — xóa ô = giữ bản ghi, giá trị rỗng (null) | Quyết định dự án D-7 (không xóa cứng, dịch vụ không có quyền Delete); chủ dự án chấp thuận |
 
 ---
@@ -102,16 +103,5 @@ OD-05, OD-07, OD-42: độc lập với nhau
 | A2 | Như A nhưng **giữ quyền đọc cho IT Support** (giữ đúng legacy: IT cũ có quyền đọc). AppAdmin vẫn không. |
 | B | Như A nhưng phân loại MẬT → đặt ở vùng dữ liệu mật (phụ thuộc ENV-D2 chưa có quyết định → trễ M1). |
 | Đề xuất | **A** — giữ nhóm người dùng nghiệp vụ của legacy; bỏ quyền đọc của IT cũ vì quyền kỹ thuật không phải nhu cầu nghiệp vụ (yêu cầu chủ dự án), nhưng đây là **lệch có chủ ý so với legacy** và phải được duyệt; A2 nếu chủ bảo mật/khách hàng muốn giữ đúng legacy. Số công ngân sách không chứa lương/chi phí → NỘI BỘ. |
-| Phân loại | **CUSTOMER_OR_SECURITY_OWNER_REQUIRED — BLOCKING M1** — chủ dự án (vai trò chủ bảo mật) cùng HR xác nhận nhóm xem (kể cả việc bỏ quyền đọc của IT cũ / IT Support) và phân loại; hỏi khách hàng nếu bảng ánh xạ vai trò hoặc việc bỏ quyền IT bị tranh luận. **Không** RESOLVED_BY_EVIDENCE. |
+| Phân loại | **CUSTOMER_OR_SECURITY_OWNER_REQUIRED — BLOCKING M1** — duyệt bởi **BOTH**: chủ bảo mật (nhóm xem, phân loại, việc bỏ quyền đọc của IT cũ / IT Support) và khách hàng (xác nhận nhóm người dùng). AppAdmin: DENY trong mọi phương án. **Không** RESOLVED_BY_EVIDENCE; chưa phương án nào được phê duyệt. |
 | Mặc định | **BLOCK / KHÔNG ĐOÁN**. |
-
-### OD-42 — Giới hạn giá trị (tối thiểu, tối đa) — tách từ OD-03
-
-| Mục | Nội dung |
-|---|---|
-| Legacy (LEGACY_FACT) | **Không có giới hạn** (ô văn bản tự do; số âm vẫn được đọc; không có tối đa). Dữ liệu thực tế 2–200. |
-| Mục tiêu | Các con số 999,9 / 9.999 trước đây chỉ là **ràng buộc đề xuất** (PROPOSED_MODERNIZATION), không có bằng chứng legacy hay khách hàng. |
-| A | Tối thiểu 0; không đặt tối đa nghiệp vụ (chỉ giới hạn kỹ thuật của cột số). |
-| B | Tối thiểu 0; tối đa do chủ dự án/PMO đặt (ví dụ theo quy mô dự án lớn nhất). |
-| Đề xuất | **A** (không thêm ràng buộc nghiệp vụ không có bằng chứng; số âm không có nghĩa cho ngân sách công). |
-| Ai quyết | **Chủ dự án nội bộ** (+ PMO). Mặc định: **BLOCK / KHÔNG ĐOÁN**. |

@@ -6,7 +6,7 @@
 ## 0. Spec review and decisions (no implementation)
 
 - [x] 0.1 Project owner review of proposal, design, specs, acceptance, role matrix — APPROVED 2026-10-09 (Open Spec V3 baseline)
-- [ ] 0.2 Record answers for M1 decisions — DONE 2026-10-09: OD-01, 02, 04, 09 (owner), OD-03 (evidence); OPEN: OD-25 (customer, first), OD-07, OD-08 (customer), OD-05 (security owner), OD-42 (owner) — see `M1-DECISION-PACK.md`
+- [ ] 0.2 Record answers for M1 decisions — DONE 2026-10-09: OD-01, 02, 04, 09, 42 (owner), OD-03 (evidence); OPEN: OD-25 (customer, first), OD-07, OD-08 (customer), OD-05 (security owner / customer) — see `M1-DECISION-SUMMARY.md`
 - [ ] 0.3 Customer workshop (backlog S16.1) for the M2 and M3 gate sets in `decisions.md` (open EFF-F-1..7, 9, 10 and OD-24, 25, 27–30, 32–34, 37, 40; non-blocking OD-31, 35, 36 may be taken at the same time); include OD-41 only if OD-19 selects separate/hybrid actual entry
 - [ ] 0.4 Documentation sync only (no decision pending): record the RESOLVED_BY_EVIDENCE items OD-21 / OD-38 (current-scope deferral) and OD-26 (no A.I approval) in the project decision pack and `docs/roadmap.md`; apply the OD-39 id rename
 - [ ] 0.5 Re-baseline this task list and the backlog source (S12.5, EPIC 16/17 wording) after decisions
@@ -14,7 +14,7 @@
 ## 1. M1 — S12.5 Hour Registration (blocked by 0.1, 0.2)
 
 - [ ] 1.1 Update the target data model and provisioning definition for `HourRegistrations` (§5.1)
-- [ ] 1.2 Reference model + tests: changed-cell diff, BLANK/VALUE encoding (OD-01 = A), 2-dp precision + OD-42 bounds, preflight, per-cell results, replay-safe NO_CHANGE/CONFLICT semantics
+- [ ] 1.2 Reference model + tests: changed-cell diff, BLANK/VALUE encoding (OD-01 = A), ≥ 0, ≤ 2 decimals, no business maximum (OD-03, OD-42), preflight, per-cell results, replay-safe NO_CHANGE/CONFLICT semantics
 - [ ] 1.3 Generate `REG-ReadMatrix` / `REG-SaveMatrix`; reference-vs-flow tests incl. audit and concurrency
 - [ ] 1.4 Capability seed: `REG.Edit` = Executive + PMO, AppAdmin removed (OD-04); `REG.View` per OD-05; role × capability tests
 - [ ] 1.5 Canvas Hour Registration screen + generator assertions (blank vs 0, Save rule, read-only, dirty prompt, geometry)

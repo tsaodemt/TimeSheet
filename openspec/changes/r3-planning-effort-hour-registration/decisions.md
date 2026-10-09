@@ -1,6 +1,6 @@
 # R3 decision register (OPEN_DECISION items)
 
-Status 2026-10-09: rows in sections A/B are **OPEN_DECISION** unless explicitly marked otherwise. Owner accepted OD-01, OD-02, OD-04, OD-09 = A on 2026-10-09 (moved to §C). A "recommended default" is evidence-based advice for the reviewer; it is **not approved** and nothing may be implemented on it before the decision owner records an answer (date, owner, source).
+Status 2026-10-09: rows in sections A/B are **OPEN_DECISION** unless explicitly marked otherwise. Owner accepted OD-01, OD-02, OD-04, OD-09 = A and decided OD-42 on 2026-10-09 (moved to §C). A "recommended default" is evidence-based advice for the reviewer; it is **not approved** and nothing may be implemented on it before the decision owner records an answer (date, owner, source).
 
 Resolved scope/source decisions discovered during review are moved to section C and are not counted as open blockers.
 
@@ -21,7 +21,6 @@ requirement rows (`traceability.md` §1). Legacy facts are from the decompiled l
 | OD-06 | Project list scoping by assignment | Legacy scopes by the person loaded elsewhere and in practice shows all projects (LHR-07); target switch `ProjectAssignmentScoping` = Off (engineering interim, B-03 open) | a) follow the existing switch; b) always all; c) always assigned | (a) | Wrong visibility | read flow filter | NON_BLOCKING (switch exists) | Project owner |
 | OD-07 | Are inactive / closed projects listed and editable? | Legacy filter was a UI flag, effectively all projects listed and editable (LHR-09) | a) all listed, editable (legacy); b) active editable, others read-only; c) active only | (a) legacy semantics | Edits to closed budgets or hidden history | read/save validation | **BLOCKING M1** — CUSTOMER | PMO |
 | OD-08 | Values on a phase removed from the project or an inactive discipline | Legacy hides stale lines and silently drops them on the next save, while one report still sums them (LHR-13/14) | a) keep, show read-only and flagged, excluded from editing; b) keep hidden; c) remove | (a) never delete silently | Silent data loss or inconsistent totals | read model, reports, migration (1 stale line) | **BLOCKING M1** | PMO |
-| OD-42 | Value bounds for registered man-days (minimum, maximum) — split from OD-03 | Legacy has **no** bounds (free text; a negative number parses; no maximum); data holds 2–200 only; 9,999 / 999.9 were only proposed target constraints | a) minimum 0, no business maximum (technical column limit only); b) minimum 0 + owner-set maximum; c) other | none approved (proposal: a) | Rejecting legitimate large budgets or accepting garbage/negative values | validation, tests | **BLOCKING M1** — OWNER_INTERNAL | Project owner + PMO |
 | OD-10 | Multi-cell clear / spreadsheet paste (UD-06) | Legacy Delete/Backspace clears all selected cells (LHR-17); nested galleries edit one cell at a time | a) single-cell clear + "clear row" action; b) Excel-like grid (SPFx, new tech) | (a) | Productivity gap | UI only | NON_BLOCKING | PMO |
 | OD-11 | Migrate legacy E14 values (199 filled cells, Σ 8,648 man-days; orphan file 9 blank lines) in R3? | Needed for reports to match legacy | a) migrate with the R3 release; b) with the historical migration epic; c) not at all | (a) or (b); orphan file excluded (0 values lost) | Empty budgets at go-live | migration plan | NON_BLOCKING for M1, **BLOCKING GL** | PMO + project owner |
 | OD-12 | Per-year budget? | Legacy registration is lifetime per project; the year only filters the project list (LHR-23) | a) lifetime (legacy); b) per year | (a) | Semantics change | schema | NON_BLOCKING (default = legacy) | PMO |
@@ -66,27 +65,28 @@ requirement rows (`traceability.md` §1). Legacy facts are from the decompiled l
 | OD-03 | **RESOLVED_BY_EVIDENCE — 2026-10-09**: numeric only; decimals allowed; at most 2 decimal places | Legacy VERIFIED: input is parsed as a number with decimal point (no precision limit, no validation); every legacy output shows 2 decimals (report totals `#,0.00`); data holds integers only. Non-numeric input is a legacy defect (silently lost) | 2-dp precision preserved; bounds are **not** decided here → OD-42 |
 | OD-04 | **RESOLVED_BY_EVIDENCE — owner accepted 2026-10-09 = A** | Legacy VERIFIED writers CEO, Secretary, PM (+ technical Admin bypass); mapped to Executive and PMO; owner rule: technical admin gets no business authority | `REG.Edit` = Executive, PMO; AppAdmin DENY (seed to be corrected at implementation) |
 | OD-09 | **RESOLVED_BY_EVIDENCE — owner accepted 2026-10-09 = A** | D-7 (no Delete right, soft delete only) excludes item deletion; a soft-delete flag would duplicate "blank" | Clear keeps the item and sets `ManDays = null` (BLANK, per OD-01); history in versions and audit |
+| OD-42 | **RESOLVED — OWNER_DECISION 2026-10-09** (value bounds, split from OD-03) | Owner decision; legacy had no bounds (negative numbers parsed, no maximum); data 2–200 | Minimum 0; negative values refused; **no business maximum**; precision ≤ 2 decimals (OD-03); numeric validation server-side (and client-side). TECHNICAL_LIMIT (not a business rule): SharePoint Number columns and Power Fx numbers are IEEE-754 doubles (about 15 significant digits); no explicit column maximum is configured |
 | OD-21 / EFF-F-8 | **RESOLVED_BY_EVIDENCE — DEFERRED_CURRENT_SCOPE** | project-owner current-scope directive of 2026-10-09 (R3 Open Spec task scope: KPI, Evaluation, salary review, bonus/reward and advanced employee scoring/ranking are deferred / out of current implementation scope) | No evaluation formula is designed or implemented in R3; NR-EFF-09 stays a future-phase requirement (not removed). No customer decision is pending for the current scope |
 | OD-26 | **RESOLVED_BY_EVIDENCE — NO_A_I_APPROVAL** | NR-EFF-01 source/traceability states no approval/lock for A.I; inventing one would add a workflow absent from the requirement | EPIC 16 A.I save is effective after a successful guarded write; no `EFF.ProjectApprove` flow/capability in current scope |
 | OD-38 | **RESOLVED_BY_EVIDENCE — DOCUMENTATION_SYNC_ONLY** | Same owner directive as OD-21. The repository decision pack and `docs/roadmap.md` do not yet carry it; recording it there is a documentation task (`tasks.md` 0.4), not a decision | No customer decision pending; sync only |
 
 ## Tally
 
-Unconditional BLOCKING (any milestone M1–M3 or GL): OD-05, 07, 08, 11 (GL), 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 27, 28, 29, 30, 32, 33, 34, 37, 40, 42 → **24**. Of these, blocking **M1 (S12.5)**: OD-05, 07, 08, 25, 42 → **5**.
+Unconditional BLOCKING (any milestone M1–M3 or GL): OD-05, 07, 08, 11 (GL), 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 27, 28, 29, 30, 32, 33, 34, 37, 40 → **23**. Of these, blocking **M1 (S12.5)**: OD-05, 07, 08, 25 → **4**.
 
 CONDITIONAL BLOCKING: OD-41 → **1** (only if OD-19 selects a separate/hybrid actual-entry path).
 
 NON_BLOCKING for R3 build: OD-06, 10, 12, 13, 20, 31, 35, 36, 39 → **9** (OD-20 and OD-31 become blocking for M4/reporting scope).
 
-Open decisions total: **34**. Resolved in §C: **8** (OD-01 by owner decision; OD-02, OD-03, OD-04, OD-09 by evidence accepted by the owner; OD-21, OD-26, OD-38 by evidence).
+Open decisions total: **33**. Resolved in §C: **9** (OD-01 and OD-42 by owner decision; OD-02, OD-03, OD-04, OD-09 by evidence accepted by the owner; OD-21, OD-26, OD-38 by evidence).
 
-Changes since the V3 baseline (2026-10-09, M1 decision cleanup): OD-01, 02, 04, 09 resolved by the owner (−4 blocking); OD-03 resolved by evidence for precision (−1) and its unresolved bounds split into new OD-42 (+1). Net blocking 28 → 24; open 38 → 34.
+Changes since the V3 baseline (2026-10-09, M1 decision cleanup): OD-01, 02, 04, 09 resolved by the owner (−4 blocking); OD-03 resolved by evidence for precision (−1) and its unresolved bounds split into new OD-42 (+1). Then OD-42 resolved by the owner (−1). Net blocking 28 → 23; open 38 → 33.
 
 Milestone gate sets (derived from the Blocking column above; checked by `tools/spec/check_r3_open_spec.py`):
 
 | Gate | BLOCKING decisions | Conditional |
 |---|---|---|
-| M1 | OD-05, OD-07, OD-08, OD-25, OD-42 | – |
+| M1 | OD-05, OD-07, OD-08, OD-25 | – |
 | M2 | OD-14, OD-16, OD-19, OD-22, OD-23, OD-24, OD-25, OD-37, OD-40 | OD-41 (if OD-19 = b/c) |
 | M3 | OD-15, OD-17, OD-18, OD-19, OD-27, OD-28, OD-29, OD-30, OD-32, OD-33, OD-34 (+ M2 gate satisfied) | OD-41 (if OD-19 = b/c) |
 | GL | OD-11 | – |
