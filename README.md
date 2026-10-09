@@ -29,6 +29,7 @@ docs/
   security-read-proxy-spike.md        Read-proxy test plan (R1–R10) and results
   identity-resolution.md              Identity-resolution contract (fail-closed), session behaviour, portability
   role-model.md                       Target roles and capabilities
+  approval-capability-rules.md        Approve / unapprove capability matrix, gate G5 status, immutability and audit contract
   runbook-identity-jml.md             Joiner / mover / leaver guidance (group propagation)
   roadmap.md                          Epic structure
 tools/powerautomate/
@@ -45,6 +46,9 @@ tools/identity/
   employee_matching.py                Conservative Employees ↔ directory account matching (proposals only, never applied)
   build_identity_apply_preview.py     Reviewed mapping CSV → APPLY PREVIEW (closed decision vocabulary; local file, no writes)
   test_*.py                           Contract tests I1–I10, S1–S8, EM01–EM23, AP01–AP19 (synthetic data; python -m unittest)
+tools/approval/
+  approval_rules.py                   Approval capability matrix and check order over the existing guard (reference)
+  test_approval_rules.py              AP-R01–AP-R24 (synthetic data; python -m unittest)
 ```
 
 ## Confidentiality
