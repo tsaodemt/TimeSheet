@@ -41,7 +41,7 @@ them; technical administration SHALL NOT imply business authority.
 | `EFF.DisciplineView` view discipline allocation / registration (OD-37) | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | `EFF.DisciplineEdit` register discipline effort (OD-30) | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | `EFF.DisciplineApprove` approve discipline effort = lock (OD-17) | DENY | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
-| `EFF.ActualView` view actual effort (OD-19, OD-37) | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | OPEN_DECISION | DENY | DENY | DENY | NOT_APPLICABLE |
+| `EFF.ActualView` view actual effort derived from TimesheetEntries (OD-19 resolved; OD-37) | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | OPEN_DECISION | DENY | DENY | DENY | NOT_APPLICABLE |
 | `EFF.ActualApprove` approve actual effort (OD-17, OD-19) | DENY | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | `EFF.Unlock` unlock / reopen (OD-18) | DENY | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | Planning configuration (AppSettings keys, e.g. unit, period windows) | DENY | DENY | DENY | DENY | DENY | DENY | DENY | DENY | ALLOW (configuration only) | DENY | DENY | NOT_APPLICABLE |
