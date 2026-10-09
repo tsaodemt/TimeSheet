@@ -102,15 +102,15 @@ keys); ETag = SharePoint `odata.etag`; version history on.
 |---|---|---|---|---|---|
 | `RegKey` | SL | Y | Y | **Y** | `<ProjectLegacyId>\|<PhaseLegacyId>\|<DisciplineLegacyId>` using immutable environment-portable master `LegacyId` values; SharePoint ItemIds are local lookup/query ids only (LHR-06) |
 | `Project` / `ProjectItemId` | LU → Projects / Num | Y | **Y** (ItemId) | N | |
-| `Phase` / `PhaseItemId` | LU → Phases / Num | Y | N | N | allowed phase set follows OD-02; if legacy-parity option is approved, phase must belong to the project's phase list |
+| `Phase` / `PhaseItemId` | LU → Phases / Num | Y | N | N | must belong to the project's phase list (OD-02 resolved = legacy parity) |
 | `Discipline` / `DisciplineItemId` | LU → Disciplines / Num | Y | N | N | |
-| `ManDays` | Number (decimals per OD-03) | **N** | N | N | blank/zero storage follows OD-01; option (a) uses null = BLANK and 0 = explicit VALUE 0 |
+| `ManDays` | Number, at most 2 decimals (OD-03 resolved); bounds per OD-42 | **N** | N | N | null = BLANK, 0 = explicit VALUE 0 (OD-01 resolved = A) |
 | `Status` | Choice `Active` | Y | N | N | no workflow (§4.1); `Deleted` only if a project deletion rule requires it (OD-08/09) |
 | `ActorUpn`, `CorrelationId` | SL | – | N | N | trusted writer; run id |
 | `LegacyId` | SL | Y | Y | **Y** | immutable row identifier generated for every target item; migration may derive it deterministically from the canonical `RegKey` for repeatable loads |
 
-- Unpivoted storage is fixed; physical clear semantics follow OD-09. If OD-09 option (a) is approved, one item is retained per cell that has ever held a value and clearing sets `ManDays = null` (no Delete right needed, history kept in versions and audit). Other OD-09 options require this row to be re-baselined before implementation.
-- Volume: legacy source has 199 filled cells; migrated target item count is conditional on OD-01/09. Growth ≈ 200 projects × ≤ 13 phases × ≤ 6 disciplines worst case ≈ 15,600, realistic
+- Unpivoted storage is fixed; clear semantics (OD-09 resolved = A): one item is retained per cell that has ever held a value and clearing sets `ManDays = null` (no Delete right needed, history kept in versions and audit).
+- Volume: legacy source has 199 filled cells (195 non-zero + 4 zero) → 199 migrated items under OD-01/OD-09 = A (blank cells create no item); migration timing per OD-11, stale-row handling per OD-08. Growth ≈ 200 projects × ≤ 13 phases × ≤ 6 disciplines worst case ≈ 15,600, realistic
   ≈ 1–3k. Query pattern: `ProjectItemId eq <n>` (indexed) → ≤ 78 items per project.
 
 ### 5.2 Candidate EPIC 16 / 17 entities (shape depends on decisions; columns marked † are decision-dependent)
@@ -163,10 +163,10 @@ SharePoint is suitable: small volumes, keyed access, no cross-list transactions 
   (same silent-hide pattern as the EPIC 07 pending count).
 - **Selection:** year filter (All + years present in Projects, LHR-03), single searchable project picker showing
   code — name, keyed by project id (LHR-05/06); empty filter result clears the grid (LHR-04).
-- **Matrix:** row source follows OD-02; if legacy parity is approved, rows = the project's phases in project order. STT, phase name and code are read-only (LHR-11);
+- **Matrix:** rows = the project's phases in project order (OD-02 resolved). STT, phase name and code are read-only (LHR-11);
   columns are dynamic and ordered by SortOrder; active/editable vs inactive/stale discipline/phase presentation follows OD-08 and SHALL NOT silently discard stored values. Under OD-08 option (a), stale/inactive values are shown read-only and flagged. Built as nested galleries over a local collection loaded from `REG-ReadMatrix`.
-- **Cell states:** exact BLANK/zero semantics follow OD-01. Under option (a): BLANK (empty input, placeholder "—"), VALUE (number, including explicit 0 shown as "0"), DIRTY and ERROR; under option (b), UI/storage follow the approved legacy-coercion rule.
-- **Editing:** numeric input per OD-03; inline validation message; clear = empty input or a clear (×) button per cell;
+- **Cell states (OD-01 resolved = A):** BLANK (empty input, placeholder "—"), VALUE (number, including explicit 0 shown as "0"), DIRTY and ERROR.
+- **Editing:** numeric input, at most 2 decimals (OD-03), bounds per OD-42; inline validation message; clear = empty input or a clear (×) button per cell;
   "clear row" optional (OD-10).
 - **Save:** enabled only with a selected project, ≥ 1 dirty cell and no invalid cell (LHR-20); sends only dirty cells
   with their load ETags; shows a per-cell result list; success toast with correlation id; conflicts reload the affected
@@ -200,7 +200,7 @@ client decoys (`OwnerUpn, Role, Scope, DisciplineCode, ProjectItemId-as-claim, A
 | Flow | Purpose | Inputs | Authorization | Validation | Reads / writes | Concurrency / batch | Replay safety / dedup | Audit | Response | Typed errors |
 |---|---|---|---|---|---|---|---|---|---|---|
 | `REG-ReadMatrix` | load one project's matrix | `ProjectItemId` | `REG.View` (scope per OD-05/06) | project exists, listed per OD-07 | read Projects (phase list), Phases, Disciplines, HourRegistrations (`ProjectItemId eq`) | – | read-only | AuthorizationAllow/Deny + ReadProxy | `phases[]`, `disciplines[]`, `cells[] {phaseId, disciplineId, state: BLANK\|VALUE, value, etag}`, `canEdit`, `stale[]` | ROLE_NOT_ALLOWED, NOT_FOUND, VALIDATION_LOOKUP |
-| `REG-SaveMatrix` | save changed cells | `ProjectItemId`, `Changes` JSON `[{phaseId, disciplineId, state, value, etag}]` (1–100), `ClientRequestId` | `REG.Edit` | preflight **all** cells before any write: phase allowed by OD-02, discipline allowed by OD-08/current master state, value domain (OD-03), project editable (OD-07), no duplicate key in request, ETag matches current (or "new" when no item); server resolves stable Project/Phase/Discipline LegacyIds before constructing `RegKey` | per cell: POST new item (unique `RegKey`) or MERGE `ManDays` with `If-Match` | §9 | `ClientRequestId` is correlation only; state equality may return `NO_CHANGE`; stale ETag returns `CONFLICT`; unique RegKey prevents duplicate cell items | WriteProxy per committed changed cell (Create / Update / Clear) | `resultcode` OK / PARTIAL / REFUSED, `results[] {phaseId, disciplineId, resultcode, etag}` | VALIDATION_REQUEST, VALIDATION_VALUE, CONFLICT, LOCKED (n/a for S12.5), ROLE_NOT_ALLOWED |
+| `REG-SaveMatrix` | save changed cells | `ProjectItemId`, `Changes` JSON `[{phaseId, disciplineId, state, value, etag}]` (1–100), `ClientRequestId` | `REG.Edit` | preflight **all** cells before any write: phase belongs to the project (OD-02), discipline allowed by OD-08/current master state, value domain (OD-03 precision, OD-42 bounds), project editable (OD-07), no duplicate key in request, ETag matches current (or "new" when no item); server resolves stable Project/Phase/Discipline LegacyIds before constructing `RegKey` | per cell: POST new item (unique `RegKey`) or MERGE `ManDays` with `If-Match` | §9 | `ClientRequestId` is correlation only; state equality may return `NO_CHANGE`; stale ETag returns `CONFLICT`; unique RegKey prevents duplicate cell items | WriteProxy per committed changed cell (Create / Update / Clear) | `resultcode` OK / PARTIAL / REFUSED, `results[] {phaseId, disciplineId, resultcode, etag}` | VALIDATION_REQUEST, VALIDATION_VALUE, CONFLICT, LOCKED (n/a for S12.5), ROLE_NOT_ALLOWED |
 | `EFF-ReadProjectAllocation` / `EFF-SaveProjectAllocation` | A.I | analogous | `EFF.ProjectView` / `EFF.ProjectEdit` + project scope (OD-24) | unit/period/phase/source/blank-zero per OD-14/22/23/16/40 | `ProjectEffortAllocations` | §9 | same replay-safe model; no request-id exactly-once claim | WriteProxy | same shape | + OUT_OF_PERIOD |
 | `EFF-ReadDisciplineEffort` | own / discipline / queue modes | `ProjectItemId`, `Mode` | `EFF.DisciplineView` | – | `DisciplineEffortRegistrations` | paging ≤ 500 | – | ReadProxy | rows + `remainingCeiling` | – |
 | `EFF-SaveDisciplineEffort` | register / change / clear Draft | changes JSON | `EFF.DisciplineEdit`, discipline scope; ownership grain/resolution per OD-30 | ceiling (OD-15), period open (OD-23), Draft only | same | §9.3 counter | replay-safe semantics per §9.4 | WriteProxy | per row | OVER_CEILING, LOCKED, CONFLICT |
@@ -243,7 +243,7 @@ For `REG-SaveMatrix`, one user Save SHALL be one guarded flow call of 1–100 ch
 `ClientRequestId` is a correlation value only; it is **not** a persisted deduplication key in this design. A resubmitted request may return `NO_CHANGE` when current state already equals the requested state, or `CONFLICT` when its ETag is stale. Unique canonical keys prevent duplicate cell items. The implementation SHALL NOT claim exactly-once request-id idempotency unless a future design persists request outcomes keyed by `ClientRequestId`.
 
 ### 9.5 Blank / zero / decimal round-trip
-Wire/storage semantics follow OD-01. If option (a) is approved, wire format per cell is `state` ∈ {`BLANK`, `VALUE`}, `value` is a JSON number only when `VALUE`, storage uses `ManDays = null` vs number, and Canvas distinguishes empty input from explicit `0`. If option (b) is approved, the contract is re-baselined to the approved legacy-coercion semantics before implementation. Decimal parsing follows OD-03.
+Wire/storage semantics (OD-01 resolved = A): wire format per cell is `state` ∈ {`BLANK`, `VALUE`}, `value` is a JSON number only when `VALUE`, storage uses `ManDays = null` vs number, and Canvas distinguishes empty input from explicit `0`. Decimal input: at most 2 decimals (OD-03); a typed decimal comma is normalised; bounds per OD-42.
 
 ## 10. Actual effort source (OD-19) — options and downstream effect
 
@@ -259,7 +259,7 @@ No option is chosen here.
 
 | Fact (grain) | Measure | Keys | Source | Filters |
 |---|---|---|---|---|
-| Registered budget (legacy) | `ManDays` — storage, aggregation and display semantics follow OD-01: **IF (a)** blank (null) and explicit 0 stay distinct in storage and display, sums treat blank as 0, "registered cell" counts exclude blank and include explicit 0; **IF (b)** the approved legacy coercion applies (0 and blank equivalent) and counts follow that rule | Project, Phase, Discipline | HourRegistrations | Status Active; stale rows per OD-08 |
+| Registered budget (legacy) | `ManDays` — OD-01 resolved = A: storage keeps blank (null) and explicit 0 distinct; display shows blank vs "0"; aggregation sums blank as 0; "registered cell" counts exclude blank and include explicit 0 | Project, Phase, Discipline | HourRegistrations | Status Active; stale rows per OD-08 |
 | Planned project effort | `Effort` in OD-14 source unit | Project, RecipientCategory, Phase†, Period† | ProjectEffortAllocations | successful guarded saves (no A.I approval in current scope) |
 | Discipline registered effort | `Effort` | Project, Discipline, Task†, Owner†, Period† | DisciplineEffortRegistrations | Draft / Approved flag exposed |
 | Actual effort | source unit per OD-19/OD-14 | Project, Phase†, Discipline (snapshot OD-35), Owner†, Date/Period† | per OD-19 | EntryStatus per OD-33; ownership per existing Timesheet rules or OD-41 |
@@ -273,7 +273,7 @@ Rules: legacy HourRegistration source remains man-days; new EFF source unit foll
   4 zero) and 271 blank; Σ 8,648 man-days; integers 2–200; no decimals, negatives, text, duplicates or unknown
   phase/discipline ids; one orphan file (deleted project, 9 lines, all blank → excluded, 0 values lost; corrects the
   earlier "45 orphan cells" note); one stale line (phase no longer on the project, OD-08); 3 duplicate project codes
-  (16 projects) → key by project id (LHR-06). Proposal: unpivot according to the approved OD-01 + OD-09 mapping. If blank≠0 is approved, explicit legacy zeros remain zero values; if legacy coercion is approved, the target zero/null/item-count mapping is re-baselined accordingly. No acceptance criterion hard-codes `199` before those decisions. In all cases, reconcile Σ per project to the approved legacy total; timing per OD-11.
+  (16 projects) → key by project id (LHR-06). Mapping (OD-01 = A, OD-09 = A): each filled legacy cell → one item (195 non-zero values, 4 explicit zeros kept as 0); each blank cell → no item; target 199 items; Σ per project reconciles to the legacy total (8,648 overall); stale lines per OD-08; timing per OD-11.
 - **EPIC 16/17:** new requirements, **no historical data** exists to migrate (unless OD-25 seeds A.I from E14).
 - No live migration in this change.
 
@@ -283,7 +283,7 @@ Rules: legacy HourRegistration source remains man-days; new EFF source unit foll
 |---|---|
 | Reference / unit | REG reference model: changed-cell diff, blank/zero/decimal encoding, preflight validation, per-cell result codes, NO_CHANGE replay-safety |
 | Contract (reference vs generated flow in the WDL simulator, R1/R2 pattern) | REG-ReadMatrix / REG-SaveMatrix equality incl. audit rows and MERGE/POST bodies |
-| Round-trip | synthetic 13 × 5 (capacity) and real-shape 6 × 5 using states/values allowed by approved OD-01/03; save + reload preserves the approved representation exactly |
+| Round-trip | synthetic 13 × 5 (capacity) and real-shape 6 × 5 with BLANK, 0, integers and 2-decimal values (OD-01, OD-03) within OD-42 bounds; save + reload preserves state and value exactly |
 | Batch | 1, 78, 100, 101 (VALIDATION_REQUEST); full 13 × 5 and 13 × 6 changes fit one call; duplicate key in request; one write-time 412 mid-call → explicit PARTIAL with committed/failed cells identified |
 | Concurrency | same cell two editors → CONFLICT; different cells → both kept; concurrent create → unique-key CONFLICT; ceiling counter race (EPIC 17) |
 | Replay safety | resubmitted request → NO_CHANGE or CONFLICT according to current state/ETag; `ClientRequestId` is correlation only; no duplicate cell item |
@@ -293,17 +293,17 @@ Rules: legacy HourRegistration source remains man-days; new EFF source unit foll
 | Approval / lock | Draft → Approved; Approved edit → LOCKED for every role; unlock absent until OD-18 |
 | Audit | exactly one WriteProxy per committed changed value; AuthorizationAllow/Deny once per request; exactly one Approval business event per approved row with resulting locked state |
 | Delegation / threshold | no Canvas data source on planning lists; every flow query filters an indexed column first; 5k+ synthetic list volume test on STAGING (read-only probe of query plans) |
-| Canvas UX | generator assertions: OD-01 blank/zero rendering, Save enable rule, read-only mode, confirm/dirty prompts, no control overlap (EPIC 07 geometry lesson) |
+| Canvas UX | generator assertions: blank vs "0" rendering (OD-01 = A), Save enable rule, read-only mode, confirm/dirty prompts, no control overlap (EPIC 07 geometry lesson) |
 | Live STAGING | REG live proof with synthetic projects only; per-role live capability results (temporary memberships, baseline restored) |
 | Focused E2E | PMO edits budget → persisted facts reconcile through an offline/reference contract calculation; EPIC 17 register → approve → locked → edit LOCKED; no EPIC18 analytics surface required |
-| Migration | target counts follow approved OD-01/09 mapping; Σ per project reconciles to legacy; 0 silent loss |
+| Migration | 199 items (195 non-zero + 4 zero), 271 blanks → no item, orphan file excluded (0 values); Σ per project = legacy; stale rows per OD-08; 0 silent loss |
 
 ## 14. Implementation entry gate R3-G0 (Definition of Ready)
 
 Implementation of a milestone may start only when **all** hold for that milestone: legacy evidence mapped (done for
 S12.5: 39/39); NR-EFF mapped (14/14); the milestone's BLOCKING decisions answered and recorded with date/owner
 (gate sets are defined once, in the "Milestone gate sets" table of `decisions.md`, derived from its Blocking column and
-checked by `tools/spec/check_r3_open_spec.py`: **M1** 9 decisions, **M2** 9 + OD-41 conditional, **M3** 11 + OD-41
+checked by `tools/spec/check_r3_open_spec.py`: **M1** 5 decisions, **M2** 9 + OD-41 conditional, **M3** 11 + OD-41
 conditional and the M2 gate satisfied, **GL** OD-11); data model, security model, flow contracts and UX reviewed
 and accepted by the project owner; test strategy and acceptance criteria approved; migration impact known (OD-11 for
 GL); dependencies confirmed (Projects / ProjectPhases / Disciplines lists live on STAGING; guard framework; AuditLog);
@@ -338,16 +338,15 @@ matrix.
 
 ## 16. Risks / Trade-offs
 
-- [Decisions arrive late] → S12.5 first (9 decisions), EPIC 16/17 behind the workshop; schedule risk stated, not hidden.
+- [Decisions arrive late] → S12.5 first (5 open decisions), EPIC 16/17 behind the workshop; schedule risk stated, not hidden.
 - [A.I later declared to replace E14 (OD-25)] → S12.5 entity designed with an optional link; asked before M1.
 - [No transactions in SharePoint] → preflight all-or-nothing + per-cell ETag + explicit PARTIAL.
 - [Ceiling race] → counter item with ETag (EPIC 17), proven by a concurrency test.
 - [Chủ trì per project] → would need a project scope the guard lacks (new security work, OD-17/OD-24).
 - [Timesheet reuse for actuals] → may conflict with the closed G5 approval roles (OD-19/33).
-- [Blank vs 0 contradicts legacy] → explicit decision OD-01; migration mapping and reconciliation follow the approved
-  OD-01/OD-09 option (§12): IF both states are kept, reconciliation expects both; IF legacy zeros are normalised, it
-  expects the normalised result.
+- [Blank vs 0 differs from the legacy UI] → owner decision OD-01 = A; migration keeps both states and reconciliation
+  expects 199 items (4 explicit zeros) with Σ per project equal to legacy (§12).
 
 ## 17. Open questions
 
-Open questions are the 38 OPEN_DECISION items of `decisions.md` (28 unconditional BLOCKING, 1 conditional blocker, 9 NON_BLOCKING). Three decisions are RESOLVED_BY_EVIDENCE in `decisions.md` §C (OD-21, OD-26, OD-38).
+Open questions are the 34 OPEN_DECISION items of `decisions.md` (24 unconditional BLOCKING, 1 conditional blocker, 9 NON_BLOCKING). Eight decisions are resolved in `decisions.md` §C (OD-01 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence).

@@ -33,8 +33,8 @@ them; technical administration SHALL NOT imply business authority.
 
 | Capability | EMP | TL | APR | EXE | PMO | HR | SALV | FIN | ADM | ITS | CONFO | MIGO |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `REG.View` view Hour Registration (OD-05) | DENY | ALLOW* | ALLOW* | ALLOW* | ALLOW* | ALLOW* | DENY | DENY | OPEN_DECISION | DENY | DENY | NOT_APPLICABLE |
-| `REG.Edit` edit / clear / save matrix (OD-04) | DENY | DENY | DENY | OPEN_DECISION (proposed ALLOW) | OPEN_DECISION (proposed ALLOW) | DENY | DENY | DENY | OPEN_DECISION (proposed DENY) | DENY | DENY | NOT_APPLICABLE |
+| `REG.View` view Hour Registration (OD-05) | DENY | OPEN_DECISION (proposed ALLOW) | OPEN_DECISION (proposed ALLOW) | OPEN_DECISION (proposed ALLOW) | OPEN_DECISION (proposed ALLOW) | OPEN_DECISION (proposed ALLOW) | DENY | DENY | DENY | OPEN_DECISION (proposed DENY; deviation from legacy IT read, OD-05) | DENY | NOT_APPLICABLE |
+| `REG.Edit` edit / clear / save matrix (OD-04 resolved) | DENY | DENY | DENY | ALLOW | ALLOW | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | `EFF.ProjectView` view project planned effort (OD-37) | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | OPEN_DECISION | DENY | DENY | DENY | NOT_APPLICABLE |
 | `EFF.ProjectEdit` edit project planned effort (OD-24) | DENY | DENY | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | `EFF.ProjectApprove` project planned-effort approval | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE |
@@ -46,7 +46,7 @@ them; technical administration SHALL NOT imply business authority.
 | `EFF.Unlock` unlock / reopen (OD-18) | DENY | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | Planning configuration (AppSettings keys, e.g. unit, period windows) | DENY | DENY | DENY | DENY | DENY | DENY | DENY | DENY | ALLOW (configuration only) | DENY | DENY | NOT_APPLICABLE |
 
-`ALLOW*` = present in the current role seed (legacy-derived), to be confirmed by OD-05. MIGO (temporary migration role)
+`REG.Edit`: OD-04 resolved (Executive, PMO; AppAdmin DENY). `REG.View`: proposed ALLOW cells derive from legacy read/write rights through the prepared (unsigned) role map and stay OPEN until OD-05; AppAdmin and IT Support never receive business visibility by technical privilege; the `ITS` DENY cell is a proposed deviation from legacy IT read access and is decided under OD-05. MIGO (temporary migration role)
 has no business capability. Legacy Director is retired (no mapping). A.I project allocation has no approval capability in current scope (resolved OD-26). Self-approval of discipline/actual effort: OD-28.
 
 #### Scenario: Matrix is machine-checked

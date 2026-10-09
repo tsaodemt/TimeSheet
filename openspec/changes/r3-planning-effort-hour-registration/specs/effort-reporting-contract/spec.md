@@ -9,7 +9,7 @@ R3 SHALL define and populate the persisted facts/keys that later reporting can c
 - **THEN** planned, actual and variance reconcile using the documented keys and conversion rule without requiring a deployed analytics surface
 
 ### Requirement: Source units are preserved; comparison unit is normalised explicitly
-Legacy `HourRegistrations.ManDays` SHALL remain stored in man-days (LHR-39). New EPIC 16/17 effort SHALL be stored in the unit decided by OD-14. Reporting SHALL NOT rewrite either source unit. When a comparison needs a common unit and OD-14 is not man-days, the reporting contract SHALL normalise explicitly using the approved conversion (`HoursPerManDay` where applicable) and SHALL expose/document the comparison unit. Blank/zero counting semantics for each source SHALL follow that source's approved rule (OD-01 for Hour Registration, OD-40 for Project Effort).
+Legacy `HourRegistrations.ManDays` SHALL remain stored in man-days (LHR-39). New EPIC 16/17 effort SHALL be stored in the unit decided by OD-14. Reporting SHALL NOT rewrite either source unit. When a comparison needs a common unit and OD-14 is not man-days, the reporting contract SHALL normalise explicitly using the approved conversion (`HoursPerManDay` where applicable) and SHALL expose/document the comparison unit. Blank/zero counting semantics for each source SHALL follow that source's approved rule (OD-01 = A for Hour Registration; OD-40 for Project Effort).
 
 #### Scenario: Legacy budget with hour-based rev01 effort
 - **GIVEN** OD-14 selects hours
@@ -17,7 +17,7 @@ Legacy `HourRegistrations.ManDays` SHALL remain stored in man-days (LHR-39). New
 - **THEN** Hour Registration remains stored as man-days and the comparison calculation converts it explicitly rather than mutating the source data
 
 ### Requirement: Registered budget sums remain reconcilable
-Registered man-days per project SHALL equal the sum of applicable `HourRegistrations` values after applying the approved stale-row rule OD-08; blank cells contribute zero to arithmetic sums without being rewritten as explicit zero unless OD-01 says so.
+Registered man-days per project SHALL equal the sum of applicable `HourRegistrations` values after applying the approved stale-row rule OD-08; blank cells contribute zero to arithmetic sums without being rewritten as explicit zero (OD-01 resolved = A).
 
 #### Scenario: Legacy budget sum
 - **GIVEN** the migrated legacy budget of a project

@@ -17,7 +17,7 @@ closed projects SHALL follow OD-07; assignment scoping SHALL follow OD-06.
 - **THEN** the project picker is empty and no matrix is shown
 
 ### Requirement: Matrix structure
-The matrix row source SHALL follow OD-02. If OD-02 selects legacy parity, rows SHALL be the selected project's phases in project order; if OD-02 selects all active master phases, that approved rule SHALL be used instead. Until OD-02 is decided, M1 implementation is BLOCKED. The matrix SHALL show read-only sequence, phase name and phase code, and one editable column per active discipline ordered by discipline sort order, without a hard-coded discipline count (LHR-10..12). Values on removed phases or inactive disciplines SHALL be handled per OD-08 and SHALL NOT be deleted silently.
+Rows SHALL be the selected project's phases in the project's phase order (OD-02 resolved = legacy parity, LHR-10); a save for a phase outside the project SHALL be refused. The matrix SHALL show read-only sequence, phase name and phase code, and one editable column per active discipline ordered by discipline sort order, without a hard-coded discipline count (LHR-10..12). Values on removed phases or inactive disciplines SHALL be handled per OD-08 and SHALL NOT be deleted silently.
 
 #### Scenario: Project with six phases
 - **GIVEN** a project with 6 phases and 5 active disciplines
@@ -30,27 +30,25 @@ The matrix row source SHALL follow OD-02. If OD-02 selects legacy parity, rows S
 - **THEN** a sixth column appears without layout overlap
 
 ### Requirement: Blank and zero are distinct
-Cell blank/zero semantics SHALL follow OD-01. If OD-01 selects `blank ≠ 0`, a cell SHALL be in exactly one state, BLANK or VALUE and explicit 0 SHALL be a VALUE; storage (`ManDays` null vs number), the flow contract (`state` + `value`) and the UI SHALL preserve that state. If OD-01 selects legacy semantics, the target SHALL implement the approved coercion/display rule instead. Until OD-01 is decided, M1 implementation is BLOCKED. Reports may treat blank as 0 in arithmetic sums without erasing the storage/UI distinction when option (a) is selected.
+A cell SHALL be in exactly one state, BLANK or VALUE, and an explicit 0 SHALL be a VALUE (OD-01 resolved = A); storage (`ManDays` null vs number), the flow contract (`state` + `value`) and the UI SHALL preserve that state. Clearing a cell SHALL keep its item and set the value to null (OD-09 resolved = A). Reports SHALL sum BLANK as 0 without erasing the distinction.
 
-#### Scenario: Zero round-trip when OD-01 selects distinct zero
-- **GIVEN** OD-01 option (a) is approved
+#### Scenario: Zero round-trip
 - **WHEN** the user enters 0 in a blank cell, saves and reloads
 - **THEN** the cell shows "0" and the stored value is 0
 
-#### Scenario: Clear round-trip follows OD-01/OD-09
-- **GIVEN** OD-01 and OD-09 are approved
+#### Scenario: Clear round-trip
 - **WHEN** the user clears a cell holding 12 and saves
-- **THEN** the reloaded cell and stored representation match the approved blank/clear semantics exactly
+- **THEN** the cell is BLANK after reload, the item still exists and its stored value is null
 
 ### Requirement: Value validation
-The system SHALL accept only values in the domain decided by OD-03 (default proposal: non-negative, at most one
-decimal, at most 999.9) and SHALL reject any other input with a typed message before saving, client-side and again
-server-side (LHR-15, LHR-16). IF OD-03 allows decimals, a decimal comma typed by the user SHALL be normalised to the
-stored decimal value; IF OD-03 allows integers only, a decimal input SHALL be rejected. In every option no value SHALL be
+The system SHALL accept only numeric values with at most 2 decimal places (OD-03 resolved by evidence: legacy parses
+decimals and reports 2 decimals) and SHALL reject non-numeric input or more than 2 decimals with a typed message before
+saving, client-side and again server-side (LHR-15, LHR-16). A typed decimal comma SHALL be normalised to the stored
+decimal value. Minimum and maximum bounds SHALL follow OD-42 (BLOCKING M1; no bound is assumed). No value SHALL be
 silently changed.
 
-#### Scenario: Invalid text
-- **WHEN** the user types "abc" or "-3" in a cell
+#### Scenario: Invalid text or precision
+- **WHEN** the user types "abc" or "1.234" in a cell
 - **THEN** the cell is marked invalid, Save is disabled, and a direct flow call with that value returns VALIDATION_VALUE without any write
 
 ### Requirement: Changed-cell save

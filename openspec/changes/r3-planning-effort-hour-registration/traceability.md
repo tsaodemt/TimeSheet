@@ -49,7 +49,7 @@ Spec ownership: `project-effort` NR-EFF-01, -05; `discipline-effort` NR-EFF-02, 
 
 Classification: REPLICATE · REPLACE · FIX_LEGACY_DEFECT · SECURITY_HARDENING · NOT_APPLICABLE · OPEN_DECISION.
 Where a row says OPEN_DECISION the matching OD-nn in `decisions.md` governs (LHR-07→OD-06, LHR-09→OD-07, LHR-10→OD-02,
-LHR-13/14→OD-08, LHR-15/16→OD-03, LHR-17→OD-10, LHR-21→OD-01, LHR-23→OD-12, LHR-26→retired role (G5), LHR-33→OD-13,
+LHR-13/14→OD-08, LHR-15/16→OD-03 (resolved: 2-dp precision) + OD-42 (bounds), LHR-17→OD-10, LHR-21→OD-01 (resolved = A), LHR-23→OD-12, LHR-26→retired role (G5), LHR-33→OD-13,
 LHR-38→OD-11). LHR-26 (legacy Director): resolved by the closed gate G5 — Director is retired with no target mapping.
 
 | ID | Feature / rule | Legacy evidence | Legacy behaviour | Target classification | Rationale | Test requirement |
@@ -99,9 +99,9 @@ LHR-38→OD-11). LHR-26 (legacy Director): resolved by the closed gate G5 — Di
 | Backlog claim | Legacy evidence | Spec handling |
 |---|---|---|
 | Unpivoted storage | Silent (legacy is pivoted per project file; conversion lossless) | REPLACE (design §5.1) |
-| Nested galleries phases × disciplines | Supports (rows = the project's phases) | REPLICATE (OD-02) |
-| Clear cells | Supports | REPLICATE (OD-09 storage, OD-10 multi-cell) |
+| Nested galleries phases × disciplines | Supports (rows = the project's phases) | REPLICATE (OD-02 resolved) |
+| Clear cells | Supports | REPLICATE (OD-09 resolved: keep item, null; OD-10 multi-cell) |
 | Save changed cells as a batch | Contradicts the mechanism (whole-file rewrite) | REPLACE + concurrency (design §9) |
 | READ role read-only | Partly contradicts (READ users can type, Save disabled) | SECURITY_HARDENING |
 | 13 × 5 round-trip | Silent: never occurs in data (largest live matrix 6 × 5; max 9 phases on a project) | Keep 13 × 5 as a synthetic capacity test + add real-shape 6 × 5 test |
-| Empty ≠ 0 | Contradicts legacy UI and reports | OD-01 (BLOCKING M1) |
+| Empty ≠ 0 | Contradicts legacy UI and reports | OD-01 resolved = A (owner, 2026-10-09) |

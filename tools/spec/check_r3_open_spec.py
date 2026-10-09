@@ -35,7 +35,7 @@ def classify(md):
     blocking, conditional, nonblocking, resolved = {}, {}, set(), set()
     for c in rows(md):
         oid = re.match(r"OD-\d\d", c[0]).group(0)
-        if "RESOLVED_BY_EVIDENCE" in c[1]:
+        if "RESOLVED" in c[1]:  # §C: owner decision or evidence
             resolved.add(oid)
             continue
         if len(c) < 8:
@@ -78,7 +78,7 @@ def check(d=DEFAULT):
     for name, txt in (("decisions.md", dec), ("proposal.md", read(d, "proposal.md")), ("design.md", read(d, "design.md"))):
         for pat, key in ((r"(\d+) unconditional BLOCKING", "unconditional"), (r"(\d+) NON_BLOCKING", "non"),
                          (r"Open decisions total: \*\*(\d+)\*\*", "open"), (r"(\d+) open items after review", "open"),
-                         (r"the (\d+) OPEN_DECISION items", "open"), (r"(\d+) RESOLVED_BY_EVIDENCE", "resolved")):
+                         (r"the (\d+) OPEN_DECISION items", "open"), (r"(\d+) RESOLVED_BY_EVIDENCE", "resolved"), (r"plus (\d+) resolved items", "resolved"), (r"Resolved in §C: \*\*(\d+)\*\*", "resolved")):
             for m in re.finditer(pat, txt):
                 if int(m.group(1)) != expect[key]:
                     errs.append("%s: '%s' says %s, register has %d" % (name, m.group(0), m.group(1), expect[key]))
