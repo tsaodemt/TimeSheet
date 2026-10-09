@@ -34,13 +34,12 @@ FIXTURE = {
         "HR": {"TS.ViewOwn": "self", "TS.ViewOthers": "none", "MD.Maintain": "restricted:org, positions", "RATE.View": "company"},
         "SALV": {"RATE.View": "company"},
         "FIN": {"FIN.RevenueEdit": "company", "BI.FinanceReports": "company"},
-        "ADM": {"TS.ViewOwn": "self", "TS.ViewOthers": "company", "TS.SelfApprove": "none", "EMP.Maintain": "company",
+        "ADM": {"TS.ViewOwn": "self", "TS.ViewOthers": "company", "TS.Approve": "none", "TS.Unapprove": "none", "EMP.Maintain": "company",
                 "ROLE.Admin": "company"},
         "MIGO": {"MIG.Run": "restricted:until hypercare end"},
     },
     "pending": [{"role": r, "capability": a} for r, a in [
-        ("TL", "TS.Unapprove"), ("TL", "TS.SelfApprove"), ("APR", "TS.SelfApprove"), ("APR", "BI.FinanceReports"),
-        ("EXE", "TS.SelfApprove"), ("EXE", "RATE.View"), ("HR", "TS.ViewOthers"), ("ADM", "TS.SelfApprove")]],
+        ("APR", "BI.FinanceReports"), ("EXE", "RATE.View"), ("HR", "TS.ViewOthers")]],  # approval decisions closed (G5)
 }
 SCOPE_CONFIG = FIXTURE
 if os.environ.get("TS_SCOPE_CONFIG"):
@@ -215,7 +214,7 @@ class GuardTests(Base):
                 r, _ = self.check(Case(u("emp"), [role], action, kind, ref), "DECISION_PENDING")
                 self.assertEqual(r.ResolvedScope, "none")
         if os.environ.get("TS_SCOPE_CONFIG"):
-            self.assertEqual(len(pend), 11)
+            self.assertEqual(len(pend), 6)  # 11 before Gate G5 closed UD-04 x4 and LeaderCanUnapprove (2026-10-09)
 
     def test_G11_inactive_employee_denied(self):
         r, _ = self.check(Case(u("gone"), ["APR", "ADM"], "TS.ViewOwn", "self"), "INACTIVE_EMPLOYEE")
@@ -237,7 +236,7 @@ class GuardTests(Base):
         self.check(Case(u("emp"), ["TL", "SALV"], "RATE.View", "company"), "ALLOW")
         self.check(Case(u("emp"), ["TL", "SALV"], "TS.Approve", "employee", "E3"), "SCOPE_NOT_ALLOWED")
         self.check(Case(u("emp"), ["TL", "APR"], "TS.Unapprove", "employee", "E3"), "ALLOW")
-        self.check(Case(u("emp"), ["TL", "APR"], "TS.SelfApprove", "self"), "DECISION_PENDING")
+        self.check(Case(u("emp"), ["TL", "APR"], "TS.SelfApprove", "self"), "ROLE_NOT_ALLOWED")  # UD-04: nobody
         self.check(Case(u("emp"), ["EMP", "MIGO"], "MIG.Run", "company"), "TEMP_ROLE_INACTIVE")
         self.check(Case(u("emp"), ["ADM", "HR"], "MD.Maintain", "company"),
                    "ALLOW" if POLICY.classify("ADM", "MD.Maintain") == "company" else "UNKNOWN_SCOPE")

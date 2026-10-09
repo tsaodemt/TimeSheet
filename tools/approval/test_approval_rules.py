@@ -1,9 +1,10 @@
-"""S07.1 approval capability tests AP-R01..AP-R24 (synthetic data only; run: python -m unittest test_approval_rules).
+"""S07.1 approval capability tests AP-R01..AP-R25, Gate G5 decisions 2026-10-09 (synthetic data only;
+run: python -m unittest test_approval_rules).
 
 Every guard call made by approval_rules.decide is also executed through the generated Power Automate guard
 template (tools/powerautomate/guard_template.py) in the offline WDL interpreter; both must agree.
 
-Policy: approval_rules.scope_config() (the documented S07.1 matrix). Set TS_SCOPE_CONFIG=<ScopeConfig.json> to
+Policy: approval_rules.scope_config() (the approved matrix). Set TS_SCOPE_CONFIG=<ScopeConfig.json> to
 also check that the authoritative role seed grants exactly the same approval capabilities.
 """
 import json
@@ -103,124 +104,139 @@ class Base(unittest.TestCase):
 
 
 class MatrixTests(Base):
-    def test_R01_every_role_has_one_row_with_a_valid_status(self):
+    def test_R01_every_role_has_one_resolved_row(self):
         self.assertEqual(len(ROLE_KEYS), len(set(ROLE_KEYS)))
         self.assertEqual(set(ROLE_KEYS), {"EMP", "TL", "APR", "EXE", "PMO", "HR", "SALV", "FIN", "ADM", "ITS", "CONFO", "MIGO"})
         for r in AR.MATRIX:
-            self.assertIn(r.status, AR.STATUSES)
-            self.assertIn(r.approve, ("none", "self", "discipline", "company"))
-            self.assertIn(r.unapprove, ("none", "self", "discipline", "company"))
+            self.assertEqual(r.status, AR.RESOLVED, r.role)
+            self.assertIn(r.approve, ("none", "discipline", "company"))
+            self.assertIn(r.unapprove, ("none", "discipline", "company"))
             self.assertTrue(r.evidence)
+        self.assertEqual(CFG_SCOPES["pending"], [])
 
-    def test_R02_pending_cells_are_never_grants(self):
-        for r in AR.MATRIX:
-            for cap in r.pending:
-                self.assertEqual(POLICY.classify(r.role, cap), "pending", (r.role, cap))
-            if r.pending:
-                self.assertEqual(r.status, AR.DECISION_PENDING, r.role)
+    def test_R02_approved_b01_matrix(self):
+        def grants(cap):
+            return {r: POLICY.classify(r, cap) for r in ROLE_KEYS
+                    if POLICY.classify(r, cap) in ("self", "discipline", "company")}
+        self.assertEqual(grants("TS.Approve"), {"TL": "discipline", "APR": "company", "EXE": "company"})
+        self.assertEqual(grants("TS.Unapprove"), {"APR": "company", "EXE": "company"})
+        self.assertEqual(grants("TS.SelfApprove"), {})
 
-    def test_R03_self_approval_pending_for_every_role_that_can_approve(self):
-        for r in AR.MATRIX:
-            if r.approve != "none" or r.unapprove != "none":
-                self.assertEqual(r.pending.get(AR.SELF_CAPABILITY), "UD-04", r.role)
-            self.assertNotIn(POLICY.classify(r.role, AR.SELF_CAPABILITY), ("self", "discipline", "company"))
+    def test_R03_unapprove_independent_of_approve(self):
+        """UD-05: Team Leader approves but cannot unapprove."""
+        self.assertEqual((POLICY.classify("TL", "TS.Approve"), POLICY.classify("TL", "TS.Unapprove")), ("discipline", "none"))
 
-    def test_R04_capabilities_are_independent(self):
-        """UD-05: approve does not imply unapprove (Team Leader)."""
-        tl = {r.role: r for r in AR.MATRIX}["TL"]
-        self.assertEqual((tl.approve, POLICY.classify("TL", "TS.Unapprove")), ("discipline", "pending"))
-
-    def test_R05_no_director_role_and_no_new_action_ids(self):
-        self.assertNotIn("DIR", ROLE_KEYS)
+    def test_R04_director_retired_and_no_new_action_ids(self):
+        self.assertEqual(AR.RETIRED_LEGACY_ROLES, ("Director",))
+        self.assertFalse({"DIR", "Director", "DIRECTOR"} & set(ROLE_KEYS))
         self.assertEqual(set(POLICY.actions.values()), set(AR.APPROVAL_CAPABILITIES))
 
     @unittest.skipUnless(os.environ.get("TS_SCOPE_CONFIG"), "TS_SCOPE_CONFIG not set")
-    def test_R06_matrix_equals_authoritative_seed(self):
+    def test_R05_matrix_equals_authoritative_seed(self):
         with open(os.environ["TS_SCOPE_CONFIG"], encoding="utf-8-sig") as fh:
             seed = json.load(fh)
         caps = AR.APPROVAL_CAPABILITIES
         ours = {(r, a): v for r, acts in CFG_SCOPES["scopes"].items() for a, v in acts.items()}
         theirs = {(r, a): v for r, acts in seed["scopes"].items() for a, v in acts.items() if a in caps}
         self.assertEqual(ours, theirs)
-        pend = lambda c: {(p["role"], p["capability"]) for p in c["pending"] if p["capability"] in caps}
-        self.assertEqual(pend(CFG_SCOPES), pend(seed))
+        self.assertEqual([p for p in seed["pending"] if p["capability"] in caps], [])
 
 
 class ApproveTests(Base):
-    def test_R07_member_denied(self):
-        self.check(u("lead"), ["EMP"], AR.APPROVE, entry("E2"), G.ROLE_NOT_ALLOWED)
+    def test_R06_employee_and_pm_denied(self):
+        for role in ("EMP", "PMO"):
+            self.check(u("lead"), [role], AR.APPROVE, entry("E2"), G.ROLE_NOT_ALLOWED)
 
-    def test_R08_team_leader_same_discipline_allowed(self):
+    def test_R07_team_leader_same_discipline_allowed(self):
         self.check(u("lead"), ["TL"], AR.APPROVE, entry("E2"), G.R_ALLOW, is_self=False)
 
-    def test_R09_team_leader_cross_discipline_denied(self):
+    def test_R08_team_leader_cross_discipline_denied(self):
         self.check(u("lead"), ["TL"], AR.APPROVE, entry("E3"), G.SCOPE_NOT_ALLOWED)
 
-    def test_R10_team_leader_without_discipline_denied(self):
+    def test_R09_team_leader_without_discipline_denied(self):
         self.check(u("nodisc"), ["TL"], AR.APPROVE, entry("E2"), G.SCOPE_NOT_ALLOWED)
 
-    def test_R11_approver_company_scope(self):
+    def test_R10_approver_and_executive_company_approve(self):
+        for role in ("APR", "EXE"):
+            for code in ("E2", "E3"):
+                self.check(u("lead"), [role], AR.APPROVE, entry(code), G.R_ALLOW)
+
+    def test_R11_appadmin_approve_denied(self):
         for code in ("E2", "E3"):
-            self.check(u("lead"), ["APR"], AR.APPROVE, entry(code), G.R_ALLOW)
+            self.check(u("lead"), ["ADM"], AR.APPROVE, entry(code), G.ROLE_NOT_ALLOWED)
 
-    def test_R12_executive_and_appadmin_company_scope(self):
-        for role in ("EXE", "ADM"):
-            self.check(u("lead"), [role], AR.APPROVE, entry("E3"), G.R_ALLOW)
-
-    def test_R13_non_approving_roles_denied(self):
-        for role in ("PMO", "HR", "SALV", "FIN", "ITS", "CONFO", "MIGO"):
+    def test_R12_other_roles_denied(self):
+        for role in ("HR", "SALV", "FIN", "ITS", "CONFO", "MIGO"):
             self.check(u("lead"), [role], AR.APPROVE, entry("E2"), G.ROLE_NOT_ALLOWED)
             self.check(u("lead"), [role], AR.UNAPPROVE, entry("E2"), G.ROLE_NOT_ALLOWED)
 
-    def test_R14_self_approval_denied_for_every_approving_role(self):
-        for role in ("TL", "APR", "EXE", "ADM"):
-            self.check(u("lead"), [role], AR.APPROVE, entry("E1"), G.DECISION_PENDING, is_self=True)
+    def test_R13_self_approve_denied_for_every_role(self):
+        for role in ROLE_KEYS:
+            d = self.check(u("lead"), [role], AR.APPROVE, entry("E1"), G.ROLE_NOT_ALLOWED)
+            self.assertEqual(d.is_self, role in ("TL", "APR", "EXE"), role)  # others already fail the capability
 
-    def test_R15_self_detected_by_upn_as_well_as_employee_code(self):
-        self.check(u("lead"), ["APR"], AR.APPROVE, entry("E2", owner_upn=u("LEAD")), G.DECISION_PENDING, is_self=True)
+    def test_R14_self_detected_by_upn_as_well_as_employee_code(self):
+        self.check(u("lead"), ["APR"], AR.APPROVE, entry("E2", owner_upn=u("LEAD")), G.ROLE_NOT_ALLOWED, is_self=True)
 
 
 class UnapproveTests(Base):
-    def test_R16_team_leader_cannot_unapprove(self):
-        self.check(u("lead"), ["TL"], AR.UNAPPROVE, entry("E2"), G.DECISION_PENDING)
+    def test_R15_team_leader_unapprove_denied(self):
+        for code in ("E2", "E3"):
+            self.check(u("lead"), ["TL"], AR.UNAPPROVE, entry(code), G.ROLE_NOT_ALLOWED)
 
-    def test_R17_approver_executive_appadmin_unapprove_company(self):
-        for role in ("APR", "EXE", "ADM"):
-            self.check(u("lead"), [role], AR.UNAPPROVE, entry("E3"), G.R_ALLOW)
+    def test_R16_approver_and_executive_company_unapprove(self):
+        for role in ("APR", "EXE"):
+            for code in ("E2", "E3"):
+                self.check(u("lead"), [role], AR.UNAPPROVE, entry(code), G.R_ALLOW)
 
-    def test_R18_own_entry_unapprove_denied(self):
-        for role in ("APR", "EXE", "ADM"):
-            self.check(u("lead"), [role], AR.UNAPPROVE, entry("E1"), G.DECISION_PENDING, is_self=True)
+    def test_R17_appadmin_unapprove_denied(self):
+        self.check(u("lead"), ["ADM"], AR.UNAPPROVE, entry("E3"), G.ROLE_NOT_ALLOWED)
 
-    def test_R19_member_cannot_unapprove(self):
-        self.check(u("lead"), ["EMP"], AR.UNAPPROVE, entry("E2"), G.ROLE_NOT_ALLOWED)
+    def test_R18_self_unapprove_denied_for_every_role(self):
+        for role in ROLE_KEYS:
+            d = self.check(u("lead"), [role], AR.UNAPPROVE, entry("E1"), G.ROLE_NOT_ALLOWED)
+            self.assertEqual(d.is_self, role in ("APR", "EXE"), role)
+
+    def test_R19_employee_and_pm_unapprove_denied(self):
+        for role in ("EMP", "PMO"):
+            self.check(u("lead"), [role], AR.UNAPPROVE, entry("E2"), G.ROLE_NOT_ALLOWED)
 
 
 class TrustTests(Base):
-    def test_R20_multi_role_union_but_self_still_denied(self):
+    def test_R20_multi_role_deterministic_least_privilege(self):
         self.check(u("lead"), ["EMP", "TL"], AR.APPROVE, entry("E3"), G.SCOPE_NOT_ALLOWED)
+        self.check(u("lead"), ["TL", "ADM"], AR.APPROVE, entry("E3"), G.SCOPE_NOT_ALLOWED)  # ADM adds nothing
+        self.check(u("lead"), ["TL", "ADM"], AR.UNAPPROVE, entry("E2"), G.ROLE_NOT_ALLOWED)
         self.check(u("lead"), ["TL", "APR"], AR.APPROVE, entry("E3"), G.R_ALLOW)
         self.check(u("lead"), ["TL", "APR"], AR.UNAPPROVE, entry("E3"), G.R_ALLOW)
-        self.check(u("lead"), ["TL", "APR", "ADM"], AR.APPROVE, entry("E1"), G.DECISION_PENDING, is_self=True)
+        for roles in (["TL", "APR", "EXE", "ADM"], ["ADM", "EXE", "APR", "TL"]):  # order-independent
+            for op in (AR.APPROVE, AR.UNAPPROVE):
+                self.check(u("lead"), roles, op, entry("E1"), G.ROLE_NOT_ALLOWED, is_self=True)
 
     def test_R21_inactive_employee_denied(self):
         self.check(u("gone"), ["APR"], AR.APPROVE, entry("E2"), G.INACTIVE_EMPLOYEE)
+        self.check(u("gone"), ["EXE"], AR.UNAPPROVE, entry("E2"), G.INACTIVE_EMPLOYEE)
 
     def test_R22_forged_owner_upn_ignored(self):
-        claims = {"OwnerUpn": u("peer")}
-        d = self.check(u("lead"), ["TL"], AR.APPROVE, entry("E3"), G.SCOPE_NOT_ALLOWED, decoys=claims)
+        d = self.check(u("lead"), ["TL"], AR.APPROVE, entry("E3"), G.SCOPE_NOT_ALLOWED, decoys={"OwnerUpn": u("peer")})
         self.assertIn("OwnerUpn", d.guard_results[0].IgnoredInputs)
-        self.check(u("lead"), ["APR"], AR.APPROVE, entry("E1"), G.DECISION_PENDING, is_self=True,
+        self.check(u("lead"), ["APR"], AR.APPROVE, entry("E1"), G.ROLE_NOT_ALLOWED, is_self=True,
                    decoys={"OwnerUpn": u("far")})
 
     def test_R23_forged_role_and_scope_ignored(self):
-        claims = {"ClaimRole": "APR,EXE,ADM", "ClaimScope": "company"}
+        claims = {"ClaimRole": "APR,EXE", "ClaimScope": "company"}
         self.check(u("lead"), ["EMP"], AR.APPROVE, entry("E2"), G.ROLE_NOT_ALLOWED, decoys=claims)
-        self.check(u("lead"), ["TL"], AR.UNAPPROVE, entry("E2"), G.DECISION_PENDING, decoys=claims)
+        self.check(u("lead"), ["TL"], AR.UNAPPROVE, entry("E2"), G.ROLE_NOT_ALLOWED, decoys=claims)
+        self.check(u("lead"), ["TL"], AR.APPROVE, entry("E3"), G.SCOPE_NOT_ALLOWED, decoys=claims)
 
-    def test_R24_unknown_operation_and_unknown_target_denied(self):
-        for op in ("Lock", "Unlock", "approve ", "", None):
-            d = run(u("lead"), ["ADM"], op, entry("E2"))
+    def test_R24_unknown_role_and_director_group_denied(self):
+        self.check(u("lead"), [], AR.APPROVE, entry("E2"), G.ROLE_NOT_ALLOWED)
+        self.check(u("lead"), ["DIR"], AR.UNAPPROVE, entry("E2"), G.ROLE_NOT_ALLOWED)  # group not configured as a role
+        self.check(u("lead"), ["DIR"], AR.APPROVE, entry("E2"), G.ROLE_NOT_ALLOWED)
+
+    def test_R25_unknown_operation_and_unknown_target_denied(self):
+        for op in ("Lock", "Unlock", "Submit", "approve ", "", None):
+            d = run(u("lead"), ["APR"], op, entry("E2"))
             self.assertEqual((d.allowed, d.result_code), (False, G.UNKNOWN_ACTION))
         self.check(u("lead"), ["APR"], AR.APPROVE, entry("NOPE"), G.SCOPE_NOT_ALLOWED)
 

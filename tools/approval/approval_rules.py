@@ -1,4 +1,7 @@
-"""Reference implementation of the S07.1 approval capability rules (executable specification).
+"""Reference implementation of the approval capability rules (EPIC 07 S07.1, executable specification).
+
+Gate G5 decisions (project owner, APPROVED 2026-10-09): B-01 matrix, UD-04 no self-approval, UD-05 independent
+capabilities, legacy Director retired, B-02 per-row approval only.
 
 Approve / unapprove authorization is the EXISTING guard (tools/identity/guard.py) with the EXISTING capability
 keys from the role seed: `TS.Approve`, `TS.Unapprove`, `TS.SelfApprove`. Nothing here is a second security
@@ -6,15 +9,12 @@ model; this module only fixes how an approval operation calls the guard:
 
     1. operation -> capability (Approve -> TS.Approve, Unapprove -> TS.Unapprove); anything else -> UNKNOWN_ACTION
     2. guard(capability, scope "employee", owner code taken from the STORED entry, never from the request)
-    3. own entry (trusted caller == stored owner) -> additionally guard(TS.SelfApprove, "self");
-       TS.SelfApprove is DECISION PENDING (UD-04) for every role, so own-entry approve AND unapprove are denied.
+    3. own entry (trusted caller == stored owner) -> additionally guard(TS.SelfApprove, "self"). No role holds
+       TS.SelfApprove (UD-04), so own-entry approve AND unapprove are denied (ROLE_NOT_ALLOWED) whatever the scope.
 
-Not decided here (S07.2 / S07.3 design, see docs/approval-capability-rules.md): entry-state preconditions
-(re-approve of an Approved row, unapprove of a Draft row), batch handling, the approver fields.
-
-MATRIX is the documented S07.1 capability matrix. `scope_config()` turns it into the guard policy shape
-(ScopeConfig.json: scopes + pending); test_approval_rules.py checks that it agrees with the authoritative seed
-when TS_SCOPE_CONFIG is set. A cell that is not RESOLVED is never a grant.
+MATRIX is the approved capability matrix. `scope_config()` turns it into the guard policy shape (ScopeConfig.json:
+scopes + pending); test_approval_rules.py checks that it equals the authoritative seed when TS_SCOPE_CONFIG is set.
+Entry-state rules, ETag and audit belong to TS-Approve (S07.2) and are specified in docs/approval-capability-rules.md.
 """
 from __future__ import annotations
 
@@ -38,50 +38,45 @@ STATUSES = (RESOLVED, DECISION_PENDING, NOT_APPLICABLE)
 
 @dataclass(frozen=True)
 class Row:
-    """One target role. Scopes: self | discipline | company | none. `pending` lists capabilities whose decision
-    is open (always denied at runtime) together with the decision ID."""
+    """One target role. Scopes: self | discipline | company | none. `denied` lists capabilities written to the
+    seed as an explicit deny, with the decision that denies them."""
     role: str
     approve: str
     unapprove: str
     status: str
     evidence: str
-    pending: Mapping[str, str] = field(default_factory=dict)
+    denied: Mapping[str, str] = field(default_factory=dict)
 
 
-_SELF = {SELF_CAPABILITY: "UD-04"}
+_NO_SELF = {SELF_CAPABILITY: "UD-04"}
 MATRIX = (
-    Row("EMP", "none", "none", RESOLVED, "legacy Member: no approve, no unapprove"),
-    Row("TL", "discipline", "none", DECISION_PENDING,
-        "legacy Leader: approve own discipline; unapprove refused; LeaderCanUnapprove default No",
-        {"TS.Unapprove": "LeaderCanUnapprove (B-01, UD-05)", **_SELF}),
-    Row("APR", "company", "company", DECISION_PENDING, "legacy Manager: approve + unapprove", dict(_SELF)),
-    Row("EXE", "company", "company", DECISION_PENDING,
-        "legacy CEO: approve + unapprove; legacy Director membership NOT included (pending)", dict(_SELF)),
-    Row("PMO", "none", "none", RESOLVED, "legacy PM / Secretary: no approve, no unapprove"),
-    Row("HR", "none", "none", RESOLVED, "legacy HR head: no approve, no unapprove"),
-    Row("SALV", "none", "none", RESOLVED, "additive rates role; no timesheet capability"),
-    Row("FIN", "none", "none", RESOLVED, "legacy accounting head: no approve, no unapprove"),
-    Row("ADM", "company", "company", DECISION_PENDING,
-        "legacy Admin: approve + unapprove; target holders are named IT administrators (B-01 / B-4)", dict(_SELF)),
-    Row("ITS", "none", "none", RESOLVED, "legacy IT: no approve, no unapprove"),
-    Row("CONFO", "none", "none", RESOLVED, "site-ownership role; no timesheet capability"),
-    Row("MIGO", "none", "none", RESOLVED, "temporary migration role; no timesheet capability"),
+    Row("EMP", "none", "none", RESOLVED, "B-01: no approval capability"),
+    Row("TL", "discipline", "none", RESOLVED, "B-01 own discipline; UD-05 no unapprove",
+        {"TS.Unapprove": "UD-05", **_NO_SELF}),
+    Row("APR", "company", "company", RESOLVED, "B-01", dict(_NO_SELF)),
+    Row("EXE", "company", "company", RESOLVED, "B-01; legacy Director retired, not mapped here", dict(_NO_SELF)),
+    Row("PMO", "none", "none", RESOLVED, "B-01: PM / PMO no approval capability"),
+    Row("HR", "none", "none", RESOLVED, "B-01: no approval capability"),
+    Row("SALV", "none", "none", RESOLVED, "B-01: no approval capability"),
+    Row("FIN", "none", "none", RESOLVED, "B-01: no approval capability"),
+    Row("ADM", "none", "none", RESOLVED, "B-01: technical administration role, no business approval",
+        {"TS.Approve": "B-01", "TS.Unapprove": "B-01"}),
+    Row("ITS", "none", "none", RESOLVED, "B-01: no approval capability"),
+    Row("CONFO", "none", "none", RESOLVED, "B-01: no approval capability"),
+    Row("MIGO", "none", "none", RESOLVED, "B-01: no approval capability"),
 )
+RETIRED_LEGACY_ROLES = ("Director",)  # T07.1.2: no target role, no mapping, no capability
 
 
 def scope_config(matrix: Iterable[Row] = MATRIX) -> dict:
-    """Guard policy (ScopeConfig shape) for the approval capabilities only."""
-    scopes, pending = {}, []
+    """Guard policy (ScopeConfig shape) for the approval capabilities only. Nothing is pending."""
+    scopes = {}
     for r in matrix:
-        acts = {}
-        for cap, val in ((CAPABILITY[APPROVE], r.approve), (CAPABILITY[UNAPPROVE], r.unapprove)):
-            if cap in r.pending or val != "none":
-                acts[cap] = "none" if cap in r.pending else val
-        if r.approve != "none" or r.unapprove != "none":
-            acts[SELF_CAPABILITY] = "none"
+        acts = {cap: val for cap, val in ((CAPABILITY[APPROVE], r.approve), (CAPABILITY[UNAPPROVE], r.unapprove))
+                if val != "none"}
+        acts.update({cap: "none" for cap in r.denied})
         scopes[r.role] = acts
-        pending += [{"role": r.role, "capability": c, "detail": d} for c, d in sorted(r.pending.items())]
-    return {"scopes": scopes, "pending": pending}
+    return {"scopes": scopes, "pending": []}
 
 
 @dataclass(frozen=True)
