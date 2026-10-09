@@ -255,6 +255,12 @@ class Run:
             if x not in out:
                 out.append(x)
         return out
+    def f_intersection(self, a, b):  # arrays: items of a also in b, duplicates removed (Power Automate semantics)
+        out = []
+        for x in list(a or []):
+            if x in list(b or []) and x not in out:
+                out.append(x)
+        return out
     def f_startsWith(self, s, t): return _str(s).lower().startswith(_str(t).lower())
     def f_float(self, x): return float(x)
     def f_removeProperty(self, obj, k): return {x: v for x, v in obj.items() if x != k}

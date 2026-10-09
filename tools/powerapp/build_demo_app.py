@@ -23,8 +23,9 @@ import yaml
 FLOW_APPOPEN, FLOW_READ, FLOW_SAVE = "'TS-AppOpen'", "'TS-ReadOwn'", "'TS-SaveEntry'"
 FLOW_TEAM, FLOW_APPROVE = "'TS-ReadTeam'", "'TS-Approve'"  # S07.2 team approval (guarded; no direct entry access)
 FLOW_UNAPPROVE = "'TS-Unapprove'"  # S07.3 explicit per-row unapproval
+FLOW_REG_READ, FLOW_REG_SAVE = "'REG-ReadMatrix'", "'REG-SaveMatrix'"  # R3 M1 S12.5 Hour Registration (guarded; no direct list access)
 REFERENCE_SOURCES = ("Projects", "ProjectPhases", "Phases", "WorkTypes", "Shifts", "HourTypes")
-PROTECTED_LISTS = ("TimesheetEntries", "AuditLog", "Employees", "AppSettings")
+PROTECTED_LISTS = ("TimesheetEntries", "AuditLog", "Employees", "AppSettings", "HourRegistrations")
 PAGE_SIZE = 100
 
 # PROVISIONAL DEMO WORDING (R1-Q4 open): neutral, no internals; the correlation id is appended by the app.
@@ -72,6 +73,13 @@ MESSAGES = {
     "MSG_UNAPPROVE_CONFIRM": "Bạn có muốn hủy phê duyệt nội dung chấm công này không?",
     "MSG_UNAPPROVE_OK": "The approval was cancelled.",
     "MSG_ROW_UNAPPROVED": "Approval cancelled.",
+    # R3 M1 Hour Registration (Đăng ký công)
+    "REG_OK": "Đã lưu công đăng ký.",
+    "REG_REFUSED": "Chưa lưu: có ô không hợp lệ hoặc vừa được người khác thay đổi. Dữ liệu đã được tải lại; các ô bạn sửa vẫn được giữ.",
+    "REG_PARTIAL": "Đã lưu một phần: một số ô vừa được người khác thay đổi. Dữ liệu đã được tải lại; các ô chưa lưu vẫn được giữ.",
+    "REG_INVALID": "Giá trị phải là số lớn hơn hoặc bằng 0, tối đa 2 chữ số thập phân.",
+    "REG_LEAVE": "Có thay đổi chưa lưu. Bỏ các thay đổi này?",
+    "REG_NO_ACCESS": "Bạn không có quyền xem Đăng ký công.",
 }
 
 
@@ -116,7 +124,8 @@ If(varRead.ok = "true",
 APP_ONSTART = """
 ClearCollect(colMessages, %s);
 Set(varBusy, false); Set(varSaving, false); Set(varReloadRequired, false); Set(varNoTeam, false); Set(varApproving, false);
-Set(varConfirm, false); Set(varTeamMode, ""); Set(varNoUnapprove, false); Set(varUnConfirm, false); Set(varPendingCount, Blank())
+Set(varConfirm, false); Set(varTeamMode, ""); Set(varNoUnapprove, false); Set(varUnConfirm, false); Set(varPendingCount, Blank());
+Set(varNoReg, false); Set(varRegPid, Blank()); Set(varRegCanEdit, false); Set(varRegLeave, false); Set(varRegSwitch, false)
 """ % _table(MESSAGES)
 
 # Power Apps Studio rejects Navigate in the start screen's OnVisible ("would automatically always navigate away"):
@@ -235,6 +244,56 @@ Set(varTeamAfter, Blank());
 """ % {"F": FLOW_UNAPPROVE, "OK": MSG % '"MSG_UNAPPROVE_OK"', "MSG": MSG % "varUn.messagecode"} + TEAM_READ
 
 
+# R3 M1 S12.5 Hour Registration. The matrix comes only from the guarded REG-ReadMatrix (rows = the project's current
+# phases, columns = every discipline; BLANK vs explicit 0 kept); edits are held in colRegEdit {k, ph, d, t} and only
+# changed cells are sent to REG-SaveMatrix (one call, <= 100 cells). Read-only when the server says canedit = false.
+REG_READ = """
+Set(varBusy, true);
+Set(varReg, %(F)s.Run(Text(varRegPid)));
+Set(varBusy, false);
+If(varReg.ok = "true",
+    Set(varRegCanEdit, varReg.canedit = "true");
+    // STT = the row's position in the project's phase order (legacy column "STT")
+    ClearCollect(colRegPhases, With({t: Table(ParseJSON(varReg.phases))}, ForAll(Sequence(CountRows(t)), With({r: Index(t, Value).Value},
+        {n: Value, id: Value(r.id), code: Text(r.code), name: Text(r.name)}))));
+    ClearCollect(colRegDiscs, ForAll(Table(ParseJSON(varReg.disciplines)), {id: Value(ThisRecord.Value.id), code: Text(ThisRecord.Value.code),
+        name: Text(ThisRecord.Value.name)}));
+    ClearCollect(colRegCells, ForAll(Table(ParseJSON(varReg.cells)), {k: Text(ThisRecord.Value.phaseId) & "|" & Text(ThisRecord.Value.disciplineId),
+        state: Text(ThisRecord.Value.state), value: Text(ThisRecord.Value.value), etag: Text(ThisRecord.Value.etag)})),
+    Clear(colRegPhases); Clear(colRegDiscs); Clear(colRegCells);
+    If(varReg.resultcode = "ROLE_NOT_ALLOWED", Set(varNoReg, true));
+    Notify(If(varReg.resultcode = "ROLE_NOT_ALLOWED", %(NA)s, %(MSG)s) & " (" & varReg.correlationid & ")", NotificationType.Error))
+""" % {"F": FLOW_REG_READ, "NA": MSG % '"REG_NO_ACCESS"', "MSG": MSG % "varReg.messagecode"}
+
+REG_OPEN = "Set(varRegPid, ddRegProject.Selected.ID); Clear(colRegEdit); Set(varRegSwitch, false);\n" + REG_READ
+REG_DIRTY = 'Filter(colRegEdit As e, e.t <> Coalesce(LookUp(colRegCells, k = e.k).value, ""))'
+REG_INVALID = 'Filter(colRegEdit As e, !IsBlank(Trim(e.t)) && !IsMatch(Trim(e.t), "[0-9]+([.,][0-9]{1,2})?"))'
+REG_SAVE = """
+Set(varSaving, true);
+Set(varRegSave, %(F)s.Run(Text(varRegPid), JSON(ForAll(%(DIRTY)s As c, {phaseId: c.ph, disciplineId: c.d,
+    state: If(IsBlank(Trim(c.t)), "blank", "value"), value: Substitute(Trim(c.t), ",", "."),
+    etag: Coalesce(LookUp(colRegCells, k = c.k).etag, "")}), JSONFormat.Compact), GUID()));
+Set(varSaving, false);
+ClearCollect(colRegRes, ForAll(Table(ParseJSON(varRegSave.results)), {k: Text(ThisRecord.Value.phaseId) & "|" & Text(ThisRecord.Value.disciplineId),
+    rc: Text(ThisRecord.Value.resultcode)}));
+// committed / unchanged cells leave the edit set; refused or conflicting cells stay dirty against the reloaded values
+ClearCollect(colRegEditTmp, Filter(colRegEdit As e, !(e.k in Filter(colRegRes, rc = "OK" || rc = "NO_CHANGE").k)));
+ClearCollect(colRegEdit, colRegEditTmp);
+Notify(Switch(varRegSave.resultcode, "OK", %(OK)s, "REFUSED", %(REF)s, "PARTIAL", %(PAR)s, %(MSG)s) & " (" & varRegSave.correlationid & ")",
+    Switch(varRegSave.resultcode, "OK", NotificationType.Success, "PARTIAL", NotificationType.Warning, NotificationType.Error));
+""" % {"F": FLOW_REG_SAVE, "DIRTY": REG_DIRTY, "OK": MSG % '"REG_OK"', "REF": MSG % '"REG_REFUSED"', "PAR": MSG % '"REG_PARTIAL"',
+       "MSG": MSG % "varRegSave.messagecode"} + REG_READ
+REG_CELL = 'Text(ThisItem.phid) & "|" & Text(ThisItem.id)'
+REG_CELL_ORIG = 'Coalesce(LookUp(colRegCells, k = %s).value, "")' % REG_CELL
+REG_CELL_EDIT = "LookUp(colRegEdit, k = %s)" % REG_CELL
+REG_ONVISIBLE = """
+Set(varRegLeave, false); Set(varRegSwitch, false);
+ClearCollect(colRegYears, {y: "All"});
+Collect(colRegYears, ForAll(Sort(Distinct(Filter(Projects, !IsBlank(ProjectYear)), ProjectYear), Value), {y: Text(Value)}));
+If(!IsBlank(varRegPid), """ + REG_READ.strip() + """)
+"""
+
+
 def _mode(label, value):
     return ("Set(varTeamMode, %s); Set(varConfirm, false); Set(varUnConfirm, false); Clear(colSel); Clear(colApprRes); "
             "Set(varTeamAfter, Blank());\n" % value) + TEAM_READ
@@ -282,6 +341,8 @@ def screens() -> dict:
             {"lblPending": ctl("Label@2.5.1", X="600", Y="130", Width="400", Height="40", FontWeight="FontWeight.Bold",
                                Visible="!varNoTeam && !IsBlank(varPendingCount)",
                                Text='"Chờ phê duyệt: " & If(varPendingMore, "%d+", Text(varPendingCount))' % PENDING_PAGE)},
+            {"btnReg": ctl("Classic/Button@2.2.0", Text='"Đăng ký công"', X="1020", Y="130", Width="200", Visible="!varNoReg",
+                           OnSelect="Navigate(scrHourRegistration, ScreenTransition.None)")},
             {"galEntries": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
                 "Items": _f("SortByColumns(colRows, \"workDate\", SortOrder.Descending, \"id\", SortOrder.Descending)"),
                 "X": "=20", "Y": "=180", "Width": "=Parent.Width - 40", "Height": "=Parent.Height - 260", "TemplateSize": "=70",
@@ -360,6 +421,59 @@ def screens() -> dict:
                     {"lblRes": ctl("Label@2.5.1", X="5", Y="0", Width="Parent.TemplateWidth - 10", Height="30",
                                    Text='"#" & ThisItem.itemid & ": " & If(ThisItem.resultcode = "OK", If(varTeamMode = "Approved", %s, %s), %s)'
                                    % (MSG % '"MSG_ROW_UNAPPROVED"', MSG % '"MSG_ROW_APPROVED"', MSG % "ThisItem.messagecode"))}]}}]},
+        "scrHourRegistration": {"Properties": {"OnVisible": _f(REG_ONVISIBLE)}, "Children": [
+            {"lblRegTitle": hdr("Đăng ký công")},
+            {"lblRegBusy": ctl("Label@2.5.1", Text='If(varBusy || varSaving, "Working…", "")', X="20", Y="60", Width="400", Height="30")},
+            {"btnRegBack": ctl("Classic/Button@2.2.0", Text='"Back"', X="20", Y="100", Width="120",
+                               OnSelect="If(CountRows(%s) > 0, Set(varRegLeave, true), Navigate(scrMyTimesheets, ScreenTransition.None))" % REG_DIRTY)},
+            {"ddRegYear": ctl("Classic/DropDown@2.3.1", X="160", Y="100", Width="140", Items="colRegYears", **{"Items.Value": "y"})},
+            {"ddRegProject": ctl("Classic/DropDown@2.3.1", X="320", Y="100", Width="600",
+                                 Items='SortByColumns(AddColumns(If(ddRegYear.Selected.y = "All", Projects, Filter(Projects, ProjectYear = Value(ddRegYear.Selected.y))), "Label", ProjectCode & " — " & Title), "Label", SortOrder.Ascending)',
+                                 Default="If(IsBlank(varRegPid), Blank(), LookUp(Projects, ID = varRegPid).Title)",
+                                 OnChange="If(CountRows(%s) > 0, Set(varRegSwitch, true), %s)" % (REG_DIRTY, "Set(varRegPid, ddRegProject.Selected.ID); Clear(colRegEdit);\n" + REG_READ.strip()),
+                                 **{"Items.Value": "Label"})},
+            {"btnRegReload": ctl("Classic/Button@2.2.0", Text='"Tải lại"', X="940", Y="100", Width="120",
+                                 DisplayMode="If(IsBlank(varRegPid) || varBusy || varSaving, DisplayMode.Disabled, DisplayMode.Edit)",
+                                 OnSelect="If(CountRows(%s) > 0, Set(varRegSwitch, true), %s)" % (REG_DIRTY, REG_READ.strip()))},
+            {"btnRegSave": ctl("Classic/Button@2.2.0", Text='If(varSaving, "Saving…", "Lưu (" & CountRows(%s) & ")")' % REG_DIRTY,
+                               X="1080", Y="100", Width="160", Visible="varRegCanEdit",
+                               DisplayMode="If(varSaving || varBusy || IsBlank(varRegPid) || CountRows(%s) = 0 || CountRows(%s) > 0 || CountRows(%s) > 100, DisplayMode.Disabled, DisplayMode.Edit)"
+                                           % (REG_DIRTY, REG_INVALID, REG_DIRTY),
+                               OnSelect=REG_SAVE)},
+            {"lblRegInfo": ctl("Label@2.5.1", X="20", Y="145", Width="1200", Height="30",
+                               Text='If(IsBlank(varRegPid), "", If(varRegCanEdit, "", "Chỉ xem  ·  ") & "Công đăng ký cho dự án (công)" & If(CountRows(%s) > 0, "  ·  " & %s, ""))'
+                                    % (REG_INVALID, MSG % '"REG_INVALID"'))},
+            {"lblRegLeave": ctl("Label@2.5.1", Text=MSG % '"REG_LEAVE"', X="20", Y="180", Width="560", Height="30", FontWeight="FontWeight.Bold",
+                                Visible="varRegLeave || varRegSwitch")},
+            {"btnRegLeaveYes": ctl("Classic/Button@2.2.0", Text='"Yes"', X="600", Y="180", Width="90", Height="40", Visible="varRegLeave || varRegSwitch",
+                                   OnSelect="Clear(colRegEdit); If(varRegLeave, Set(varRegLeave, false); Navigate(scrMyTimesheets, ScreenTransition.None), "
+                                            "Set(varRegSwitch, false); Set(varRegPid, ddRegProject.Selected.ID);\n" + REG_READ.strip() + ")")},
+            {"btnRegLeaveNo": ctl("Classic/Button@2.2.0", Text='"No"', X="700", Y="180", Width="90", Height="40", Visible="varRegLeave || varRegSwitch",
+                                  OnSelect="Set(varRegLeave, false); Set(varRegSwitch, false); Reset(ddRegProject)")},
+            {"galRegHead": {"Control": "Gallery@2.15.0", "Variant": "Horizontal", "Properties": {
+                "Items": _f("colRegDiscs"), "X": "=300", "Y": "=230", "Width": "=Parent.Width - 320", "Height": "=40", "TemplateSize": "=100",
+                "Visible": _f("!IsBlank(varRegPid)")},
+                "Children": [{"lblRegHead": ctl("Label@2.5.1", X="0", Y="0", Width="96", Height="40", Text="ThisItem.name", Align="Align.Center",
+                                                FontWeight="FontWeight.Bold")}]}},
+            {"galRegRows": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
+                "Items": _f("colRegPhases"), "X": "=20", "Y": "=275", "Width": "=Parent.Width - 40", "Height": "=Parent.Height - 295",
+                "TemplateSize": "=50", "Visible": _f("!IsBlank(varRegPid)")},
+                "Children": [
+                    {"lblRegPhase": ctl("Label@2.5.1", X="0", Y="5", Width="270", Height="40",
+                                        Text='Text(ThisItem.n) & ".  " & ThisItem.code & "  ·  " & ThisItem.name')},
+                    {"galRegCells": {"Control": "Gallery@2.15.0", "Variant": "Horizontal", "Properties": {
+                        "Items": _f('AddColumns(colRegDiscs, "phid", ThisItem.id)'), "X": "=280", "Y": "=0", "Width": "=Parent.TemplateWidth - 290",
+                        "Height": "=50", "TemplateSize": "=100"},
+                        "Children": [
+                            {"txtRegCell": ctl("Classic/TextInput@2.3.2", X="2", Y="5", Width="92", Height="40", Align="Align.Center",
+                                               HintText='"—"',
+                                               Default="If(IsBlank(%s), %s, %s.t)" % (REG_CELL_EDIT, REG_CELL_ORIG, REG_CELL_EDIT),
+                                               DisplayMode="If(varRegCanEdit && !varSaving, DisplayMode.Edit, DisplayMode.View)",
+                                               Fill='If(Self.Text <> %s, RGBA(255, 244, 206, 1), RGBA(255, 255, 255, 1))' % REG_CELL_ORIG,
+                                               BorderColor='If(!IsBlank(Trim(Self.Text)) && !IsMatch(Trim(Self.Text), "[0-9]+([.,][0-9]{1,2})?"), RGBA(196, 49, 75, 1), RGBA(166, 166, 166, 1))',
+                                               AccessibleLabel='ThisItem.name & " / " & LookUp(colRegPhases, id = ThisItem.phid).name',
+                                               OnChange="ClearCollect(colRegEditTmp, Filter(colRegEdit, k <> %s)); Collect(colRegEditTmp, {k: %s, ph: ThisItem.phid, d: ThisItem.id, t: Self.Text}); ClearCollect(colRegEdit, colRegEditTmp)"
+                                                        % (REG_CELL, REG_CELL))}]}}]}}]},
         "scrEntry": {"Children": [
             {"lblTitle": ctl("Label@2.5.1", Text='If(IsBlank(varEdit), "New entry", "Edit draft")', X="20", Y="10", Width="600", Height="50",
                              Size="20", FontWeight="FontWeight.Bold")}, {"lblBusy": busy},

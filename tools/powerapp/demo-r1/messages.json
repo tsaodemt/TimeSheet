@@ -41,6 +41,12 @@
   "MSG_NOT_APPROVED": "This entry is not approved.",
   "MSG_UNAPPROVE_CONFIRM": "Bạn có muốn hủy phê duyệt nội dung chấm công này không?",
   "MSG_UNAPPROVE_OK": "The approval was cancelled.",
-  "MSG_ROW_UNAPPROVED": "Approval cancelled."
+  "MSG_ROW_UNAPPROVED": "Approval cancelled.",
+  "REG_OK": "Đã lưu công đăng ký.",
+  "REG_REFUSED": "Chưa lưu: có ô không hợp lệ hoặc vừa được người khác thay đổi. Dữ liệu đã được tải lại; các ô bạn sửa vẫn được giữ.",
+  "REG_PARTIAL": "Đã lưu một phần: một số ô vừa được người khác thay đổi. Dữ liệu đã được tải lại; các ô chưa lưu vẫn được giữ.",
+  "REG_INVALID": "Giá trị phải là số lớn hơn hoặc bằng 0, tối đa 2 chữ số thập phân.",
+  "REG_LEAVE": "Có thay đổi chưa lưu. Bỏ các thay đổi này?",
+  "REG_NO_ACCESS": "Bạn không có quyền xem Đăng ký công."
  }
 }
