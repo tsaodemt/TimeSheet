@@ -165,6 +165,15 @@ M2_RESOLVED_RULES = {
     "OD-40": (r"BLANK_NOT_REGISTERED / ZERO_EXPLICIT", (r"distinguish BLANK \(not registered\) from numeric 0",)),
     "OD-44": (r"MIN_0 / NEGATIVE_DENY / NO_BUSINESS_MAX", (r"minimum 0", r"Negative values SHALL be denied",
                                                             r"no business maximum", r"TECHNICAL_LIMIT, not a business rule")),
+    "OD-16": (r"MANUAL_PM_ENTRY", (r"entered manually by the PM \(OD-16\): no formula, no derivation from finance data and no import",)),
+    "OD-22": (r"NO_PHASE_DIMENSION", (r"project × recipient with no phase dimension \(OD-22\)",)),
+    "OD-23": (r"PROJECT_LIFETIME", (r"one project-lifetime value per recipient with no period dimension",)),
+    "OD-24": (r"ONE_AUTHORITATIVE_PM_PER_PROJECT_MAINTAINED_BY_PMO", (r"at most one authoritative PM",
+                                                                       r"Only PMO SHALL set, change or remove it",
+                                                                       r"PMO and Executive SHALL NOT edit allocations merely by role")),
+    "OD-33": (r"APPROVED_ONLY", (r"Only `TimesheetEntries` in the Approved state SHALL count",)),
+    "OD-37": (r"VIEW_PROJECT_PM_PMO_EXECUTIVE", (r"visible only to the project's authoritative PM \(own projects\), PMO \(all projects\) and Executive",
+                                                 r"SHALL NOT inherit the legacy Hour Registration visibility")),
 }
 
 
@@ -211,12 +220,17 @@ def check_m2(d, dec, blocking, conditional, resolved, not_applicable, m2_gate):
             errs.append("design still proposes ActualEffortEntries although OD-19 = TIMESHEETENTRIES")
     # Vietnamese meeting summary: table = exactly the derived M2 gate; no closed M2 decision is asked again.
     summ = read(d, "M2-DECISION-SUMMARY.md")
-    asked = {re.match(r"\| (OD-\d\d)", l).group(1) for l in summ.splitlines() if re.match(r"\| OD-\d\d \|", l)}
-    if asked != set(m2_gate):
-        errs.append("M2-DECISION-SUMMARY table %s != M2 gate %s" % (sorted(asked), sorted(m2_gate)))
-    for oid in sorted((resolved | not_applicable) & set(M2_DECISIONS)):
-        if oid in summ:
-            errs.append("M2-DECISION-SUMMARY still mentions closed decision %s" % oid)
+    m = re.search(r"(?ms)^## Bảng câu hỏi\n(.*?)(?=^## |\Z)", summ)
+    if not m:
+        errs.append("M2-DECISION-SUMMARY has no '## Bảng câu hỏi' section")
+    else:
+        questions = m.group(1)
+        asked = {re.match(r"\| (OD-\d\d)", l).group(1) for l in questions.splitlines() if re.match(r"\| OD-\d\d \|", l)}
+        if asked != set(m2_gate):
+            errs.append("M2-DECISION-SUMMARY question table %s != M2 gate %s" % (sorted(asked), sorted(m2_gate)))
+        for oid in sorted((resolved | not_applicable) & set(M2_DECISIONS)):
+            if oid in questions:
+                errs.append("M2-DECISION-SUMMARY still asks closed decision %s" % oid)
     sections = re.split(r"(?m)^### Requirement: ", spec)[1:]
     for sec in sections:
         title = sec.splitlines()[0].strip()

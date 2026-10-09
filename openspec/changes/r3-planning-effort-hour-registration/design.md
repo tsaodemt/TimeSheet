@@ -10,7 +10,7 @@
   outcome (TS-Approve); typed refusals `MSG_<code>`; `AUDIT_DEGRADED` (AUD-F1 option B); correlation id = flow run name;
   optional V2 trigger inputs passed by trigger key; Canvas never binds protected lists.
 - Evidence base: legacy Hour Registration analysis (39 behaviours, `traceability.md` §2) and the requirement / decision
-  inventory (14 NR-EFF plus the reviewed decision register in `decisions.md`). EFF-F-2..5, 7, 9 and 10 remain open; EFF-F-8 is RESOLVED_BY_EVIDENCE as deferred for the current scope (OD-21); EFF-F-1 (OD-14 = man-day), EFF-F-6 (OD-19 = TimesheetEntries) and OD-40 (blank ≠ 0) are resolved by owner decision 2026-10-10.
+  inventory (14 NR-EFF plus the reviewed decision register in `decisions.md`). EFF-F-2, 4, 5 and 7 remain open; EFF-F-8 is RESOLVED_BY_EVIDENCE as deferred for the current scope (OD-21); EFF-F-1 (OD-14 = man-day), EFF-F-3 (OD-16 = manual), EFF-F-6 (OD-19 = TimesheetEntries), EFF-F-9 (OD-22 = no phase), EFF-F-10 (OD-23 = lifetime) and the other M2 decisions are resolved by owner decision 2026-10-10.
 
 ## 2. Goals / Non-Goals
 
@@ -26,7 +26,7 @@ salary review, bonus, salary-cost figures, resource evaluation formula, Producti
 | Concept | Source | Grain (evidence) | Status | Model in this spec |
 |---|---|---|---|---|
 | **Legacy Hour Registration** (E14, "Công đăng ký cho dự án") | Legacy screen + data | project × phase × discipline, man-days, lifetime, no workflow | Legacy, verified | Entity `HourRegistrations` |
-| **Project effort registration** (rev01 A.I, NR-EFF-01) | Customer document | project × recipient (Quản lý phòng, PM, disciplines); man-days (OD-14); phase / period UNKNOWN | New, rules partly open | Candidate entity `ProjectEffortAllocations` |
+| **Project effort registration** (rev01 A.I, NR-EFF-01) | Customer document | project × recipient (Quản lý phòng, PM, disciplines); man-days (OD-14); no phase (OD-22); project lifetime (OD-23) | New, M2 rules decided | Candidate entity `ProjectEffortAllocations` |
 | **Discipline effort registration** (A.II, NR-EFF-02..04) | Customer document | project × discipline × task (phase or work type, OD-29) × person? (OD-30) | New, rules open | Candidate entity `DisciplineEffortRegistrations` |
 | **Actual effort** (A.III, NR-EFF-05/06) | Customer document | existing `TimesheetEntries` (OD-19 resolved) | Existing data; A.III lock rules open (M3) | §10 option A; no new entity |
 
@@ -64,7 +64,8 @@ BLANK or VALUE. Operations: set value, clear. Proposed target adds no state (add
 
 | Transition | Actor | Precondition | Operation | Server-side authorization | Result | Audit | Editable after | Concurrency | Failure |
 |---|---|---|---|---|---|---|---|---|---|
-| create / change allocation | PM (OD-24) | project editable, unit/period/source decisions closed | EFF-SaveProjectAllocation | `EFF.ProjectEdit` + project scope (OD-24) | allocation value set and effective immediately | WriteProxy per changed value | yes; no A.I approval state in current scope | ETag per item | typed refusal, no write |
+| create / change allocation | the project's authoritative PM (OD-24) | project has a PM; caller = that PM | EFF-SaveProjectAllocation | `EFF.ProjectEdit` via project-PM scope (OD-24) | allocation value set and effective immediately | WriteProxy per changed value | yes; no A.I approval state in current scope | ETag per item | typed refusal, no write |
+| set / change PM | PMO (OD-24) | project exists | EFF-SetProjectPm | `EFF.ProjectPmAssign` (PMO) | project PM updated | WriteProxy | yes | ETag | typed refusal, no write |
 
 ### 4.3 Discipline effort (A.II) and actual effort (A.III)
 
@@ -118,7 +119,8 @@ keys); ETag = SharePoint `odata.etag`; version history on.
 
 | Entity | Purpose | Business key (candidate) | Key columns | State | Volume (est.) |
 |---|---|---|---|---|---|
-| `ProjectEffortAllocations` | A.I PM registration (NR-EFF-01) | Project + RecipientCategory + Phase† + Period† | `RecipientCategory` (Choice: QuanLyPhong / PM / Discipline), `DisciplineItemId`†, `PhaseItemId`† (OD-22), `PeriodKey`† (OD-23), `Effort` (man-days, ≤ 2 decimals rejected above, OD-14; ≥ 0, no business maximum, OD-44; blank = not registered distinct from explicit 0, OD-40; representation designed in this schema, not copied from M1), `SourceRef`† (reference to the allocation table, only if OD-16 needs it); no field shared with or linked to `HourRegistrations` (OD-25 resolved = separate). OD-31 maps QuanLyPhong to later reporting visibility, not A.I storage | no approval state in current scope (resolved OD-26) | ≈ 200 projects × ≤ 6 recipients × periods |
+| `ProjectEffortAllocations` | A.I PM registration (NR-EFF-01) | Project + RecipientCategory (+ Discipline for the discipline category); no phase (OD-22), no period (OD-23) | `RecipientCategory` (Choice: QuanLyPhong / PM / Discipline), `DisciplineItemId`, `Effort` (man-days, ≤ 2 decimals rejected above, OD-14; ≥ 0, no business maximum, OD-44; blank = not registered distinct from explicit 0, OD-40; representation designed in this schema, not copied from M1); manual PM entry, no source/import column (OD-16); no field shared with or linked to `HourRegistrations` (OD-25 resolved = separate). OD-31 maps QuanLyPhong to later reporting visibility, not A.I storage | no approval state in current scope (resolved OD-26) | ≈ 200 projects × ≤ 6 recipients |
+| `Projects` (existing) + authoritative PM | project PM (OD-24) | project | new column for the PM's stable employee key (name fixed at implementation), set only by PMO via `EFF-SetProjectPm`; ≤ 1 PM per project | – | ≈ 200 |
 | `DisciplineEffortRegistrations` | A.II discipline registration (NR-EFF-02..04) | Project + Discipline + Task† + Owner† + Period† | `TaskType`/`TaskItemId`† (OD-29), `OwnerUpn`/`EmployeeItemId`† (OD-30), `Effort` (unit OD-45, OPEN_FOR_M3), `Status` Draft/Approved, `ApprovedBy` (Text UPN), `ApprovedOn` (UTC) — same conventions as EPIC 07 | Draft → Approved (locked) | ≈ staff (≈ 120) × active projects × periods: ≈ 5–30k/yr† |
 | `ActualEffortEntries` — **not created** (OD-19 resolved = TimesheetEntries) | A.III actual effort is read from existing `TimesheetEntries` | – | – | – | – |
 
@@ -201,7 +203,8 @@ client decoys (`OwnerUpn, Role, Scope, DisciplineCode, ProjectItemId-as-claim, A
 |---|---|---|---|---|---|---|---|---|---|---|
 | `REG-ReadMatrix` | load one project's matrix | `ProjectItemId` | `REG.View` (OD-05 legacy parity; assignment switch OD-06) | project exists (any status, OD-07) | read Projects (phase list), Phases, Disciplines, HourRegistrations (`ProjectItemId eq`) | – | read-only | AuthorizationAllow/Deny + ReadProxy | `phases[]`, `disciplines[]`, `cells[] {phaseId, disciplineId, state: BLANK\|VALUE, value, etag}` for current phases only, `canEdit` | ROLE_NOT_ALLOWED, NOT_FOUND, VALIDATION_LOOKUP |
 | `REG-SaveMatrix` | save changed cells | `ProjectItemId`, `Changes` JSON `[{phaseId, disciplineId, state, value, etag}]` (1–100), `ClientRequestId` | `REG.Edit` | preflight **all** cells before any write: phase belongs to the project (OD-02), discipline exists in the master (OD-08), value domain (numeric, ≥ 0, ≤ 2 decimals, no business maximum; OD-03, OD-42), project exists (any status, OD-07); stale cells of the project (phase no longer in its set, value not empty) are added to the write set as Clear (OD-08 legacy parity), no duplicate key in request, ETag matches current (or "new" when no item); server resolves stable Project/Phase/Discipline LegacyIds before constructing `RegKey` | per cell: POST new item (unique `RegKey`) or MERGE `ManDays` with `If-Match` | §9 | `ClientRequestId` is correlation only; state equality may return `NO_CHANGE`; stale ETag returns `CONFLICT`; unique RegKey prevents duplicate cell items | WriteProxy per committed changed cell (Create / Update / Clear) | `resultcode` OK / PARTIAL / REFUSED, `results[] {phaseId, disciplineId, resultcode, etag}` | VALIDATION_REQUEST, VALIDATION_VALUE, CONFLICT, LOCKED (n/a for S12.5), ROLE_NOT_ALLOWED |
-| `EFF-ReadProjectAllocation` / `EFF-SaveProjectAllocation` | A.I | analogous | `EFF.ProjectView` / `EFF.ProjectEdit` + project scope (OD-24) | man-days, ≤ 2 decimals else VALIDATION_VALUE (no rounding, OD-14); ≥ 0, negative VALIDATION_VALUE, no business maximum (OD-44); BLANK vs explicit 0 (OD-40); period/phase/source per OD-23/22/16 | `ProjectEffortAllocations` | §9 | same replay-safe model; no request-id exactly-once claim | WriteProxy | same shape | + OUT_OF_PERIOD |
+| `EFF-ReadProjectAllocation` / `EFF-SaveProjectAllocation` | A.I | analogous | `EFF.ProjectView` (PMO, Executive, project PM) / `EFF.ProjectEdit` (project PM only) (OD-24, OD-37) | man-days, ≤ 2 decimals else VALIDATION_VALUE (no rounding, OD-14); ≥ 0, negative VALIDATION_VALUE, no business maximum (OD-44); BLANK vs explicit 0 (OD-40); project × recipient, lifetime (OD-22, OD-23); manual entry (OD-16) | `ProjectEffortAllocations` | §9 | same replay-safe model; no request-id exactly-once claim | WriteProxy | same shape | SCOPE_NOT_ALLOWED (not the project's PM / no PM) |
+| `EFF-SetProjectPm` | set / change / remove a project's PM | `ProjectItemId`, employee key, ETag | `EFF.ProjectPmAssign` (PMO) | employee exists; ≤ 1 PM | `Projects` | ETag | NO_CHANGE / CONFLICT | WriteProxy | per call | ROLE_NOT_ALLOWED, VALIDATION_LOOKUP, CONFLICT |
 | `EFF-ReadDisciplineEffort` | own / discipline / queue modes | `ProjectItemId`, `Mode` | `EFF.DisciplineView` | – | `DisciplineEffortRegistrations` | paging ≤ 500 | – | ReadProxy | rows + `remainingCeiling` | – |
 | `EFF-SaveDisciplineEffort` | register / change / clear Draft | changes JSON | `EFF.DisciplineEdit`, discipline scope; ownership grain/resolution per OD-30 | ceiling (OD-15), period open (OD-23), Draft only | same | §9.3 counter | replay-safe semantics per §9.4 | WriteProxy | per row | OVER_CEILING, LOCKED, CONFLICT |
 | `EFF-ApproveDisciplineEffort` | Chủ trì approve = lock | items `{itemId, etag}` 1–50 | `EFF.DisciplineApprove`, discipline scope (OD-17); self-approval rule per OD-28 | Draft; order (OD-27) | MERGE Status/ApprovedBy/ApprovedOn | per row (TS-Approve pattern) | ETag | exactly one Approval business event per approved row; locked state recorded in event/result | per row | ROLE_NOT_ALLOWED, SCOPE_NOT_ALLOWED, LOCKED, CONFLICT |
@@ -253,16 +256,16 @@ Wire/storage semantics (OD-01 resolved = A): wire format per cell is `state` ∈
 | B. Separate registration | staff register actual effort per project / period in `ActualEffortEntries` | new list + flows | own Draft → Chủ trì approve/lock (§4.3) | duplicate data entry with timesheets; reconciliation needed | new fact | high |
 | C. Hybrid | timesheet hours as default, Chủ trì confirms a per-project actual snapshot | new snapshot list | approval of the snapshot | none on timesheet rows | snapshot fact | medium |
 
-**Option A is chosen by owner decision (OD-19 = TIMESHEETENTRIES).** Options B and C are kept for history only; no new actual-effort list, workflow or entry screen is built and OD-41 is NOT_APPLICABLE. Existing Timesheet actor / business-owner / on-behalf / entry-status semantics and security are preserved unchanged. OD-19 fixes the source only. Conversion: actual man-days = hours of the Timesheet rows counted under OD-33 ÷ `HoursPerManDay`, in the reporting/query contract; OD-33 is BLOCKING M2 because M2 acceptance computes this total, and no inclusion rule is assumed before it is decided.
+**Option A is chosen by owner decision (OD-19 = TIMESHEETENTRIES).** Options B and C are kept for history only; no new actual-effort list, workflow or entry screen is built and OD-41 is NOT_APPLICABLE. Existing Timesheet actor / business-owner / on-behalf / entry-status semantics and security are preserved unchanged. OD-19 fixes the source only. Conversion: actual man-days = Σ Approved Timesheet hours ÷ `HoursPerManDay`, in the reporting/query contract; OD-33 resolved = Approved only (Draft excluded).
 
 ## 11. Reporting data contract (EPIC 18 boundary — contract only)
 
 | Fact (grain) | Measure | Keys | Source | Filters |
 |---|---|---|---|---|
 | Registered budget (legacy) | `ManDays` — OD-01 resolved = A: storage keeps blank (null) and explicit 0 distinct; display shows blank vs "0"; aggregation sums blank as 0; "registered cell" counts exclude blank and include explicit 0 | Project, Phase, Discipline | HourRegistrations | Status Active; stale rows per OD-08 |
-| Planned project effort | `Effort` in man-days (OD-14), blank ≠ 0 (OD-40) | Project, RecipientCategory, Phase†, Period† | ProjectEffortAllocations | successful guarded saves (no A.I approval in current scope) |
+| Planned project effort | `Effort` in man-days (OD-14), blank ≠ 0 (OD-40) | Project, RecipientCategory (lifetime, no phase — OD-22/23) | ProjectEffortAllocations | successful guarded saves (no A.I approval in current scope) |
 | Discipline registered effort | `Effort` | Project, Discipline, Task†, Owner†, Period† | DisciplineEffortRegistrations | Draft / Approved flag exposed |
-| Actual effort | Timesheet hours ÷ `HoursPerManDay` → man-days (computed, not stored) | Project, Phase, Discipline (snapshot OD-35), Owner, Date | TimesheetEntries (OD-19) | counted rows per OD-33 (BLOCKING M2); ownership per existing Timesheet rules (OD-41 NOT_APPLICABLE) |
+| Actual effort | Timesheet hours ÷ `HoursPerManDay` → man-days (computed, not stored) | Project, Phase, Discipline (snapshot OD-35), Owner, Date | TimesheetEntries (OD-19) | EntryStatus = Approved only (OD-33); ownership per existing Timesheet rules (OD-41 NOT_APPLICABLE) |
 | Variance | normalised planned − actual | common approved keys | derived later | explicit comparison-unit conversion; source facts unchanged |
 
 Rules: legacy HourRegistration source remains man-days; EPIC 16 Project Effort is stored in man-days (OD-14) in its own schema; Timesheet hours stay hours and are normalised explicitly via `HoursPerManDay` in the query instead of changing source storage. Equal units never link M1 and M2 values. Period/lifetime presentation follows approved period decisions. Whether budget/planned rows with no actuals are shown follows OD-13; R3 preserves independent facts for either option. No salary, rate or cost column exists in the R3 contract; no KPI/evaluation input.
@@ -303,7 +306,7 @@ Rules: legacy HourRegistration source remains man-days; EPIC 16 Project Effort i
 Implementation of a milestone may start only when **all** hold for that milestone: legacy evidence mapped (done for
 S12.5: 39/39); NR-EFF mapped (14/14); the milestone's BLOCKING decisions answered and recorded with date/owner
 (gate sets are defined once, in the "Milestone gate sets" table of `decisions.md`, derived from its Blocking column and
-checked by `tools/spec/check_r3_open_spec.py`: **M1** 0 open decisions (gate APPROVED 2026-10-09), **M2** 6 (OD-16, 22, 23, 24, 33, 37; OD-41 NOT_APPLICABLE), **M3** 11
+checked by `tools/spec/check_r3_open_spec.py`: **M1** 0 open decisions (gate APPROVED 2026-10-09), **M2** 0 open decisions (all resolved 2026-10-10; release still needs the owner acceptance below), **M3** 11
 and the M2 gate satisfied, **GL** OD-11); data model, security model, flow contracts and UX reviewed
 and accepted by the project owner; test strategy and acceptance criteria approved; migration impact known (OD-11 for
 GL); dependencies confirmed (Projects / ProjectPhases / Disciplines lists live on STAGING; guard framework; AuditLog);
@@ -341,11 +344,11 @@ EPIC 17 implementation; **GL** = go-live with migrated data; **M4** = later repo
 - [A.I later declared to replace E14] → closed by OD-25 (resolved 2026-10-09 = separate); any change needs a new decision and spec delta.
 - [No transactions in SharePoint] → preflight all-or-nothing + per-cell ETag + explicit PARTIAL.
 - [Ceiling race] → counter item with ETag (EPIC 17), proven by a concurrency test.
-- [Chủ trì per project] → would need a project scope the guard lacks (new security work, OD-17/OD-24).
+- [Project scope] → new guard scope for the project's PM (OD-24 resolved), designed and tested in M2; Chủ trì per project would extend it (OD-17, M3).
 - [Timesheet reuse for actuals] → chosen (OD-19 resolved); the A.III Chủ trì lock may conflict with the closed G5 approval roles — reconciled in M3 (OD-17/33) without restricting existing Timesheet behaviour.
 - [Blank vs 0 differs from the legacy UI] → owner decision OD-01 = A; migration keeps both states and reconciliation
   expects 199 items (4 explicit zeros) with Σ per project equal to legacy (§12).
 
 ## 17. Open questions
 
-Open questions are the 27 OPEN_DECISION items of `decisions.md` (17 unconditional BLOCKING, 0 conditional blockers, 10 NON_BLOCKING). Seventeen decisions are resolved in `decisions.md` §C (OD-01, 05, 07, 08, 14, 19, 25, 40, 42, 44 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence); OD-41 is NOT_APPLICABLE.
+Open questions are the 22 OPEN_DECISION items of `decisions.md` (12 unconditional BLOCKING, 0 conditional blockers, 10 NON_BLOCKING). Twenty-three decisions are resolved in `decisions.md` §C (OD-01, 05, 07, 08, 14, 16, 19, 22, 23, 24, 25, 33, 37, 40, 42, 44 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence); OD-41 is NOT_APPLICABLE.

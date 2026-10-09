@@ -38,9 +38,9 @@ immutable for every role). Self-approval SHALL follow OD-28; approval order SHAL
 - **THEN** the response is ROLE_NOT_ALLOWED and no Approval audit row with ALLOW exists
 
 ### Requirement: Chủ trì approval locks actual effort (NR-EFF-06)
-Actual effort approved by the Chủ trì SHALL be immutable for every role, with the Approved/Draft rule per OD-33. The
+Actual effort approved by the Chủ trì SHALL be immutable for every role, counting only Approved Timesheet rows (OD-33 resolved). The
 actual-effort source is the existing `TimesheetEntries` (OD-19 resolved 2026-10-10); the interaction of the A.III Chủ trì
-lock with the closed EPIC 07 approval roles SHALL be resolved by decision (OD-17, OD-33) before M3 implementation and
+lock with the closed EPIC 07 approval roles SHALL be resolved by decision (OD-17) before M3 implementation and
 SHALL NOT restrict existing Timesheet behaviour.
 
 #### Scenario: Approved actual is immutable

@@ -10,7 +10,7 @@
 R3 delivers planning and effort: the legacy budget matrix "Đăng ký công" (S12.5) must be replaced, and the customer's new
 requirement "Đăng ký công – rev01" adds project effort registration by the PM (EPIC 16), discipline effort registration
 with a ceiling, Chủ trì approval and lock (EPIC 17), and planned-vs-actual figures for later analytics (EPIC 18 boundary).
-EFF-F-2..5, 7, 9 and 10 remain open; EFF-F-1 (OD-14 = man-day) and EFF-F-6 (OD-19 = existing TimesheetEntries) are resolved by owner decision 2026-10-10; EFF-F-8 (resource evaluation) is RESOLVED_BY_EVIDENCE as deferred for the current scope (OD-21; project-owner scope directive) and remains a future-phase requirement. Legacy behaviour contradicts parts of the current backlog contract
+EFF-F-2, 4, 5 and 7 remain open; EFF-F-1 (OD-14 = man-day), EFF-F-3 (OD-16 = manual PM entry), EFF-F-6 (OD-19 = existing TimesheetEntries), EFF-F-9 (OD-22 = no phase) and EFF-F-10 (OD-23 = project lifetime) are resolved by owner decision 2026-10-10; EFF-F-8 (resource evaluation) is RESOLVED_BY_EVIDENCE as deferred for the current scope (OD-21; project-owner scope directive) and remains a future-phase requirement. Legacy behaviour contradicts parts of the current backlog contract
 (blank vs zero, matrix rows, read-only behaviour), and the two "Đăng ký công" concepts share a name but not a proven
 model. Writing code now would mean guessing business rules, which the new process forbids.
 
@@ -55,4 +55,4 @@ model. Writing code now would mean guessing business rules, which the new proces
 - **Future flows (not built):** `REG-ReadMatrix`, `REG-SaveMatrix`, `EFF-*` proposals in `design.md` §8.
 - **Future Canvas screens:** Hour Registration matrix; effort registration journeys (`design.md` §7).
 - **Existing artefacts touched later (not now):** role seed / ScopeConfig (`REG.*`, new `EFF.*` capabilities), audit catalogue (Approval records the resulting locked state; `Unlock` stays disabled until EFF-F-5/OD-18), backlog S12.5 / EPIC 16–18 wording after decisions.
-- **Decisions:** `decisions.md` contains 27 open items after review (17 unconditional BLOCKING, 0 CONDITIONAL BLOCKING, 10 NON_BLOCKING) plus 17 resolved items (OD-01, 05, 07, 08, 14, 19, 25, 40, 42, 44 owner decisions; OD-02, 03, 04, 09, 21, 26, 38 by evidence) and 1 NOT_APPLICABLE (OD-41). No open item blocks S12.5 (M1_IMPLEMENTATION_GATE = APPROVED 2026-10-09); gate sets per milestone are in `decisions.md`. Implementation entry gate R3-G0 is CLOSED.
+- **Decisions:** `decisions.md` contains 22 open items after review (12 unconditional BLOCKING, 0 CONDITIONAL BLOCKING, 10 NON_BLOCKING) plus 23 resolved items (OD-01, 05, 07, 08, 14, 16, 19, 22, 23, 24, 25, 33, 37, 40, 42, 44 owner decisions; OD-02, 03, 04, 09, 21, 26, 38 by evidence) and 1 NOT_APPLICABLE (OD-41). No open item blocks S12.5 (M1_IMPLEMENTATION_GATE = APPROVED 2026-10-09); gate sets per milestone are in `decisions.md`. Implementation entry gate R3-G0 is CLOSED.
