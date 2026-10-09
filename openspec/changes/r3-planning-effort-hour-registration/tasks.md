@@ -7,7 +7,7 @@
 
 - [x] 0.1 Project owner review of proposal, design, specs, acceptance, role matrix — APPROVED 2026-10-09 (Open Spec V3 baseline)
 - [x] 0.2 Record answers for M1 decisions — DONE 2026-10-09: OD-01, 02, 04, 09, 42 (owner), OD-03 (evidence), OD-25, OD-07, OD-08, OD-05 (owner, legacy parity). M1_IMPLEMENTATION_GATE = APPROVED
-- [ ] 0.3 Customer workshop (backlog S16.1) for the M2 and M3 gate sets in `decisions.md` (open EFF-F-1..7, 9, 10 and OD-24, 25, 27–30, 32–34, 37, 40; non-blocking OD-31, 35, 36 may be taken at the same time); include OD-41 only if OD-19 selects separate/hybrid actual entry
+- [ ] 0.3 Customer workshop (backlog S16.1) for the M2 and M3 gate sets in `decisions.md` (open EFF-F-1..7, 9, 10 and OD-24, 27–30, 32–34, 37, 40; non-blocking OD-31, 35, 36 may be taken at the same time); include OD-41 only if OD-19 selects separate/hybrid actual entry
 - [ ] 0.4 Documentation sync only (no decision pending): record the RESOLVED_BY_EVIDENCE items OD-21 / OD-38 (current-scope deferral) and OD-26 (no A.I approval) in the project decision pack and `docs/roadmap.md`; apply the OD-39 id rename
 - [ ] 0.5 Re-baseline this task list and the backlog source (S12.5, EPIC 16/17 wording) after decisions
 

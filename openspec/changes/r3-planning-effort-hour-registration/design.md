@@ -31,9 +31,10 @@ salary review, bonus, salary-cost figures, resource evaluation formula, Producti
 | **Actual effort** (A.III, NR-EFF-05/06) | Customer document | UNKNOWN (OD-19) | New, rules open | Options in §10 |
 
 **Decision of this spec:** the three are **not collapsed**. Shared name, actor and discipline columns link legacy E14
-and A.I, but rev01 is classified as a new requirement and adds workflow legacy never had. OD-25 decides whether A.I
-replaces, extends or is seeded from E14; until then S12.5 is specified as the legacy budget matrix and A.I as a separate
-candidate entity with an explicit, optional link (`design.md` §5.2 `SourceRegistration`).
+and A.I, but rev01 is classified as a new requirement and adds workflow legacy never had. OD-25 is resolved (owner
+decision 2026-10-09 = A): S12.5 stays the legacy budget matrix (`HourRegistrations`, DONE) and A.I is a separate entity
+with **no link, no shared fields and no seeding** from `HourRegistrations`; any later seeding would need a new explicit
+decision and spec delta.
 
 ```mermaid
 flowchart LR
@@ -45,7 +46,6 @@ flowchart LR
     DR[DisciplineEffortRegistrations<br/>A.II discipline staff]
     AE[Actual effort<br/>A.III source = OD-19]
   end
-  HR -. OD-25 link? .-> PA
   PA -- ceiling OD-15 --> DR
   DR -. approval / lock OD-17/18 .-> DR
   AE -. approval / lock .-> AE
@@ -117,7 +117,7 @@ keys); ETag = SharePoint `odata.etag`; version history on.
 
 | Entity | Purpose | Business key (candidate) | Key columns | State | Volume (est.) |
 |---|---|---|---|---|---|
-| `ProjectEffortAllocations` | A.I PM registration (NR-EFF-01) | Project + RecipientCategory + Phase† + Period† | `RecipientCategory` (Choice: QuanLyPhong / PM / Discipline), `DisciplineItemId`†, `PhaseItemId`† (OD-22), `PeriodKey`† (OD-23), `Effort` (unit OD-14; blank/zero OD-40), `SourceRegistration`† (link to `HourRegistrations`, OD-25), `SourceRef`† (allocation table, OD-16). OD-31 maps QuanLyPhong to later reporting visibility, not A.I storage | no approval state in current scope (resolved OD-26) | ≈ 200 projects × ≤ 6 recipients × periods |
+| `ProjectEffortAllocations` | A.I PM registration (NR-EFF-01) | Project + RecipientCategory + Phase† + Period† | `RecipientCategory` (Choice: QuanLyPhong / PM / Discipline), `DisciplineItemId`†, `PhaseItemId`† (OD-22), `PeriodKey`† (OD-23), `Effort` (unit OD-14; blank/zero OD-40), `SourceRef`† (reference to the allocation table, only if OD-16 needs it); no field shared with or linked to `HourRegistrations` (OD-25 resolved = separate). OD-31 maps QuanLyPhong to later reporting visibility, not A.I storage | no approval state in current scope (resolved OD-26) | ≈ 200 projects × ≤ 6 recipients × periods |
 | `DisciplineEffortRegistrations` | A.II discipline registration (NR-EFF-02..04) | Project + Discipline + Task† + Owner† + Period† | `TaskType`/`TaskItemId`† (OD-29), `OwnerUpn`/`EmployeeItemId`† (OD-30), `Effort`, `Status` Draft/Approved, `ApprovedBy` (Text UPN), `ApprovedOn` (UTC) — same conventions as EPIC 07 | Draft → Approved (locked) | ≈ staff (≈ 120) × active projects × periods: ≈ 5–30k/yr† |
 | `ActualEffortEntries` (only if OD-19 = separate) | A.III actual effort | Project + Owner + Date/Period† | as above + `Status`, `ApprovedBy/On` | Draft → Approved | similar to TimesheetEntries (≈ 10–15k/yr) |
 
@@ -133,7 +133,6 @@ erDiagram
   Projects ||--o{ ProjectEffortAllocations : "A.I"
   ProjectEffortAllocations ||--o{ DisciplineEffortRegistrations : "ceiling (OD-15)"
   Employees ||--o{ DisciplineEffortRegistrations : "owner (OD-30)"
-  HourRegistrations |o..o| ProjectEffortAllocations : "OD-25 link"
 ```
 
 Retention: planning data kept for the project lifetime + the company's record retention (not decided; non-blocking).
@@ -274,7 +273,7 @@ Rules: legacy HourRegistration source remains man-days; new EFF source unit foll
   phase/discipline ids; one orphan file (deleted project, 9 lines, all blank → excluded, 0 values lost; corrects the
   earlier "45 orphan cells" note); one stale line (phase no longer on the project; all its cells blank, so nothing to keep or clear under OD-08); 3 duplicate project codes
   (16 projects) → key by project id (LHR-06). Mapping (OD-01 = A, OD-09 = A): each filled legacy cell → one item (195 non-zero values, 4 explicit zeros kept as 0); each blank cell → no item; target 199 items; Σ per project reconciles to the legacy total (8,648 overall); stale lines per OD-08; timing per OD-11.
-- **EPIC 16/17:** new requirements, **no historical data** exists to migrate (unless OD-25 seeds A.I from E14).
+- **EPIC 16/17:** new requirements, **no historical data** exists to migrate (OD-25 resolved = separate: A.I is not seeded from E14).
 - No live migration in this change.
 
 ## 13. Test strategy (designed, not executed)
@@ -333,13 +332,12 @@ EPIC 17 implementation; **GL** = go-live with migrated data; **M4** = later repo
 | Focused R3 E2E + functional closure | **~20/11 target** | M2/M3 live green |
 
 **Critical path:** the M2/M3 customer decision workshop. Every week of delay in closing the M2/M3 gate decisions
-(§14) moves M2/M3 one-for-one; S12.5 can proceed independently only if OD-25 confirms S12.5 is kept as the legacy budget
-matrix.
+(§14) moves M2/M3 one-for-one. S12.5 proceeded independently (OD-25 = separate; M1 DONE on STAGING 2026-10-10).
 
 ## 16. Risks / Trade-offs
 
 - [Decisions arrive late] → S12.5 first (M1 decisions closed 2026-10-09), EPIC 16/17 behind the workshop; schedule risk stated, not hidden.
-- [A.I later declared to replace E14 (OD-25)] → S12.5 entity designed with an optional link; asked before M1.
+- [A.I later declared to replace E14] → closed by OD-25 (resolved 2026-10-09 = separate); any change needs a new decision and spec delta.
 - [No transactions in SharePoint] → preflight all-or-nothing + per-cell ETag + explicit PARTIAL.
 - [Ceiling race] → counter item with ETag (EPIC 17), proven by a concurrency test.
 - [Chủ trì per project] → would need a project scope the guard lacks (new security work, OD-17/OD-24).
@@ -349,4 +347,4 @@ matrix.
 
 ## 17. Open questions
 
-Open questions are the 29 OPEN_DECISION items of `decisions.md` (19 unconditional BLOCKING, 1 conditional blocker, 9 NON_BLOCKING). Thirteen decisions are resolved in `decisions.md` §C (OD-01, 05, 07, 08, 25, 42 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence).
+Open questions are the 30 OPEN_DECISION items of `decisions.md` (19 unconditional BLOCKING, 1 conditional blocker, 10 NON_BLOCKING). Thirteen decisions are resolved in `decisions.md` §C (OD-01, 05, 07, 08, 25, 42 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence).

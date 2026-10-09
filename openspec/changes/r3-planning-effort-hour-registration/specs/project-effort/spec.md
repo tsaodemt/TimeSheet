@@ -27,12 +27,14 @@ NR-EFF-01 defines registration but no approval/lock for A.I. The current R3 scop
 - **WHEN** an authorised PM successfully saves an A.I allocation
 - **THEN** the allocation is effective immediately and no project-allocation approval queue item or Approval audit event is created
 
-### Requirement: Link to legacy hour registration
-Project effort SHALL be stored separately from `HourRegistrations` unless OD-25 decides otherwise; if OD-25 decides that legacy values seed the allocation, the seed SHALL be an audited, one-time, reconcilable operation.
+### Requirement: Separate from legacy hour registration
+Project effort SHALL be stored separately from `HourRegistrations` (OD-25 resolved = separate capability): no shared
+entity, field, key or workflow, and no automatic seeding from legacy budget cells. A later seeding request SHALL require
+a new explicit decision and spec delta.
 
-#### Scenario: Separate until decided
+#### Scenario: Legacy budget change does not touch project effort
 - **WHEN** a legacy budget cell changes
-- **THEN** no project effort allocation changes unless OD-25 defines a link
+- **THEN** no project effort allocation changes
 
 ### Requirement: Actual project effort boundary (NR-EFF-05)
 Actual effort SHALL come from the source decided by OD-19 (timesheet-derived, separate registration or hybrid; `design.md` §10). Caller-supplied owner identity SHALL never be trusted. If OD-19 selects existing `TimesheetEntries`, R3 SHALL preserve the existing trusted owner/on-behalf authorisation semantics of the live timesheet path and SHALL NOT narrow them to caller-only ownership. If OD-19 selects a separate or hybrid actual-entry list, ownership/on-behalf semantics SHALL follow OD-41 before implementation.
