@@ -13,13 +13,13 @@
 
 ## 1. M1 — S12.5 Hour Registration (blocked by 0.1, 0.2)
 
-- [ ] 1.1 Update the target data model and provisioning definition for `HourRegistrations` (§5.1)
-- [ ] 1.2 Reference model + tests: changed-cell diff, BLANK/VALUE encoding (OD-01 = A), ≥ 0, ≤ 2 decimals, no business maximum (OD-03, OD-42), preflight, per-cell results, replay-safe NO_CHANGE/CONFLICT semantics
-- [ ] 1.3 Generate `REG-ReadMatrix` / `REG-SaveMatrix`; reference-vs-flow tests incl. audit and concurrency
-- [ ] 1.4 Capability seed: `REG.Edit` = Executive + PMO (OD-04); `REG.View` = Team Leader, Approver, Executive, PMO, HR, IT Support (OD-05); AppAdmin removed; role × capability tests
-- [ ] 1.5 Canvas Hour Registration screen + generator assertions (blank vs 0, Save rule, read-only, dirty prompt, geometry)
-- [ ] 1.6 STAGING: provision list, deploy flows, publish app, live proof with synthetic projects, per-role live results
-- [ ] 1.7 Migration of legacy E14 per OD-11 (199 items incl. 4 explicit zeros, blanks → no item; Σ per project reconciled; stale rows per OD-08)
+- [x] 1.1 Update the target data model and provisioning definition for `HourRegistrations` (§5.1) — DONE 2026-10-10 (`tools/registration/hr_schema.py`; STAGING list provisioned, unique permissions: owners + service role only)
+- [x] 1.2 Reference model + tests: changed-cell diff, BLANK/VALUE encoding (OD-01 = A), ≥ 0, ≤ 2 decimals, no business maximum (OD-03, OD-42), preflight, per-cell results, replay-safe NO_CHANGE/CONFLICT semantics — DONE (`tools/registration/hour_registration.py`, HR01–HR34)
+- [x] 1.3 Generate `REG-ReadMatrix` / `REG-SaveMatrix`; reference-vs-flow tests incl. audit and concurrency — DONE; live findings fixed: ids compared as integers (SharePoint numbers arrive as floats, HR33) and parallel cell loops so a 100-cell save answers within the Power Apps 120 s wait (HR34)
+- [x] 1.4 Capability seed: `REG.Edit` = Executive + PMO (OD-04); `REG.View` = Team Leader, Approver, Executive, PMO, HR, IT Support (OD-05); AppAdmin removed; role × capability tests — DONE (offline + live, every role)
+- [x] 1.5 Canvas Hour Registration screen + generator assertions (blank vs 0, Save rule, read-only, dirty prompt, geometry) — DONE (HC01–HC16; year list = All + 2017–2050 legacy parity, no delegation warning)
+- [x] 1.6 STAGING: provision list, deploy flows, publish app, live proof with synthetic projects, per-role live results — DONE 2026-10-10: 13×5 round trip, update/clear, validation, stale ETag (preflight), removed/re-added phase, Paused project; 12/12 roles as specified; Closed status not testable (no Closed state in the target schema); post-preflight conflict (PARTIAL) proven offline only
+- [ ] 1.7 (open — blocked by OD-11, migration gate; not part of the S12.5 screen closure) Migration of legacy E14 per OD-11 (199 items incl. 4 explicit zeros, blanks → no item; Σ per project reconciled; stale rows per OD-08)
 
 ## 2. M2 — EPIC 16 Project Effort (blocked by 0.3)
 

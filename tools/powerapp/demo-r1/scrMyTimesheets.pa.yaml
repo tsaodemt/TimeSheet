@@ -110,6 +110,15 @@ Screens:
           FontWeight: =FontWeight.Bold
           Visible: =!varNoTeam && !IsBlank(varPendingCount)
           Text: '="Chờ phê duyệt: " & If(varPendingMore, "500+", Text(varPendingCount))'
+    - btnReg:
+        Control: Classic/Button@2.2.0
+        Properties:
+          Text: ="Đăng ký công"
+          X: =1020
+          Y: =130
+          Width: =200
+          Visible: =!varNoReg
+          OnSelect: =Navigate(scrHourRegistration, ScreenTransition.None)
     - galEntries:
         Control: Gallery@2.15.0
         Variant: Vertical

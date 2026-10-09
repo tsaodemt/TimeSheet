@@ -31,7 +31,7 @@ class DemoApp(unittest.TestCase):
     def test_DA01_four_screens_and_valid_yaml(self):
         names = {os.path.basename(f) for f in self.files}
         self.assertEqual(names, {"App.pa.yaml", "scrStartup.pa.yaml", "scrAccessDenied.pa.yaml", "scrMyTimesheets.pa.yaml",
-                                 "scrEntry.pa.yaml", "scrTeamApproval.pa.yaml", "messages.json"})
+                                 "scrEntry.pa.yaml", "scrTeamApproval.pa.yaml", "scrHourRegistration.pa.yaml", "messages.json"})
         for f in self.files:
             if f.endswith(".pa.yaml"):
                 self.assertIsInstance(yaml.safe_load(open(f, encoding="utf-8")), dict, f)

@@ -21,7 +21,7 @@
 | 17 Discipline Effort Planning & Approval | New requirement: discipline plan, allocation ceiling, approval and lock | Captured; decisions open |
 | 18 Effort Analytics & Resource Evaluation | New requirement: registered vs actual, cost and resource evaluation | Captured; decisions open |
 
-New epics and business areas start with an Open Spec, not with code (`delivery-process.md`). Next: Open Spec for R3 Planning & Effort (Hour Registration S12.5, EPIC 16, EPIC 17); no implementation before spec approval.
+New epics and business areas start with an Open Spec, not with code (`delivery-process.md`). R3 Planning & Effort (Open Spec `r3-planning-effort-hour-registration`) is IN PROGRESS: milestone M1 (Hour Registration S12.5, legacy parity) is done on STAGING; next is the M2 / EPIC 16 decision closure — no EPIC 16 or EPIC 17 implementation before those decisions.
 
 Tenant portability: the system must be rebuildable in another Microsoft 365 tenant (configuration-driven URLs and IDs, stable business keys, old→new UPN mapping, provisioning scripts, solution export, restore runbook). This is tracked as an administration story.
 
