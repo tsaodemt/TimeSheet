@@ -8,6 +8,7 @@ meaning differs.
 | `DIRECTORY_ERROR` | caller profile (MyProfile_V2) or directory / Employees lookup operational failure | all | `MSG_TEMPORARY_PROBLEM` from the error responder; the guard path keeps `MSG_<code>` in ReadOwn/SaveEntry |
 | `INTERNAL_ERROR` | a mandatory internal / infrastructure step failed and no more specific code applies (mandatory audit before data is returned or written) | all | `MSG_TEMPORARY_PROBLEM` |
 | `ERROR` | SharePoint TimesheetEntries operation failure (ReadOwn query, SaveEntry write other than 412) or unreadable reference data | ReadOwn, SaveEntry | `MSG_ERROR` |
+| `NOT_APPROVED` | TS-Unapprove target is not Approved (Draft); never a no-op success | TS-Unapprove (S07.3) | `MSG_NOT_APPROVED` |
 | `CONFLICT` | ETag optimistic-concurrency conflict (stale / missing ETag, SharePoint 412) | SaveEntry | `MSG_CONFLICT` |
 | `AUDIT_DEGRADED` | SaveEntry write committed but the post-write WriteProxy append failed (AUD-F1 option B): `ok=true`, warning + `auditstatus`, run ends Failed for alerting | SaveEntry | warning, not a result code |
 | `INVALID_EMPLOYEE_REFERENCE` | AppStart only: required Department / Discipline does not resolve | AppStart | `MSG_TEMPORARY_PROBLEM` |

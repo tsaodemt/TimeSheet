@@ -7,7 +7,7 @@ pack manifest. It refuses to build unless the site URL equals the approved stagi
 PRODUCTION. Business settings stay in SharePoint AppSettings (read at run time by the flows).
 
 config: {"siteUrl", "approvedSiteUrl", "domain", "environmentLabel", "roleGroups": [[key, groupObjectId]],
-         "approvalRoleGroups": [[key, groupObjectId]] (optional, S07.2: TL / APR / EXE),
+         "approvalRoleGroups": [[key, groupObjectId]] (optional, S07.2 / S07.3: TL / APR / EXE),
          "registry": {...}, "overlay": {...}}  — never committed (tenant values).
 """
 from __future__ import annotations
@@ -82,6 +82,7 @@ def flows(config: dict) -> dict:
         approval = dict(common, role_groups=[tuple(x) for x in config["approvalRoleGroups"]], conf_audit_list="ConfidentialAuditLog")
         out["TS-ReadTeam"] = apf.read_team_actions(**approval)
         out["TS-Approve"] = apf.approve_actions(**approval)
+        out["TS-Unapprove"] = apf.unapprove_actions(**approval)  # S07.3
     out = {k: add_site_guard(_plain(v), config["approvedSiteUrl"]) for k, v in out.items()}
     p = scope.check_artifacts(out)
     if p:

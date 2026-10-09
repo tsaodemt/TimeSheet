@@ -1,6 +1,6 @@
 # Approval capability rules (EPIC 07, S07.1)
 
-Status 2026-10-09: **gate G5 PASS — S07.1 DONE.** Decisions approved by the project owner. Nothing is deployed. TS-Approve is designed in `docs/approve-contract.md`. TS-Unapprove (S07.3) is not built yet.
+Status 2026-10-09: **gate G5 PASS — S07.1 DONE.** Decisions approved by the project owner. Nothing is deployed. TS-Approve is designed in `docs/approve-contract.md`. TS-Approve (S07.2) and TS-Unapprove (S07.3) are implemented and live-proven on STAGING (`docs/approve-contract.md`).
 
 | Artefact | Role |
 |---|---|

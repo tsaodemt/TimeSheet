@@ -147,7 +147,8 @@ class DemoApp(unittest.TestCase):
         call = ap[ap.index("'TS-Approve'.Run("):ap.index("));", ap.index("'TS-Approve'.Run("))]
         self.assertNotRegex(call, r"(?i)owner|approvedby|role|scope|discipline|User\(\)", "only item ids and ETags are sent")
         self.assertIn("'TS-ReadTeam'.Run(", ap[ap.index("'TS-Approve'"):], "the queue is re-read after approving")
-        self.assertNotIn("Unapprove", json.dumps(app.screens()), "no unapprove in S07.2")
+        # S07.3 adds TS-Unapprove only behind the explicit per-row action (test_unapprove_flow UQ38); never on the batch path
+        self.assertNotIn("'TS-Unapprove'", c["btnConfirmYes"]["Properties"]["OnSelect"])
         self.assertIn("MSG_APPROVE_CONFIRM", app.MESSAGES)
         num = lambda c, k: int(c[k]["Properties"]["Y"].lstrip("="))  # noqa: E731
         bottom = int(c["btnConfirmYes"]["Properties"]["Y"].lstrip("=")) + int(c["btnConfirmYes"]["Properties"]["Height"].lstrip("="))

@@ -4,11 +4,13 @@ Screens:
     Properties:
       OnVisible: |-
         =Set(varTeamPeriod, Text(Coalesce(varTo, Today()), "yyyy-mm"));
+        Set(varUnConfirm, false); Set(varConfirm, false);
         Set(varTeamAfter, Blank());
         Clear(colSel);
 
         Set(varBusy, true);
-        Set(varTeam, 'TS-ReadTeam'.Run(varTeamPeriod, If(IsBlank(varTeamAfter), "", Text(varTeamAfter)), "100"));
+        Set(varTeam, 'TS-ReadTeam'.Run(varTeamPeriod, If(IsBlank(varTeamAfter), "", Text(varTeamAfter)), "100",
+            {text_7: If(varTeamMode = "Approved", "Approved", "")}));  // optional V2 trigger input Mode = key text_7, passed as a record (live finding)
         Set(varBusy, false);
         If(varTeam.ok = "true",
             If(IsBlank(varTeamAfter), Clear(colTeam));
@@ -16,9 +18,11 @@ Screens:
                 id: Value(ThisRecord.Value.id), ownerName: Text(ThisRecord.Value.ownerName), ownerCode: Text(ThisRecord.Value.ownerCode),
                 workDate: DateValue(Text(ThisRecord.Value.workDate)), projectId: Value(ThisRecord.Value.projectId),
                 phaseId: Value(ThisRecord.Value.phaseId), hours: Value(ThisRecord.Value.hours), remark: Text(ThisRecord.Value.remark),
-                status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag)}));
+                status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag),
+                approvedBy: Text(ThisRecord.Value.approvedBy), approvedOn: Text(ThisRecord.Value.approvedOn)}));
             Set(varTeamNext, varTeam.nextafterid),
-            If(varTeam.resultcode = "ROLE_NOT_ALLOWED", Set(varNoTeam, true));
+            If(varTeam.resultcode = "ROLE_NOT_ALLOWED",
+                If(varTeamMode = "Approved", Set(varNoUnapprove, true); Set(varTeamMode, ""), Set(varNoTeam, true)));
             Notify(Coalesce(LookUp(colMessages, code = varTeam.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text)) & " (" & varTeam.correlationid & ")", NotificationType.Error))
     Children:
     - lblTeamTitle:
@@ -42,7 +46,7 @@ Screens:
     - lblTeamPeriod:
         Control: Label@2.5.1
         Properties:
-          Text: '="Pay period " & varTeamPeriod & "  ·  Draft entries waiting for approval: " & CountRows(colTeam)'
+          Text: '="Pay period " & varTeamPeriod & "  ·  " & If(varTeamMode = "Approved", "Approved entries: ", "Draft entries waiting for approval: ") & CountRows(colTeam)'
           X: =20
           Y: =90
           Width: =800
@@ -62,6 +66,7 @@ Screens:
           X: =160
           Y: =130
           Width: =200
+          Visible: =varTeamMode <> "Approved"
           OnSelect: '=ClearCollect(colSel, ForAll(colTeam, {id: id, etag: etag}))'
     - btnApprove:
         Control: Classic/Button@2.2.0
@@ -70,8 +75,119 @@ Screens:
           X: =380
           Y: =130
           Width: =200
+          Visible: =varTeamMode <> "Approved"
           DisplayMode: =If(varApproving || varBusy || CountRows(colSel) = 0 || CountRows(colSel) > 50, DisplayMode.Disabled, DisplayMode.Edit)
           OnSelect: =Set(varConfirm, true)
+    - btnModePending:
+        Control: Classic/Button@2.2.0
+        Properties:
+          Text: ="Pending"
+          X: =740
+          Y: =130
+          Width: =130
+          OnSelect: |-
+            =Set(varTeamMode, ""); Set(varConfirm, false); Set(varUnConfirm, false); Clear(colSel); Clear(colApprRes); Set(varTeamAfter, Blank());
+
+            Set(varBusy, true);
+            Set(varTeam, 'TS-ReadTeam'.Run(varTeamPeriod, If(IsBlank(varTeamAfter), "", Text(varTeamAfter)), "100",
+                {text_7: If(varTeamMode = "Approved", "Approved", "")}));  // optional V2 trigger input Mode = key text_7, passed as a record (live finding)
+            Set(varBusy, false);
+            If(varTeam.ok = "true",
+                If(IsBlank(varTeamAfter), Clear(colTeam));
+                Collect(colTeam, ForAll(Table(ParseJSON(varTeam.rows)), {
+                    id: Value(ThisRecord.Value.id), ownerName: Text(ThisRecord.Value.ownerName), ownerCode: Text(ThisRecord.Value.ownerCode),
+                    workDate: DateValue(Text(ThisRecord.Value.workDate)), projectId: Value(ThisRecord.Value.projectId),
+                    phaseId: Value(ThisRecord.Value.phaseId), hours: Value(ThisRecord.Value.hours), remark: Text(ThisRecord.Value.remark),
+                    status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag),
+                    approvedBy: Text(ThisRecord.Value.approvedBy), approvedOn: Text(ThisRecord.Value.approvedOn)}));
+                Set(varTeamNext, varTeam.nextafterid),
+                If(varTeam.resultcode = "ROLE_NOT_ALLOWED",
+                    If(varTeamMode = "Approved", Set(varNoUnapprove, true); Set(varTeamMode, ""), Set(varNoTeam, true)));
+                Notify(Coalesce(LookUp(colMessages, code = varTeam.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text)) & " (" & varTeam.correlationid & ")", NotificationType.Error))
+    - btnModeApproved:
+        Control: Classic/Button@2.2.0
+        Properties:
+          Text: ="Approved"
+          X: =880
+          Y: =130
+          Width: =130
+          Visible: =!varNoUnapprove
+          OnSelect: |-
+            =Set(varTeamMode, "Approved"); Set(varConfirm, false); Set(varUnConfirm, false); Clear(colSel); Clear(colApprRes); Set(varTeamAfter, Blank());
+
+            Set(varBusy, true);
+            Set(varTeam, 'TS-ReadTeam'.Run(varTeamPeriod, If(IsBlank(varTeamAfter), "", Text(varTeamAfter)), "100",
+                {text_7: If(varTeamMode = "Approved", "Approved", "")}));  // optional V2 trigger input Mode = key text_7, passed as a record (live finding)
+            Set(varBusy, false);
+            If(varTeam.ok = "true",
+                If(IsBlank(varTeamAfter), Clear(colTeam));
+                Collect(colTeam, ForAll(Table(ParseJSON(varTeam.rows)), {
+                    id: Value(ThisRecord.Value.id), ownerName: Text(ThisRecord.Value.ownerName), ownerCode: Text(ThisRecord.Value.ownerCode),
+                    workDate: DateValue(Text(ThisRecord.Value.workDate)), projectId: Value(ThisRecord.Value.projectId),
+                    phaseId: Value(ThisRecord.Value.phaseId), hours: Value(ThisRecord.Value.hours), remark: Text(ThisRecord.Value.remark),
+                    status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag),
+                    approvedBy: Text(ThisRecord.Value.approvedBy), approvedOn: Text(ThisRecord.Value.approvedOn)}));
+                Set(varTeamNext, varTeam.nextafterid),
+                If(varTeam.resultcode = "ROLE_NOT_ALLOWED",
+                    If(varTeamMode = "Approved", Set(varNoUnapprove, true); Set(varTeamMode, ""), Set(varNoTeam, true)));
+                Notify(Coalesce(LookUp(colMessages, code = varTeam.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text)) & " (" & varTeam.correlationid & ")", NotificationType.Error))
+    - lblUnConfirm:
+        Control: Label@2.5.1
+        Properties:
+          Text: '=Coalesce(LookUp(colMessages, code = "MSG_UNAPPROVE_CONFIRM", text), LookUp(colMessages, code = "MSG_ERROR", text)) & " #" & varUnRow.id'
+          X: =20
+          Y: =175
+          Width: =560
+          Height: =30
+          Visible: =varUnConfirm
+          FontWeight: =FontWeight.Bold
+    - btnUnYes:
+        Control: Classic/Button@2.2.0
+        Properties:
+          Text: ="Yes"
+          X: =600
+          Y: =175
+          Width: =90
+          Height: =40
+          Visible: =varUnConfirm
+          DisplayMode: =If(varApproving, DisplayMode.Disabled, DisplayMode.Edit)
+          OnSelect: |-
+            =Set(varUnConfirm, false);
+            Set(varApproving, true);
+            Set(varUn, 'TS-Unapprove'.Run(Text(varUnRow.id), varUnRow.etag));
+            Set(varApproving, false);
+            ClearCollect(colApprRes, {itemid: Text(varUnRow.id), resultcode: varUn.resultcode, messagecode: varUn.messagecode});
+            Notify(If(varUn.resultcode = "OK", Coalesce(LookUp(colMessages, code = "MSG_UNAPPROVE_OK", text), LookUp(colMessages, code = "MSG_ERROR", text)), Coalesce(LookUp(colMessages, code = varUn.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text))) & " (" & varUn.correlationid & ")",
+                   If(varUn.resultcode = "OK", NotificationType.Success, NotificationType.Error));
+            Set(varUnRow, Blank());
+            Set(varTeamAfter, Blank());
+
+            Set(varBusy, true);
+            Set(varTeam, 'TS-ReadTeam'.Run(varTeamPeriod, If(IsBlank(varTeamAfter), "", Text(varTeamAfter)), "100",
+                {text_7: If(varTeamMode = "Approved", "Approved", "")}));  // optional V2 trigger input Mode = key text_7, passed as a record (live finding)
+            Set(varBusy, false);
+            If(varTeam.ok = "true",
+                If(IsBlank(varTeamAfter), Clear(colTeam));
+                Collect(colTeam, ForAll(Table(ParseJSON(varTeam.rows)), {
+                    id: Value(ThisRecord.Value.id), ownerName: Text(ThisRecord.Value.ownerName), ownerCode: Text(ThisRecord.Value.ownerCode),
+                    workDate: DateValue(Text(ThisRecord.Value.workDate)), projectId: Value(ThisRecord.Value.projectId),
+                    phaseId: Value(ThisRecord.Value.phaseId), hours: Value(ThisRecord.Value.hours), remark: Text(ThisRecord.Value.remark),
+                    status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag),
+                    approvedBy: Text(ThisRecord.Value.approvedBy), approvedOn: Text(ThisRecord.Value.approvedOn)}));
+                Set(varTeamNext, varTeam.nextafterid),
+                If(varTeam.resultcode = "ROLE_NOT_ALLOWED",
+                    If(varTeamMode = "Approved", Set(varNoUnapprove, true); Set(varTeamMode, ""), Set(varNoTeam, true)));
+                Notify(Coalesce(LookUp(colMessages, code = varTeam.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text)) & " (" & varTeam.correlationid & ")", NotificationType.Error))
+    - btnUnNo:
+        Control: Classic/Button@2.2.0
+        Properties:
+          Text: ="No"
+          X: =700
+          Y: =175
+          Width: =90
+          Height: =40
+          Visible: =varUnConfirm
+          OnSelect: =Set(varUnConfirm, false); Set(varUnRow, Blank())
     - btnTeamRefresh:
         Control: Classic/Button@2.2.0
         Properties:
@@ -83,7 +199,8 @@ Screens:
             =Clear(colSel); Set(varTeamAfter, Blank());
 
             Set(varBusy, true);
-            Set(varTeam, 'TS-ReadTeam'.Run(varTeamPeriod, If(IsBlank(varTeamAfter), "", Text(varTeamAfter)), "100"));
+            Set(varTeam, 'TS-ReadTeam'.Run(varTeamPeriod, If(IsBlank(varTeamAfter), "", Text(varTeamAfter)), "100",
+                {text_7: If(varTeamMode = "Approved", "Approved", "")}));  // optional V2 trigger input Mode = key text_7, passed as a record (live finding)
             Set(varBusy, false);
             If(varTeam.ok = "true",
                 If(IsBlank(varTeamAfter), Clear(colTeam));
@@ -91,9 +208,11 @@ Screens:
                     id: Value(ThisRecord.Value.id), ownerName: Text(ThisRecord.Value.ownerName), ownerCode: Text(ThisRecord.Value.ownerCode),
                     workDate: DateValue(Text(ThisRecord.Value.workDate)), projectId: Value(ThisRecord.Value.projectId),
                     phaseId: Value(ThisRecord.Value.phaseId), hours: Value(ThisRecord.Value.hours), remark: Text(ThisRecord.Value.remark),
-                    status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag)}));
+                    status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag),
+                    approvedBy: Text(ThisRecord.Value.approvedBy), approvedOn: Text(ThisRecord.Value.approvedOn)}));
                 Set(varTeamNext, varTeam.nextafterid),
-                If(varTeam.resultcode = "ROLE_NOT_ALLOWED", Set(varNoTeam, true));
+                If(varTeam.resultcode = "ROLE_NOT_ALLOWED",
+                    If(varTeamMode = "Approved", Set(varNoUnapprove, true); Set(varTeamMode, ""), Set(varNoTeam, true)));
                 Notify(Coalesce(LookUp(colMessages, code = varTeam.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text)) & " (" & varTeam.correlationid & ")", NotificationType.Error))
     - lblConfirm:
         Control: Label@2.5.1
@@ -128,7 +247,8 @@ Screens:
             Set(varTeamAfter, Blank());
 
             Set(varBusy, true);
-            Set(varTeam, 'TS-ReadTeam'.Run(varTeamPeriod, If(IsBlank(varTeamAfter), "", Text(varTeamAfter)), "100"));
+            Set(varTeam, 'TS-ReadTeam'.Run(varTeamPeriod, If(IsBlank(varTeamAfter), "", Text(varTeamAfter)), "100",
+                {text_7: If(varTeamMode = "Approved", "Approved", "")}));  // optional V2 trigger input Mode = key text_7, passed as a record (live finding)
             Set(varBusy, false);
             If(varTeam.ok = "true",
                 If(IsBlank(varTeamAfter), Clear(colTeam));
@@ -136,9 +256,11 @@ Screens:
                     id: Value(ThisRecord.Value.id), ownerName: Text(ThisRecord.Value.ownerName), ownerCode: Text(ThisRecord.Value.ownerCode),
                     workDate: DateValue(Text(ThisRecord.Value.workDate)), projectId: Value(ThisRecord.Value.projectId),
                     phaseId: Value(ThisRecord.Value.phaseId), hours: Value(ThisRecord.Value.hours), remark: Text(ThisRecord.Value.remark),
-                    status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag)}));
+                    status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag),
+                    approvedBy: Text(ThisRecord.Value.approvedBy), approvedOn: Text(ThisRecord.Value.approvedOn)}));
                 Set(varTeamNext, varTeam.nextafterid),
-                If(varTeam.resultcode = "ROLE_NOT_ALLOWED", Set(varNoTeam, true));
+                If(varTeam.resultcode = "ROLE_NOT_ALLOWED",
+                    If(varTeamMode = "Approved", Set(varNoUnapprove, true); Set(varTeamMode, ""), Set(varNoTeam, true)));
                 Notify(Coalesce(LookUp(colMessages, code = varTeam.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text)) & " (" & varTeam.correlationid & ")", NotificationType.Error))
     - btnConfirmNo:
         Control: Classic/Button@2.2.0
@@ -168,6 +290,7 @@ Screens:
               X: =5
               Y: =15
               Width: =60
+              Visible: =varTeamMode <> "Approved"
               OnSelect: '=If(ThisItem.id in colSel.id, ClearCollect(colSelTmp, Filter(colSel, id <> ThisItem.id)); ClearCollect(colSel, colSelTmp), Collect(colSel, {id: ThisItem.id, etag: ThisItem.etag}))'
         - lblTeam1:
             Control: Label@2.5.1
@@ -183,9 +306,19 @@ Screens:
             Properties:
               X: =80
               Y: =35
-              Width: =Parent.TemplateWidth - 90
+              Width: =Parent.TemplateWidth - 280
               Height: =30
-              Text: ="#" & ThisItem.id & "  ·  " & ThisItem.status & "  ·  " & ThisItem.remark
+              Text: ="#" & ThisItem.id & "  ·  " & ThisItem.status & If(ThisItem.status = "Approved", " by " & ThisItem.approvedBy & " " & ThisItem.approvedOn, "") & "  ·  " & ThisItem.remark
+        - btnUnapprove:
+            Control: Classic/Button@2.2.0
+            Properties:
+              Text: ="Hủy phê duyệt"
+              X: =Parent.TemplateWidth - 190
+              Y: =15
+              Width: =170
+              Visible: =varTeamMode = "Approved" && ThisItem.status = "Approved"
+              DisplayMode: =If(varApproving || varBusy, DisplayMode.Disabled, DisplayMode.Edit)
+              OnSelect: =Set(varUnRow, ThisItem); Set(varUnConfirm, true)
     - btnTeamMore:
         Control: Classic/Button@2.2.0
         Properties:
@@ -197,7 +330,8 @@ Screens:
             =Set(varTeamAfter, Value(varTeamNext));
 
             Set(varBusy, true);
-            Set(varTeam, 'TS-ReadTeam'.Run(varTeamPeriod, If(IsBlank(varTeamAfter), "", Text(varTeamAfter)), "100"));
+            Set(varTeam, 'TS-ReadTeam'.Run(varTeamPeriod, If(IsBlank(varTeamAfter), "", Text(varTeamAfter)), "100",
+                {text_7: If(varTeamMode = "Approved", "Approved", "")}));  // optional V2 trigger input Mode = key text_7, passed as a record (live finding)
             Set(varBusy, false);
             If(varTeam.ok = "true",
                 If(IsBlank(varTeamAfter), Clear(colTeam));
@@ -205,9 +339,11 @@ Screens:
                     id: Value(ThisRecord.Value.id), ownerName: Text(ThisRecord.Value.ownerName), ownerCode: Text(ThisRecord.Value.ownerCode),
                     workDate: DateValue(Text(ThisRecord.Value.workDate)), projectId: Value(ThisRecord.Value.projectId),
                     phaseId: Value(ThisRecord.Value.phaseId), hours: Value(ThisRecord.Value.hours), remark: Text(ThisRecord.Value.remark),
-                    status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag)}));
+                    status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag),
+                    approvedBy: Text(ThisRecord.Value.approvedBy), approvedOn: Text(ThisRecord.Value.approvedOn)}));
                 Set(varTeamNext, varTeam.nextafterid),
-                If(varTeam.resultcode = "ROLE_NOT_ALLOWED", Set(varNoTeam, true));
+                If(varTeam.resultcode = "ROLE_NOT_ALLOWED",
+                    If(varTeamMode = "Approved", Set(varNoUnapprove, true); Set(varTeamMode, ""), Set(varNoTeam, true)));
                 Notify(Coalesce(LookUp(colMessages, code = varTeam.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text)) & " (" & varTeam.correlationid & ")", NotificationType.Error))
     - lblResTitle:
         Control: Label@2.5.1
@@ -236,5 +372,6 @@ Screens:
               Y: =0
               Width: =Parent.TemplateWidth - 10
               Height: =30
-              Text: '="#" & ThisItem.itemid & ": " & If(ThisItem.resultcode = "OK", Coalesce(LookUp(colMessages, code = "MSG_ROW_APPROVED", text), LookUp(colMessages, code = "MSG_ERROR", text)), Coalesce(LookUp(colMessages,
-                code = ThisItem.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text)))'
+              Text: '="#" & ThisItem.itemid & ": " & If(ThisItem.resultcode = "OK", If(varTeamMode = "Approved", Coalesce(LookUp(colMessages, code = "MSG_ROW_UNAPPROVED", text), LookUp(colMessages, code
+                = "MSG_ERROR", text)), Coalesce(LookUp(colMessages, code = "MSG_ROW_APPROVED", text), LookUp(colMessages, code = "MSG_ERROR", text))), Coalesce(LookUp(colMessages, code = ThisItem.messagecode,
+                text), LookUp(colMessages, code = "MSG_ERROR", text)))'

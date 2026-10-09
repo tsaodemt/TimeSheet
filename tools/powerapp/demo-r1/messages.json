@@ -37,6 +37,10 @@
   "MSG_PARTIAL": "Some entries were approved; the others were refused (see the results).",
   "MSG_REFUSED": "No entry was approved (see the results).",
   "MSG_VALIDATION_REQUEST": "The selection could not be processed. Please select between 1 and 50 entries.",
-  "MSG_APPROVE_CONFIRM": "Bạn có muốn phê duyệt nội dung chấm công không?"
+  "MSG_APPROVE_CONFIRM": "Bạn có muốn phê duyệt nội dung chấm công không?",
+  "MSG_NOT_APPROVED": "This entry is not approved.",
+  "MSG_UNAPPROVE_CONFIRM": "Bạn có muốn hủy phê duyệt nội dung chấm công này không?",
+  "MSG_UNAPPROVE_OK": "The approval was cancelled.",
+  "MSG_ROW_UNAPPROVED": "Approval cancelled."
  }
 }

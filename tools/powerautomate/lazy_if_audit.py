@@ -17,7 +17,7 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
 SUITES = [("timesheet", "test_r1_read_flow"), ("timesheet", "test_r1_save_flow"), ("config", "test_appstart"),
-          ("identity", "test_guard"), ("maintenance", "test_maintenance_flow"), ("approval", "test_approve_flow")]
+          ("identity", "test_guard"), ("maintenance", "test_maintenance_flow"), ("approval", "test_approve_flow"), ("approval", "test_unapprove_flow")]
 
 
 def run(suites=SUITES, mode="audit") -> tuple:

@@ -1,6 +1,6 @@
-# Approve (TS-Approve) and team approval queue (TS-ReadTeam) — S07.2 implementation contract
+# Approve (TS-Approve), unapprove (TS-Unapprove) and team queue (TS-ReadTeam) — S07.2 / S07.3 contract
 
-Status 2026-10-09: **IMPLEMENTED** — reference `tools/approval/approve_entries.py`, flows `tools/powerautomate/build_approval_flows.py` (`approve_actions`, `read_team_actions`), Canvas `scrTeamApproval` (`tools/powerapp/build_demo_app.py`), offline tests `tools/approval/test_approve_flow.py` (AQ01–AQ26, AQ-EQ, AQ-T1–T3, RT01–RT12) and `tools/powerapp/test_demo_app.py` DA16. **S07.2 DONE (2026-10-09):** deployed to STAGING, run-only shared like the R1 flows, Canvas team mode published, and live-proven through the published app: same-discipline approval OK (ApprovedBy = trusted caller UPN, ApprovedOn = server UTC, owner / employee / discipline / LegacyId / Created / Author preserved, one `Approval` audit row per item), batch of 2 OK, cross-discipline `SCOPE_NOT_ALLOWED` and own-row `ROLE_NOT_ALLOWED` with no write (request item ids altered on the client; identity untouched), TS-SaveEntry on an Approved row `LOCKED`. Live finding fixed: the confirm buttons must not overlap the queue gallery (DA16). Evidence is kept in the private working area. It rests on gate G5 (PASS; `docs/approval-capability-rules.md`) and reuses the R1 architecture (`docs/saveentry-contract.md`, `docs/readown-contract.md`, `docs/r1-error-semantics.md`). Unapprove is S07.3 and is not part of this contract. There is no period submission (B-02).
+Status 2026-10-09: **IMPLEMENTED** — reference `tools/approval/approve_entries.py`, flows `tools/powerautomate/build_approval_flows.py` (`approve_actions`, `read_team_actions`), Canvas `scrTeamApproval` (`tools/powerapp/build_demo_app.py`), offline tests `tools/approval/test_approve_flow.py` (AQ01–AQ26, AQ-EQ, AQ-T1–T3, RT01–RT12) and `tools/powerapp/test_demo_app.py` DA16. **S07.2 DONE (2026-10-09):** deployed to STAGING, run-only shared like the R1 flows, Canvas team mode published, and live-proven through the published app: same-discipline approval OK (ApprovedBy = trusted caller UPN, ApprovedOn = server UTC, owner / employee / discipline / LegacyId / Created / Author preserved, one `Approval` audit row per item), batch of 2 OK, cross-discipline `SCOPE_NOT_ALLOWED` and own-row `ROLE_NOT_ALLOWED` with no write (request item ids altered on the client; identity untouched), TS-SaveEntry on an Approved row `LOCKED`. Live finding fixed: the confirm buttons must not overlap the queue gallery (DA16). Evidence is kept in the private working area. It rests on gate G5 (PASS; `docs/approval-capability-rules.md`) and reuses the R1 architecture (`docs/saveentry-contract.md`, `docs/readown-contract.md`, `docs/r1-error-semantics.md`). Unapprove (S07.3) is section L. There is no period submission (B-02).
 
 ## A. SharePoint schema delta (`TimesheetEntries`)
 
@@ -100,6 +100,12 @@ Status 2026-10-09: **IMPLEMENTED** — reference `tools/approval/approve_entries
 
 ## TS-ReadTeam (approval queue, read-only)
 
+S07.3 adds an optional trigger input `Mode` (key `text_7`, after the decoys; Power Apps passes it as the record `{text_7: …}`):
+empty or `Pending` = the S07.2 behaviour below (Draft rows, capability `TS.Approve`); `Approved` = Approved rows of the period for
+review before *Hủy phê duyệt*, guarded by `TS.Unapprove` (Approver / Executive; a Team Leader or App Administrator gets
+`ROLE_NOT_ALLOWED`); any other value → `VALIDATION_REQUEST`. Rows also carry `approvedBy` / `approvedOn`. The leak check uses the
+requested status.
+
 | | Rule |
 |---|---|
 | Input | `PeriodKey` (`yyyy-MM`, required; `VALIDATION_DATE` otherwise), `AfterId`, `PageSize` (1–500) |
@@ -172,3 +178,22 @@ Preconditions, each a separate approval:
 - the existing invoker and service connections.
 
 Schema provisioning (section A) is a site-owner schema change in its own approved step.
+
+## L. TS-Unapprove (S07.3) — DONE 2026-10-09
+
+| | Rule |
+|---|---|
+| Input (Power Apps V2) | `ItemId`, `ETag` (both from TS-ReadTeam `Approved` mode). One row per request — explicit per-row action, no batch. Claimed `ApprovedBy`, `ApprovedOn`, `DisciplineCode`, `EmployeeItemId`, `EntryStatus`, `OwnerUpn`, `Role`, `Scope` are optional decoys, logged by name only |
+| Guard | `TS.Unapprove`, scope self: Approver / Executive (company). Team Leader, Employee, PM / PMO, App Administrator → `ROLE_NOT_ALLOWED` (request level, `AuthorizationDeny`, nothing read). `TS.Approve` does not imply `TS.Unapprove` |
+| Per row (same order as TS-Approve) | `NOT_FOUND` (bad id, missing, `Deleted`) → owner read failure `ERROR` → `SCOPE_NOT_ALLOWED` (owner row missing) → own entry `ROLE_NOT_ALLOWED` (owner employee or stored `OwnerUpn` = trusted caller; company scope never bypasses it) → status not `Approved` → **`NOT_APPROVED`** (a Draft is never a no-op success) → missing / different ETag `CONFLICT` |
+| Write | MERGE exactly `{EntryStatus: "Draft", ApprovedBy: null, ApprovedOn: null}` with `IF-MATCH` = stored ETag; 412 → `CONFLICT`; no wildcard, no retry. Owner, employee, discipline snapshot, `LegacyId`, `PeriodKey`, `WorkDate`, `Created`, `Author` are never written; the row is not recreated |
+| Audit | one `AuthorizationAllow` / `AuthorizationDeny` (mandatory, before any read); one `Unapproval` row (`Action=Unapprove`, ActionText `Hủy phê duyệt: <WorkDate>`, ChangeJson `{"EntryStatus":"Draft"}` on success, DENY + code otherwise), shared CorrelationId, append not retried, AUD-F1 option B after a committed write. Never an `Approval` row |
+| Response | `ok`, `resultcode`, `messagecode` (`MSG_<code>`), `correlationid`, `itemid`, `etag` (new ETag, empty otherwise), `auditstatus`, `warnings`; `DIRECTORY_ERROR` / `INTERNAL_ERROR` with `MSG_TEMPORARY_PROBLEM` when the normal path does not complete |
+| Canvas | Team approval → **Approved** mode → per-row **Hủy phê duyệt** → per-row confirmation (Yes / No) → TS-Unapprove → result line → queue re-read. The Approved mode button hides for the session after `ROLE_NOT_ALLOWED`; the server decides |
+| Tests | `tools/approval/test_unapprove_flow.py` UQ01–UQ38 (reference vs generated flow, TS-Approve / TS-ReadTeam non-regression, Canvas) |
+
+Live (STAGING, published app): Approver unapproved a foreign Approved row (fields cleared, provenance preserved, one `Unapproval`
+row), stale ETag → `CONFLICT` with the newer row kept, own Approved row → `ROLE_NOT_ALLOWED` (request item id altered on the
+client, identity untouched), Team Leader → `ROLE_NOT_ALLOWED` (Approved review denied as well); no write on any refusal.
+Live findings: optional V2 trigger inputs must be passed as a record keyed by the trigger key; a Studio YAML paste can rewrite a
+control's `Y` — re-check geometry after pasting. Evidence is kept in the private working area.
