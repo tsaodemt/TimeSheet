@@ -24,12 +24,16 @@ import sec_monitor as M  # noqa: E402
 import test_approve_flow as ta  # noqa: E402
 import test_r1_save_flow as ts  # noqa: E402
 import test_unapprove_flow as tu  # noqa: E402
+import build_sec_monitor_flow as bsm  # noqa: E402
+import build_demo_app as bda  # noqa: E402
+import wdl_sim  # noqa: E402
 
 ME, OTHER = ts.ME, ts.OTHER
 SVC = "svc-timesheet@tenant-a.invalid"
 INTRUDER = "someone@tenant-a.invalid"
 BUSINESS = ("WorkDate", "ProjectId", "PhaseId", "WorkTypeId", "ShiftId", "HourTypeId", "Hours", "Remark", "OwnerUpn", "EntryStatus")
 NI = "NOT_IMPLEMENTED_CURRENT_PATH"
+LOCKED_TEXT = "Dữ liệu đã được phê duyệt"
 DOC = os.path.join(ROOT, "docs", "immutability-and-monitor.md")
 
 
@@ -109,6 +113,14 @@ class SaveImmutability(ts._Both):
         self.assertIn("'LOCKED'", src)
         self.assertFalse(re.search(r"'(APPROVED_LOCKED|IMMUTABLE|ROW_LOCKED)'", src), "no near-duplicate result code")
         self.assertIn("MSG_LOCKED", json.loads(read("tools", "powerapp", "demo-r1", "messages.json"))["messages"])
+
+    def test_IM27_locked_message_is_the_legacy_wording(self):
+        # W-1 (owner 2026-10-09): code LOCKED, message exactly the verified legacy text
+        self.assertEqual(bda.MESSAGES["MSG_LOCKED"], LOCKED_TEXT)
+        self.assertEqual(json.loads(read("tools", "powerapp", "demo-r1", "messages.json"))["messages"]["MSG_LOCKED"], LOCKED_TEXT)
+        self.assertIn('{code: "MSG_LOCKED", text: "%s"}' % LOCKED_TEXT, read("tools", "powerapp", "demo-r1", "App.pa.yaml"))
+        f = self.locked(ts.req(ItemId="3", ETag='"3,1"'))
+        self.assertEqual((f["code"], f["messageCode"]), ("LOCKED", "MSG_LOCKED"))
 
 
 class Invariant(unittest.TestCase):
@@ -263,12 +275,96 @@ class Monitor(unittest.TestCase):
         self.assertNotRegex(src, r"(?i)merge|update\(|create\(")
 
 
+SITE = "https://tenant-a.invalid/sites/x"
+RCPT = "ops@tenant-a.invalid"
+
+
+def flow_run(versions, scheduled, *, interval=2, fail=()):
+    acts = bsm.monitor_actions(site=SITE, service_upn=SVC, recipient=RCPT, environment="STAGING", interval_minutes=interval)
+    calls, sent = [], []
+
+    def mocks(name, a, p):
+        host = a["inputs"]["host"]
+        if host["connectionName"] == bsm.OUTLOOK:
+            assert host["operationId"] == "SendEmailV2"
+            sent.append(p)
+            return "Succeeded", {}
+        assert p["parameters/method"] == "GET" and p["dataset"] == SITE, "monitor only reads"
+        uri = p["parameters/uri"]
+        calls.append(uri)
+        if name in fail:
+            return "Failed", {"statusCode": 503}
+        m = re.search(r"items\((\d+)\)/versions", uri)
+        if m:
+            return "Succeeded", {"value": versions[int(m.group(1))]}
+        since = re.search(r"Modified ge datetime'([^']+)Z'", uri).group(1)
+        return "Succeeded", {"value": [{"Id": i} for i, vs in versions.items() if any(v["Created"] >= since for v in vs)]}
+    run = wdl_sim.Run(trigger_body={"scheduledTime": scheduled}, mocks=mocks, now="2026-10-09T06:02:03Z").run(acts)
+    return run, calls, sent
+
+
+def ver(label, created, upn):
+    return {"VersionLabel": label, "Created": created, "Editor": {"LookupId": 1, "LookupValue": "x", "Email": upn}}
+
+
+VERSIONS = {5: [ver("1.0", "2026-10-09T05:00:00", SVC), ver("2.0", "2026-10-09T06:00:30", INTRUDER)],
+            7: [ver("1.0", "2026-10-09T05:00:00", SVC), ver("2.0", "2026-10-09T06:00:10", SVC)],
+            9: [ver("1.0", "2026-10-09T05:58:59", INTRUDER), ver("2.0", "2026-10-09T06:01:00", SVC.upper())]}
+
+
+class MonitorFlow(unittest.TestCase):
+    """IM28-IM32: generated SEC-Monitor flow vs the reference scan_versions model (WDL simulator)."""
+
+    def alerts(self, sent):
+        return [(re.search(r"Item: (\d+)", s["emailMessage/Body"]).group(1), re.search(r"Version: ([\d.]+)", s["emailMessage/Body"]).group(1))
+                for s in sent]
+
+    def test_IM28_flow_matches_reference(self):
+        for sched in ("2026-10-09T06:00:00Z", "2026-10-09T06:02:00Z", "2026-10-09T06:04:00Z"):
+            _, _, sent = flow_run(VERSIONS, sched)
+            ref = M.scan_versions(VERSIONS, service_upn=SVC, scheduled_utc=sched, interval_minutes=2)
+            self.assertEqual(self.alerts(sent), [(c.item_id, c.version) for c in ref], sched)
+
+    def test_IM29_each_version_alerted_once_across_consecutive_windows(self):
+        got = []
+        for t in ("05:56", "05:58", "06:00", "06:02", "06:04", "06:06"):
+            got += self.alerts(flow_run(VERSIONS, "2026-10-09T%s:00Z" % t)[2])
+        self.assertEqual(sorted(got), [("5", "2.0"), ("9", "1.0")], "one alert per out-of-band version; service versions never")
+
+    def test_IM30_alert_content(self):
+        _, _, sent = flow_run(VERSIONS, "2026-10-09T06:02:00Z")
+        s = sent[0]
+        self.assertEqual((s["emailMessage/To"], s["emailMessage/Subject"]), (RCPT, "[STAGING][SECURITY] Timesheet out-of-band edit detected"))
+        b = s["emailMessage/Body"]
+        for x in ("Environment: STAGING", "Reason: OUT_OF_BAND_EDIT", "Target: TimesheetEntries", "Item: 5", "Version: 2.0",
+                  "Modified (UTC): 2026-10-09T06:00:30", "Modified by: " + INTRUDER, "Reference: TimesheetEntries:5:2.0", "Run: run-0"):
+            self.assertIn(x, b)
+        for bad in ("Hours", "Remark", "Bearer", "Cookie", "token", "ProjectId", "Rate"):
+            self.assertNotIn(bad, b)
+
+    def test_IM31_read_only_and_config_driven(self):
+        run, calls, _ = flow_run(VERSIONS, "2026-10-09T06:02:00Z")
+        self.assertTrue(calls and all("TimesheetEntries" in u for u in calls))
+        src = read("tools", "powerautomate", "build_sec_monitor_flow.py")
+        self.assertFalse(re.search(r"[\w.-]+@[\w-]+\.[a-z]{2,}", src), "no address in source")
+        self.assertNotIn("sharepoint.com", src)
+        with self.assertRaises(ValueError) as e:
+            bsm.monitor_actions(site=SITE, service_upn=SVC, recipient="", environment="STAGING")
+        self.assertEqual(str(e.exception), "SEC_MONITOR_ALERT_DESTINATION_UNCONFIGURED")
+        self.assertEqual(bsm.trigger(2), {"type": "Recurrence", "recurrence": {"frequency": "Minute", "interval": 2}})
+
+    def test_IM32_read_failure_fails_the_run_no_silent_pass(self):
+        run, _, sent = flow_run(VERSIONS, "2026-10-09T06:02:00Z", fail=("Get_changed",))
+        self.assertEqual((run.results["Get_changed"]["status"], run.results["Each_item"]["status"], sent), ("Failed", "Skipped", []))
+
+
 class Records(unittest.TestCase):
     def test_IM26_legacy_behaviour_matrix_documented(self):
         doc = read("docs", "immutability-and-monitor.md")
         for op in ("| Edit |", "| Delete |", "| Reorder |"):
             self.assertIn(op, doc)
-        for s in ("Dữ liệu đã được phê duyệt", NI, "SEC_MONITOR_ALERT_DESTINATION_UNCONFIGURED", "TS-Unapprove"):
+        for s in (LOCKED_TEXT, NI, "SEC_MONITOR_ALERT_DESTINATION_UNCONFIGURED", "TS-Unapprove",
+                  "SIGNED_DEVIATION_TARGET_HARDENING", "TARGET_TYPED_FEEDBACK_APPROVED"):
             self.assertIn(s, doc)
 
 

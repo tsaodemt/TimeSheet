@@ -312,6 +312,12 @@ class Run:
     def f_items(self, n): return self.loop_items[n]
     def f_workflow(self): return {"run": {"name": self.run_name}}
     def f_triggerBody(self): return self.trigger_body
+    def f_trigger(self): return self.trigger_body  # Recurrence: {"scheduledTime": ..., "startTime": ...}
+    def f_addMinutes(self, ts, n, fmt=None):
+        t, _ = _parse_ts(ts)
+        t = t + _dt.timedelta(minutes=int(n))
+        return _fmt(t, fmt) if fmt else t.strftime("%Y-%m-%dT%H:%M:%S.0000000Z")
+    def f_greaterOrEquals(self, a, b): return a >= b
     def f_item(self): return self.item_stack[-1]
     def f_actions(self, n): return {"status": self.results[n]["status"], "outputs": self.results[n]["outputs"]} if n in self.results else None
     def f_body(self, n): return self.results[n]["body"]

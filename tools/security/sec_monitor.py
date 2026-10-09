@@ -139,8 +139,33 @@ def monitor(changes: Iterable[Mapping], *, service_upn: str, settings: Mapping, 
     return run
 
 
+def window(scheduled_utc: str, interval_minutes: int) -> tuple:
+    """Half-open scan window [scheduled - interval, scheduled) of one scheduled run, as 'yyyy-MM-ddTHH:mm:ss' (UTC)."""
+    t = _ts(scheduled_utc)
+    f = "%Y-%m-%dT%H:%M:%S"
+    return (t - _dt.timedelta(minutes=int(interval_minutes))).strftime(f), t.strftime(f)
+
+
+def scan_versions(versions_by_item: Mapping, *, service_upn: str, scheduled_utc: str, interval_minutes: int) -> list:
+    """Runtime model of the deployed flow: every version created inside the run's window whose SharePoint Editor is not the
+    service identity is out of band. versions_by_item: item id -> version-history rows {VersionLabel, Created, Editor}.
+    A version lies in exactly one window, so consecutive runs alert it once."""
+    svc = (service_upn or "").strip().lower()
+    if not svc:
+        raise ValueError(MONITOR_CONFIG_INVALID)
+    start, end = window(scheduled_utc, interval_minutes)
+    out = []
+    for item_id, versions in versions_by_item.items():
+        for v in versions:
+            created = str(v.get("Created") or "")
+            if start <= created < end and principal_upn(v.get("Editor")) != svc:
+                out.append(Classification(OUT_OF_BAND_EDIT, str(item_id), str(v.get("VersionLabel") or ""),
+                                          principal_upn(v.get("Editor")), created))
+    return out
+
+
 def _ts(s: str) -> _dt.datetime:
-    return _dt.datetime.strptime(s.replace("Z", "+0000")[:24], "%Y-%m-%dT%H:%M:%S%z")
+    return _dt.datetime.strptime(s[:19] + "+0000", "%Y-%m-%dT%H:%M:%S%z")
 
 
 def alert_latency_seconds(t_change_utc: str, t_alert_utc: str) -> int:

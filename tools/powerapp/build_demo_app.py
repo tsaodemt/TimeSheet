@@ -46,7 +46,7 @@ MESSAGES = {
     "MSG_CONFIG_INVALID": "Timesheet configuration or your employee record is incomplete. Please contact the administrator.",
     "MSG_NOT_FOUND": "This entry no longer exists.",
     "MSG_FORBIDDEN": "You can only change your own entries.",
-    "MSG_LOCKED": "This entry is approved and can no longer be changed.",
+    "MSG_LOCKED": "Dữ liệu đã được phê duyệt",
     "MSG_CONFLICT": "This entry was changed elsewhere. Your entries were refreshed; please open it again.",
     "MSG_VALIDATION_LOOKUP": "Please choose an active project, phase, work type, shift and hour type.",
     "MSG_VALIDATION_HOURS": "Hours must be greater than 0 and at most 24.",
