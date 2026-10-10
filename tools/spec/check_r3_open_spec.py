@@ -133,9 +133,10 @@ def check(d=DEFAULT):
                 for o in M2_DECISIONS + (EPIC17_UNIT,)}
     errs += check_m2(d, dec, blocking, conditional, resolved, not_applicable, derived["M2"])
     errs += check_m3(d, dec, resolved)
+    errs += check_m4(d, dec, resolved)
     return errs, {"blocking": sorted(blocking), "conditional": sorted(conditional), "nonblocking": sorted(nonblocking),
                   "resolved": sorted(resolved), "not_applicable": sorted(not_applicable),
-                  "gates": {g: sorted(v) for g, v in derived.items()}, "m2_state": m2_state}
+                  "gates": dict({g: sorted(v) for g, v in derived.items()}, M4=sorted(m4_gate(dec))), "m2_state": m2_state}
 
 
 # M2 (EPIC 16): topic -> (decision id, pattern). A requirement section of the project-effort spec that mentions a topic
@@ -297,6 +298,102 @@ M3_RESOLVED = {"OD-17": "TEAMLEADER_SAME_DISCIPLINE", "OD-18": "NO_REOPEN", "OD-
 def _cap_row(sec_md, cap):
     row = [l for l in sec_md.splitlines() if l.startswith("| `%s`" % cap)]
     return [c.strip() for c in row[0].strip().strip("|").split("|")][1:] if row else None
+
+
+
+M4_FORBIDDEN_SCOPE = ("KPI", "salary review", "bonus", "ranking", "resource scoring")
+
+
+def m4_gate(dec):
+    """Open decisions whose Blocking column names M4 (current-scope reporting; not an R3 build gate)."""
+    out = set()
+    for c in rows(dec):
+        if len(c) < 8 or "RESOLVED" in c[1] or c[1].lstrip("*").startswith("NOT_APPLICABLE"):
+            continue
+        for m in re.finditer(r"(?<!NON_)BLOCKING\*?\*?\s*([^|;(]*)", c[7]):
+            if "M4" in re.findall(r"\b(M[1-4]|GL)\b", m.group(1)):
+                out.add(re.match(r"OD-\d\d", c[0]).group(0))
+    return out
+
+
+def check_m4(d, dec, resolved):
+    """M4 gate table = derived; M4 Vietnamese summary asks exactly the gate; the pack keeps KPI / salary / bonus / ranking out."""
+    errs = []
+    gate = m4_gate(dec)
+    table = gate_table(dec).get("M4", set())
+    if table != gate:
+        errs.append("gate M4 table %s != derived %s" % (sorted(table), sorted(gate)))
+    if os.path.exists(os.path.join(d, "M4-DECISION-SUMMARY.md")):
+        summ = read(d, "M4-DECISION-SUMMARY.md")
+        mm = re.search(r"(?ms)^## Bảng câu hỏi\n(.*?)(?=^## |\Z)", summ)
+        asked = {re.match(r"\| (OD-\d\d)", l).group(1) for l in (mm.group(1) if mm else "").splitlines() if re.match(r"\| OD-\d\d \|", l)}
+        if asked != gate:
+            errs.append("M4-DECISION-SUMMARY question table %s != M4 gate %s" % (sorted(asked), sorted(gate)))
+        for oid in sorted(resolved):
+            if mm and re.search(r"(?m)^\| %s \|" % oid, mm.group(1)):
+                errs.append("M4-DECISION-SUMMARY still asks closed decision %s" % oid)
+    if os.path.exists(os.path.join(d, "M4-DECISION-PACK.md")):
+        pack = read(d, "M4-DECISION-PACK.md")
+        scope = re.search(r"(?ms)^## 2\. Derived M4 gate\n(.*?)(?=^## |\Z)", pack)
+        for bad in M4_FORBIDDEN_SCOPE:
+            if scope and re.search(bad, scope.group(1), re.I):
+                errs.append("M4-DECISION-PACK gate reactivates out-of-scope %s" % bad)
+        if "Not in M4" not in pack:
+            errs.append("M4-DECISION-PACK does not state the excluded scope (KPI / salary / bonus / ranking)")
+    errs += check_m4_resolved(d, dec, resolved)
+    return errs
+
+
+M4_RESOLVED = {"OD-50": "IN_APP_GUARDED_REPORTING", "OD-20": "EFFORT_ONLY_NO_LABOUR_COST", "OD-31": "APPROVER_AS_QUAN_LY_PHONG_FOR_M4_ONLY",
+               "OD-13": "PLAN_WITH_NO_ACTUAL_VISIBLE_ACTUAL_ZERO", "OD-51": "APPROVEDLOCKED_ONLY", "OD-52": "M2_PROJECT_PLAN_M1_SEPARATE"}
+
+
+def check_m4_resolved(d, dec, resolved):
+    """Each resolved M4 decision is reflected in the reporting contract, the security matrix and the design."""
+    errs = []
+    con = read(d, "specs", "effort-reporting-contract", "spec.md")
+    sec = read(d, "specs", "planning-security", "spec.md")
+    design = read(d, "design.md")
+    flat = re.sub(r"\s+", " ", con)
+    for oid, key in M4_RESOLVED.items():
+        if oid in resolved and key not in resolution(dec, oid):
+            errs.append("%s resolution does not record %s" % (oid, key))
+    if "OD-50" in resolved:
+        for need in ("inside the existing Power Apps application", "return aggregates only", "SHALL NOT require a Power BI licence"):
+            if need not in flat:
+                errs.append("OD-50: reporting contract lacks '%s'" % need)
+    if "OD-20" in resolved:
+        if "no M4 report response or screen SHALL contain salary" not in flat:
+            errs.append("OD-20: reporting contract does not forbid money in M4 responses")
+        for cap in ("RPT.ProjectView", "RPT.DisciplineView"):
+            row = [l for l in sec.splitlines() if l.startswith("| `%s`" % cap)]
+            if row and re.search(r"(?i)cost|salary|rate\b", row[0]):
+                errs.append("OD-20: %s grants cost / salary data" % cap)
+    if "OD-31" in resolved:
+        for cap in ("RPT.ProjectView", "RPT.DisciplineView"):
+            r = _cap_row(sec, cap)
+            if not r or r[2] != "company":
+                errs.append("OD-31: Approver is not company on %s" % cap)
+        for cap in ("EFF.ProjectView", "EFF.ProjectEdit", "EFF.DisciplineView", "EFF.DisciplineEdit", "EFF.DisciplineApprove"):
+            r = _cap_row(sec, cap)
+            if r and r[2] != "DENY":
+                errs.append("OD-31: Approver gained %s (M4 mapping must not change M2 / M3)" % cap)
+        if "no M2 / M3 / EPIC 07 / Timesheet right follows from it" not in sec:
+            errs.append("OD-31: security spec does not limit the Approver mapping to M4 reporting")
+    if "OD-13" in resolved:
+        if "remains undecided" in con or "derived actual of 0" not in flat:
+            errs.append("OD-13: plan-with-no-actual rule not applied in the reporting contract")
+    if "OD-51" in resolved:
+        if "count only ApprovedLocked EPIC 17 registrations as the plan" not in flat or "Draft registrations SHALL be excluded" not in flat:
+            errs.append("OD-51: discipline plan is not ApprovedLocked-only in the reporting contract")
+        if not re.search(r"Σ ApprovedLocked `DisciplineEffortRegistrations\.Effort` \(Draft excluded", design):
+            errs.append("OD-51: design §11.1 discipline plan is not ApprovedLocked-only")
+    if "OD-52" in resolved:
+        if "EPIC 16 Project Effort total as the plan" not in flat or "never added to, netted with or substituted for the plan" not in flat:
+            errs.append("OD-52: project plan / M1 separation not in the reporting contract")
+        if "separate column, only for `REG.View` holders" not in design:
+            errs.append("OD-52: design §11.1 does not keep M1 as a separate REG.View column")
+    return errs
 
 
 def check_m3(d, dec, resolved):

@@ -265,11 +265,20 @@ Wire/storage semantics (OD-01 resolved = A): wire format per cell is `state` ∈
 |---|---|---|---|---|
 | Registered budget (legacy) | `ManDays` — OD-01 resolved = A: storage keeps blank (null) and explicit 0 distinct; display shows blank vs "0"; aggregation sums blank as 0; "registered cell" counts exclude blank and include explicit 0 | Project, Phase, Discipline | HourRegistrations | Status Active; stale rows per OD-08 |
 | Planned project effort | `Effort` in man-days (OD-14), blank ≠ 0 (OD-40) | Project, RecipientCategory (lifetime, no phase — OD-22/23) | ProjectEffortAllocations | successful guarded saves (no A.I approval in current scope) |
-| Discipline registered effort | `Effort` | Project, Discipline, Task†, Owner†, Period† | DisciplineEffortRegistrations | Draft / Approved flag exposed |
+| Discipline registered effort | `Effort` (man-days, OD-45) | Project, Discipline (snapshot), Employee, WorkType (OD-30; lifetime OD-48) | DisciplineEffortRegistrations | Draft / ApprovedLocked exposed; **M4 planned = ApprovedLocked only (OD-51)** |
 | Actual effort | Timesheet hours ÷ `HoursPerManDay` → man-days (computed, not stored) | Project, Phase, Discipline (snapshot OD-35), Owner, Date | TimesheetEntries (OD-19) | EntryStatus = Approved only (OD-33); ownership per existing Timesheet rules (OD-41 NOT_APPLICABLE) |
-| Variance | normalised planned − actual | common approved keys | derived later | explicit comparison-unit conversion; source facts unchanged |
+| Variance | normalised planned − actual | common approved keys | derived in the M4 report flows | explicit comparison-unit conversion; source facts unchanged; blank plan → no variance |
 
-Rules: legacy HourRegistration source remains man-days; EPIC 16 Project Effort is stored in man-days (OD-14) in its own schema; Timesheet hours stay hours and are normalised explicitly via `HoursPerManDay` in the query instead of changing source storage. Equal units never link M1 and M2 values. Period/lifetime presentation follows approved period decisions. Whether budget/planned rows with no actuals are shown follows OD-13; R3 preserves independent facts for either option. No salary, rate or cost column exists in the R3 contract; no KPI/evaluation input.
+Rules: legacy HourRegistration source remains man-days; EPIC 16 Project Effort is stored in man-days (OD-14) in its own schema; Timesheet hours stay hours and are normalised explicitly via `HoursPerManDay` in the query instead of changing source storage. Equal units never link M1 and M2 values. Period/lifetime presentation follows approved period decisions. Budget/planned rows with no actuals are shown with a derived actual 0 (OD-13). No salary, rate or cost column exists in the R3 contract and no M4 response carries money (OD-20); no KPI/evaluation input.
+
+### 11.1 M4 current-scope reports (OD-50: in-app, guarded, aggregate-only)
+
+| Flow | Capability | Rows | Measures (man-days unless stated) |
+|---|---|---|---|
+| `RPT-ProjectReport` | `RPT.ProjectView` (+ project-PM grant) | every authorized project | planned = Σ non-blank `ProjectEffortAllocations.Effort` (blank plan when none, OD-40); actual hours = Σ Approved `TimesheetEntries.Hours`, actual = hours ÷ `HoursPerManDay` (0 when no row, OD-13); variance = planned − actual (none when the plan is blank); M1 registered = Σ non-blank `HourRegistrations.ManDays` incl. stale lines (OD-08), separate column, only for `REG.View` holders (OD-52) |
+| `RPT-DisciplineReport` | `RPT.DisciplineView` (+ project-PM grant) | authorized project × discipline with an ApprovedLocked plan or an Approved actual | planned = Σ ApprovedLocked `DisciplineEffortRegistrations.Effort` (Draft excluded, OD-51); actual = Σ Approved hours of the `DisciplineCode` ÷ `HoursPerManDay` (0 when none, OD-13); variance = planned − actual |
+
+Both flows: trusted caller and scope from the guard (request fields are decoys), one Authorization row, totals only — no TimesheetEntries / registration / allocation row, owner, employee, salary, rate or cost field is returned (OD-20); lifetime only (OD-23 / OD-48 — no period filter is defined, so none is offered); per-project actual queries run in parallel with a 5,000-row page each and fail closed (typed ERROR) beyond it; exact cents arithmetic for man-days.
 
 ## 12. Migration
 
@@ -352,4 +361,4 @@ EPIC 17 implementation; **GL** = go-live with migrated data; **M4** = later repo
 
 ## 17. Open questions
 
-Open questions are the 11 OPEN_DECISION items of `decisions.md` (1 unconditional BLOCKING, 0 conditional blockers, 10 NON_BLOCKING). Thirty-seven decisions are resolved in `decisions.md` §C (OD-17, 18, 27, 28, 29, 30, 34, 46, 47, 48 by owner decision (M3 closure); OD-15, 32, 45, 49 by evidence in the M3 review; OD-01, 05, 07, 08, 14, 16, 19, 22, 23, 24, 25, 33, 37, 40, 42, 44 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence); OD-41 is NOT_APPLICABLE.
+Open questions are the 8 OPEN_DECISION items of `decisions.md` (1 unconditional BLOCKING, 0 conditional blockers, 7 NON_BLOCKING). Forty-three decisions are resolved in `decisions.md` §C (OD-13, 20, 31, 50, 51, 52 by owner decision (M4 closure); OD-17, 18, 27, 28, 29, 30, 34, 46, 47, 48 by owner decision (M3 closure); OD-15, 32, 45, 49 by evidence in the M3 review; OD-01, 05, 07, 08, 14, 16, 19, 22, 23, 24, 25, 33, 37, 40, 42, 44 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence); OD-41 is NOT_APPLICABLE.
