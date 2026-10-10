@@ -286,7 +286,7 @@ Both flows: trusted caller and scope from the guard (request fields are decoys),
   4 zero) and 271 blank; Σ 8,648 man-days; integers 2–200; no decimals, negatives, text, duplicates or unknown
   phase/discipline ids; one orphan file (deleted project, 9 lines, all blank → excluded, 0 values lost; corrects the
   earlier "45 orphan cells" note); one stale line (phase no longer on the project; all its cells blank, so nothing to keep or clear under OD-08); 3 duplicate project codes
-  (16 projects) → key by project id (LHR-06). Mapping (OD-01 = A, OD-09 = A): each filled legacy cell → one item (195 non-zero values, 4 explicit zeros kept as 0); each blank cell → no item; target 199 items; Σ per project reconciles to the legacy total (8,648 overall); stale lines per OD-08; timing per OD-11.
+  (16 projects) → key by project id (LHR-06). Mapping (OD-01 = A, OD-09 = A): each filled legacy cell → one item (195 non-zero values, 4 explicit zeros kept as 0); each blank cell → no item; target 199 items; Σ per project reconciles to the legacy total (8,648 overall); stale lines per OD-08; timing per OD-11 (resolved by evidence: migrated with the EPIC 08 historical migration; STAGING rehearsal current scope; Production load at the EPIC 08 cutover).
 - **EPIC 16/17:** new requirements, **no historical data** exists to migrate (OD-25 resolved = separate: A.I is not seeded from E14).
 - No live migration in this change.
 
@@ -361,4 +361,4 @@ EPIC 17 implementation; **GL** = go-live with migrated data; **M4** = later repo
 
 ## 17. Open questions
 
-Open questions are the 8 OPEN_DECISION items of `decisions.md` (1 unconditional BLOCKING, 0 conditional blockers, 7 NON_BLOCKING). Forty-three decisions are resolved in `decisions.md` §C (OD-13, 20, 31, 50, 51, 52 by owner decision (M4 closure); OD-17, 18, 27, 28, 29, 30, 34, 46, 47, 48 by owner decision (M3 closure); OD-15, 32, 45, 49 by evidence in the M3 review; OD-01, 05, 07, 08, 14, 16, 19, 22, 23, 24, 25, 33, 37, 40, 42, 44 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence); OD-41 is NOT_APPLICABLE.
+Open questions are the 7 OPEN_DECISION items of `decisions.md` (0 unconditional BLOCKING, 0 conditional blockers, 7 NON_BLOCKING). Forty-four decisions are resolved in `decisions.md` §C (OD-11 by evidence (post-R3 migration review); OD-13, 20, 31, 50, 51, 52 by owner decision (M4 closure); OD-17, 18, 27, 28, 29, 30, 34, 46, 47, 48 by owner decision (M3 closure); OD-15, 32, 45, 49 by evidence in the M3 review; OD-01, 05, 07, 08, 14, 16, 19, 22, 23, 24, 25, 33, 37, 40, 42, 44 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence); OD-41 is NOT_APPLICABLE.

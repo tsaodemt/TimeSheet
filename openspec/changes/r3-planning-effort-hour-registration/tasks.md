@@ -21,7 +21,7 @@
 - [x] 1.4 Capability seed: `REG.Edit` = Executive + PMO (OD-04); `REG.View` = Team Leader, Approver, Executive, PMO, HR, IT Support (OD-05); AppAdmin removed; role × capability tests — DONE (offline + live, every role)
 - [x] 1.5 Canvas Hour Registration screen + generator assertions (blank vs 0, Save rule, read-only, dirty prompt, geometry) — DONE (HC01–HC16; year list = All + 2017–2050 legacy parity, no delegation warning)
 - [x] 1.6 STAGING: provision list, deploy flows, publish app, live proof with synthetic projects, per-role live results — DONE 2026-10-10: 13×5 round trip, update/clear, validation, stale ETag (preflight), removed/re-added phase, Paused project; 12/12 roles as specified; Closed status not testable (no Closed state in the target schema); post-preflight conflict (PARTIAL) proven offline only
-- [ ] 1.7 (open — blocked by OD-11, migration gate; not part of the S12.5 screen closure) Migration of legacy E14 per OD-11 (199 items incl. 4 explicit zeros, blanks → no item; Σ per project reconciled; stale rows per OD-08)
+- [ ] 1.7 (open — OD-11 resolved by evidence 2026-10-10; now blocked by the EPIC 04 master-data gate G2 (legacy Projects / Phases / ProjectPhases) and executed in the EPIC 08 STAGING rehearsal; not part of the S12.5 screen closure) Migration of legacy E14 per OD-11 (199 items incl. 4 explicit zeros, blanks → no item; Σ per project reconciled; stale rows per OD-08)
 
 ## 2. M2 — EPIC 16 Project Effort — DONE 2026-10-10 on STAGING (private evidence `_investigation/r3/m2-epic16/LIVE-M2.md`)
 
