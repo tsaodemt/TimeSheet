@@ -45,9 +45,13 @@ Prerequisites (verified on STAGING read-only 2026-10-10): `Projects` has no PM f
 - [x] 3.4 Canvas Discipline Effort screen (DC01–DC13; live fix: no AccessibleLabel on Classic/Button) (own editor, discipline totals, Team Leader review / approve, view-only roles); no reopen, no revision
 - [x] 3.5 STAGING: provision, deploy (run-only), publish (v15); live E2E, 12-role matrix + PM condition, security, audit; evidence; backlog — DONE 2026-10-10 (platform fixes found at deploy: no self-referencing SetVariable, expressions ≤ 8192 characters, unique action names; each guarded by DE20)
 
-## 5. M4 — current-scope reporting (BLOCKED — M4 decision checkpoint, `M4-DECISION-PACK.md`)
+## 5. M4 — current-scope reporting (decisions complete 2026-10-10; released)
 
-- [ ] 5.0 Owner answers OD-13, OD-20, OD-31, OD-50, OD-51, OD-52 (`M4-DECISION-SUMMARY.md`); no M4 implementation before them
+- [x] 5.0 Owner answers OD-13, OD-20, OD-31, OD-50, OD-51, OD-52 recorded (`M4-DECISION-SUMMARY.md`)
+- [ ] 5.1 Report capability matrix (`RPT.ProjectView`, `RPT.DisciplineView`; Approver for M4 only) + reference model + tests (aggregates, plan with no actual, Approved / ApprovedLocked only, M1 separate, no money)
+- [ ] 5.2 Flows `RPT-ProjectReport`, `RPT-DisciplineReport` generated; simulator parity (lazy + eager)
+- [ ] 5.3 Canvas report screen (project and discipline planned vs actual, variance, M1 separate column, refresh, empty / error states)
+- [ ] 5.4 STAGING: deploy (run-only), publish; live reconciliation, role matrix incl. Approver, security (no rows, no money); evidence; backlog
 - Out of M4: KPI, salary review, bonus / reward, resource scoring / ranking, advanced evaluation analytics (NR-EFF-09 deferred)
 
 ## 4. Closure

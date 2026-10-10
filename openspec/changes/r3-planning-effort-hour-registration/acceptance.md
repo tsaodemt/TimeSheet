@@ -42,6 +42,17 @@ Each criterion is observable and traceable (requirement / legacy row / decision)
 | AC-EFF17-05 | No reopen / unapprove / unlock flow, button or bypass exists; no revision entity | OD-18, OD-34 |
 | AC-EFF17-06 | Reads return exactly the OD-46 scope per role (Employee own, Team Leader discipline, project PM, PMO, Executive; others denied) and Approved-only actual totals per discipline without Timesheet rows | OD-46, OD-33 |
 
+## M4 current-scope reporting (after M4 decisions)
+
+| AC | Criterion | Trace |
+|---|---|---|
+| AC-RPT-01 | Reports run in the existing app through guarded flows; responses are aggregates only (no source row, owner or employee field) | OD-50 |
+| AC-RPT-02 | Project planned = the M2 Project Effort total; actual = Σ Approved Timesheet hours ÷ `HoursPerManDay` (Draft excluded); variance = planned − actual; M1 registered is a separate column (REG.View holders only), never added to the plan | OD-52, OD-33, OD-08 |
+| AC-RPT-03 | Discipline planned = Σ ApprovedLocked EPIC 17 registrations (Draft excluded); actual per project × discipline from Approved Timesheet hours | OD-51, OD-33 |
+| AC-RPT-04 | A row with a plan and no Approved actual is shown with actual 0 | OD-13 |
+| AC-RPT-05 | Scope per the M4 report matrix: PM own projects, Team Leader own discipline (discipline report), PMO / Executive / Approver (= Quản lý phòng) company; Employee and technical / confidential roles denied; Approver gains no M2 / M3 / Timesheet right | OD-31, OD-37, OD-46 |
+| AC-RPT-06 | No salary, rate, labour cost, bonus or reward field in any M4 response or screen | OD-20 |
+
 ## Shared R3
 
 | AC | Criterion | Trace |

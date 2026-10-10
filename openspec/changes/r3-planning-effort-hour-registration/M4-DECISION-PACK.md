@@ -1,6 +1,6 @@
 # R3 M4 — current-scope reporting — decision pack (no implementation)
 
-Status 2026-10-10. Change `r3-planning-effort-hour-registration`. M1, M2 (EPIC 16, main 1480de9) and M3 (EPIC 17, main ed38f24) are DONE on STAGING. **M4_IMPLEMENTATION_GATE = BLOCKED — M4 DECISION CHECKPOINT** (6 owner answers needed).
+Status 2026-10-10. Change `r3-planning-effort-hour-registration`. M1, M2 (EPIC 16, main 1480de9) and M3 (EPIC 17, main ed38f24) are DONE on STAGING. **M4_IMPLEMENTATION_GATE = RELEASED** — all six M4 decisions resolved by the owner 2026-10-10 (§4).
 M4 = the current-scope reporting step of the master task R3-COMPLETE-M2-M3-M4 (Part E): project planned vs actual, discipline
 planned vs actual, variance, and the effort summaries planning needs. **Not in M4:** KPI, salary review, bonus / reward, resource
 scoring, ranking, advanced evaluation analytics (NR-EFF-09 stays deferred, OD-21 / OD-38). This pack derives the M4 gate from the
@@ -50,3 +50,18 @@ Not blocking M4: OD-06, 10, 12 (lifetime, = OD-23), 35, 36, 39, 43 (UI / migrati
 ## 3. Reconciliation the M4 build must prove (after the answers)
 M2 planned per project = report planned; Approved actual = report actual (11 h = 1.375 công on DEMO-PRJ-01); M3 planned per discipline
 = report discipline planned (per OD-51); unit conversion exact; blank vs 0; role / scope filtering per OD-37 / OD-46; no cost column.
+
+## 4. Closure 2026-10-10 (owner decisions, task R3-M4-APPLY-OWNER-DECISIONS-AND-IMPLEMENT)
+
+| Id | Answer | Key |
+|---|---|---|
+| OD-50 | b | IN_APP_GUARDED_REPORTING |
+| OD-20 | a | EFFORT_ONLY_NO_LABOUR_COST |
+| OD-31 | b (M4 reporting only) | APPROVER_AS_QUAN_LY_PHONG_FOR_M4_ONLY |
+| OD-13 | a | PLAN_WITH_NO_ACTUAL_VISIBLE_ACTUAL_ZERO |
+| OD-51 | b | APPROVEDLOCKED_ONLY |
+| OD-52 | a | M2_PROJECT_PLAN_M1_SEPARATE |
+
+Derived M4 gate after closure: none. Report capability matrix: `decisions.md` (M4 report capability matrix); contracts:
+`design.md` §11.1; acceptance AC-RPT-01..06. The measure table of §1 now reads: discipline planned = ApprovedLocked only; project
+plan = EPIC 16; M1 registered separate (REG.View holders); plan with no actual shown with actual 0; cost = none.

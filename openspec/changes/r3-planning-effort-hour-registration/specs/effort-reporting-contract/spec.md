@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
-### Requirement: Reporting data contract only
-R3 SHALL define and populate the persisted facts/keys that later reporting can consume for registered/planned effort, actual effort, variance, project summary and discipline summary. R3 SHALL NOT deploy an EPIC 18 analytics screen, Power BI page, reporting API solely to satisfy this contract, resource evaluation (NR-EFF-09), KPI, salary review or cost figures. Contract verification in R3 is an offline/reference or read-only data-shape/reconciliation test.
+### Requirement: Reporting data contract and current-scope in-app reports
+R3 SHALL define and populate the persisted facts/keys for registered/planned effort, actual effort, variance, project summary and discipline summary. Current-scope M4 reports (OD-50 resolved = in-app guarded reporting) SHALL run inside the existing Power Apps application through guarded Power Automate reporting flows that resolve the caller and scope server-side and return aggregates only; they SHALL NOT require a Power BI licence and SHALL NOT return a protected source row because a report shows its total. R3 SHALL NOT deploy resource evaluation (NR-EFF-09), KPI, salary review, bonus / reward, resource scoring or ranking.
 
 #### Scenario: Contract reconciliation test
 - **GIVEN** synthetic registrations and actuals for a project
@@ -30,16 +30,37 @@ Registered man-days per project SHALL equal the sum of applicable `HourRegistrat
 - **THEN** it equals the approved legacy-reconciliation total for that project
 
 ### Requirement: No cost leakage
-The R3 contract SHALL contain no salary, rate or labour-cost column. OD-20 is a later reporting decision and cannot add confidential cost data to R3 planning lists.
+The R3 contract SHALL contain no salary, rate or labour-cost column, and no M4 report response or screen SHALL contain salary, daily / employee / position rate, labour monetary cost, bonus, reward or salary recommendation; no confidential rate data SHALL be read to compute a hidden value (OD-20 resolved = effort only, current scope).
 
 #### Scenario: Contract schema check
 - **WHEN** the R3 planning fact columns are listed
 - **THEN** no salary, rate or cost column is present
 
-### Requirement: Budget-without-actuals presentation remains undecided
-Whether later reporting shows budget/planned rows that have no actual effort SHALL follow OD-13. R3 SHALL preserve enough independent budget/planning facts for either presentation; it SHALL NOT hard-code option (a) before OD-13 is decided.
+### Requirement: Plan with no actual is shown
+A report row with a planned value and no included Approved Timesheet row SHALL be shown with a derived actual of 0 (OD-13 resolved, deviation from legacy LHR-33); no Timesheet row SHALL be written for it.
 
-#### Scenario: OD-13 option is applied later
-- **GIVEN** a project with budget but no actuals in a period
-- **WHEN** later reporting is implemented
-- **THEN** inclusion/exclusion follows the recorded OD-13 decision without requiring a change to R3 source facts
+#### Scenario: Planned project without actuals
+- **GIVEN** a project with planned effort 5 and no Approved Timesheet row
+- **WHEN** the project report is read
+- **THEN** the row is shown with actual 0 and variance 5
+
+### Requirement: Project and discipline report measures
+The project report SHALL use the EPIC 16 Project Effort total as the plan (OD-52 resolved); M1 `HourRegistrations` SHALL be shown only as a separate column, never added to, netted with or substituted for the plan. The discipline report SHALL count only ApprovedLocked EPIC 17 registrations as the plan (OD-51 resolved); Draft registrations SHALL be excluded and no "including drafts" figure SHALL be shown. Actual = Σ Approved Timesheet hours ÷ `HoursPerManDay`; variance = planned − actual; plan and actual are project-lifetime figures.
+
+#### Scenario: Draft plan and Draft actual are excluded
+- **GIVEN** a discipline with ApprovedLocked 1.75, Draft 0.75, Approved Timesheet 16 h and Draft Timesheet 8 h, `HoursPerManDay` = 8
+- **WHEN** the discipline report is read
+- **THEN** planned is 1.75, actual is 2 and variance is −0.25
+
+#### Scenario: M1 stays separate
+- **GIVEN** a project with M2 plan 17.5 and M1 registered 10
+- **WHEN** the project report is read by a caller holding `REG.View`
+- **THEN** planned is 17.5 and M1 registered 10 is a separate value; neither is added to the other
+
+### Requirement: Report scope
+Report visibility SHALL follow the M4 report matrix: project report — project PM (own projects), PMO, Executive, Approver (= Quản lý phòng for M4 only, OD-31); discipline report — Team Leader (own discipline), project PM (own projects), PMO, Executive, Approver. Employee and technical / confidential roles SHALL be denied. The OD-31 mapping SHALL NOT change any M2, M3, EPIC 07 or Timesheet right.
+
+#### Scenario: Approver reads reports but gains no planning right
+- **GIVEN** a caller holding only Approver and Employee
+- **WHEN** the caller reads the reports and then calls the M3 approve flow
+- **THEN** both reports return company aggregates and the approval is refused ROLE_NOT_ALLOWED

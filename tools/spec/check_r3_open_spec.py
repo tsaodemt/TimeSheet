@@ -340,6 +340,59 @@ def check_m4(d, dec, resolved):
                 errs.append("M4-DECISION-PACK gate reactivates out-of-scope %s" % bad)
         if "Not in M4" not in pack:
             errs.append("M4-DECISION-PACK does not state the excluded scope (KPI / salary / bonus / ranking)")
+    errs += check_m4_resolved(d, dec, resolved)
+    return errs
+
+
+M4_RESOLVED = {"OD-50": "IN_APP_GUARDED_REPORTING", "OD-20": "EFFORT_ONLY_NO_LABOUR_COST", "OD-31": "APPROVER_AS_QUAN_LY_PHONG_FOR_M4_ONLY",
+               "OD-13": "PLAN_WITH_NO_ACTUAL_VISIBLE_ACTUAL_ZERO", "OD-51": "APPROVEDLOCKED_ONLY", "OD-52": "M2_PROJECT_PLAN_M1_SEPARATE"}
+
+
+def check_m4_resolved(d, dec, resolved):
+    """Each resolved M4 decision is reflected in the reporting contract, the security matrix and the design."""
+    errs = []
+    con = read(d, "specs", "effort-reporting-contract", "spec.md")
+    sec = read(d, "specs", "planning-security", "spec.md")
+    design = read(d, "design.md")
+    flat = re.sub(r"\s+", " ", con)
+    for oid, key in M4_RESOLVED.items():
+        if oid in resolved and key not in resolution(dec, oid):
+            errs.append("%s resolution does not record %s" % (oid, key))
+    if "OD-50" in resolved:
+        for need in ("inside the existing Power Apps application", "return aggregates only", "SHALL NOT require a Power BI licence"):
+            if need not in flat:
+                errs.append("OD-50: reporting contract lacks '%s'" % need)
+    if "OD-20" in resolved:
+        if "no M4 report response or screen SHALL contain salary" not in flat:
+            errs.append("OD-20: reporting contract does not forbid money in M4 responses")
+        for cap in ("RPT.ProjectView", "RPT.DisciplineView"):
+            row = [l for l in sec.splitlines() if l.startswith("| `%s`" % cap)]
+            if row and re.search(r"(?i)cost|salary|rate\b", row[0]):
+                errs.append("OD-20: %s grants cost / salary data" % cap)
+    if "OD-31" in resolved:
+        for cap in ("RPT.ProjectView", "RPT.DisciplineView"):
+            r = _cap_row(sec, cap)
+            if not r or r[2] != "company":
+                errs.append("OD-31: Approver is not company on %s" % cap)
+        for cap in ("EFF.ProjectView", "EFF.ProjectEdit", "EFF.DisciplineView", "EFF.DisciplineEdit", "EFF.DisciplineApprove"):
+            r = _cap_row(sec, cap)
+            if r and r[2] != "DENY":
+                errs.append("OD-31: Approver gained %s (M4 mapping must not change M2 / M3)" % cap)
+        if "no M2 / M3 / EPIC 07 / Timesheet right follows from it" not in sec:
+            errs.append("OD-31: security spec does not limit the Approver mapping to M4 reporting")
+    if "OD-13" in resolved:
+        if "remains undecided" in con or "derived actual of 0" not in flat:
+            errs.append("OD-13: plan-with-no-actual rule not applied in the reporting contract")
+    if "OD-51" in resolved:
+        if "count only ApprovedLocked EPIC 17 registrations as the plan" not in flat or "Draft registrations SHALL be excluded" not in flat:
+            errs.append("OD-51: discipline plan is not ApprovedLocked-only in the reporting contract")
+        if not re.search(r"Σ ApprovedLocked `DisciplineEffortRegistrations\.Effort` \(Draft excluded", design):
+            errs.append("OD-51: design §11.1 discipline plan is not ApprovedLocked-only")
+    if "OD-52" in resolved:
+        if "EPIC 16 Project Effort total as the plan" not in flat or "never added to, netted with or substituted for the plan" not in flat:
+            errs.append("OD-52: project plan / M1 separation not in the reporting contract")
+        if "separate column, only for `REG.View` holders" not in design:
+            errs.append("OD-52: design §11.1 does not keep M1 as a separate REG.View column")
     return errs
 
 
