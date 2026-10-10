@@ -132,6 +132,7 @@ def check(d=DEFAULT):
                     "BLOCKING" if o in blocking else "CONDITIONAL" if o in conditional else "NON_BLOCKING")
                 for o in M2_DECISIONS + (EPIC17_UNIT,)}
     errs += check_m2(d, dec, blocking, conditional, resolved, not_applicable, derived["M2"])
+    errs += check_m3(d, dec, resolved)
     return errs, {"blocking": sorted(blocking), "conditional": sorted(conditional), "nonblocking": sorted(nonblocking),
                   "resolved": sorted(resolved), "not_applicable": sorted(not_applicable),
                   "gates": {g: sorted(v) for g, v in derived.items()}, "m2_state": m2_state}
@@ -197,10 +198,17 @@ def check_m2(d, dec, blocking, conditional, resolved, not_applicable, m2_gate):
     eff16 = [l for l in acc.splitlines() if l.startswith("| AC-EFF16-")]
     if "OD-33" not in resolved and any("HoursPerManDay" in l for l in eff16) and "OD-33" not in m2_gate:
         errs.append("M2 acceptance computes an actual-effort total but open OD-33 is not in the M2 gate")
-    # EPIC 17 unit: own open decision, no hidden dependency on OD-14.
-    if EPIC17_UNIT not in blocking or "M3" not in blocking.get(EPIC17_UNIT, ()):
-        errs.append("%s (EPIC 17 unit) must stay an open M3 blocker until decided" % EPIC17_UNIT)
+    # EPIC 17 unit: own decision, no hidden dependency on OD-14. Either an open M3 blocker, or resolved with its own evidence
+    # (rev01 A.II compares the two "số công" quantities directly) and stated in the discipline-effort spec.
     disc = read(d, "specs", "discipline-effort", "spec.md")
+    if EPIC17_UNIT in resolved:
+        row45 = next((l for l in dec.splitlines() if l.startswith("| %s " % EPIC17_UNIT)), "")
+        if not re.search(r"MAN_DAY", resolution(dec, EPIC17_UNIT)) or "compares" not in row45:
+            errs.append("%s resolved without the A.II comparison evidence" % EPIC17_UNIT)
+        if not re.search(r"stored in man-days \(%s resolved" % EPIC17_UNIT, disc):
+            errs.append("%s resolved but discipline-effort spec does not state man-days" % EPIC17_UNIT)
+    elif EPIC17_UNIT not in blocking or "M3" not in blocking.get(EPIC17_UNIT, ()):
+        errs.append("%s (EPIC 17 unit) must stay an open M3 blocker until decided" % EPIC17_UNIT)
     if EPIC17_UNIT not in disc or re.search(r"unit \(OD-14\)", disc):
         errs.append("discipline-effort unit must cite %s, not OD-14" % EPIC17_UNIT)
     tr = read(d, "traceability.md")
@@ -231,6 +239,17 @@ def check_m2(d, dec, blocking, conditional, resolved, not_applicable, m2_gate):
         for oid in sorted((resolved | not_applicable) & set(M2_DECISIONS)):
             if oid in questions:
                 errs.append("M2-DECISION-SUMMARY still asks closed decision %s" % oid)
+    # M3 (EPIC 17) Vietnamese meeting summary, once it exists: question table = exactly the derived M3 gate.
+    if os.path.exists(os.path.join(d, "M3-DECISION-SUMMARY.md")):
+        m3 = {o for o, gs in blocking.items() if "M3" in gs}
+        summ3 = read(d, "M3-DECISION-SUMMARY.md")
+        mm = re.search(r"(?ms)^## Bảng câu hỏi\n(.*?)(?=^## |\Z)", summ3)
+        asked3 = {re.match(r"\| (OD-\d\d)", l).group(1) for l in (mm.group(1) if mm else "").splitlines() if re.match(r"\| OD-\d\d \|", l)}
+        if asked3 != m3:
+            errs.append("M3-DECISION-SUMMARY question table %s != M3 gate %s" % (sorted(asked3), sorted(m3)))
+        for oid in sorted(resolved | not_applicable):
+            if mm and re.search(r"(?m)^\| %s \|" % oid, mm.group(1)):
+                errs.append("M3-DECISION-SUMMARY still asks closed decision %s" % oid)
     sections = re.split(r"(?m)^### Requirement: ", spec)[1:]
     for sec in sections:
         title = sec.splitlines()[0].strip()
@@ -265,6 +284,58 @@ def check_m2(d, dec, blocking, conditional, resolved, not_applicable, m2_gate):
     pea = [l for l in design.splitlines() if l.startswith("| `ProjectEffortAllocations`")]
     if not pea or re.search(r"ManDays|RegKey|SourceRegistration|HourRegistrations`?\s*,? *OD-25|link to `HourRegistrations`", pea[0]):
         errs.append("design §5.2 ProjectEffortAllocations row missing or linked to HourRegistrations fields")
+    return errs
+
+
+# M3 (EPIC 17) owner decisions 2026-10-10: decision -> (answer in §C, checks over the change files).
+M3_RESOLVED = {"OD-17": "TEAMLEADER_SAME_DISCIPLINE", "OD-18": "NO_REOPEN", "OD-27": "SINGLE_STAGE_APPROVAL",
+               "OD-28": "SELF_APPROVAL_ALLOWED_EPIC17_ONLY", "OD-29": "EXISTING_ACTIVE_WORKTYPES",
+               "OD-30": "EMPLOYEE_X_PROJECT_X_WORKTYPE", "OD-34": "AUDIT_ONLY", "OD-46": "M3_CAPABILITY_MATRIX",
+               "OD-47": "MAN_DAY_MIN_0_2DP_NO_MAX_BLANK_NE_0", "OD-48": "PROJECT_LIFETIME"}
+
+
+def _cap_row(sec_md, cap):
+    row = [l for l in sec_md.splitlines() if l.startswith("| `%s`" % cap)]
+    return [c.strip() for c in row[0].strip().strip("|").split("|")][1:] if row else None
+
+
+def check_m3(d, dec, resolved):
+    errs = []
+    disc = read(d, "specs", "discipline-effort", "spec.md")
+    design = read(d, "design.md")
+    sec_md = read(d, "specs", "planning-security", "spec.md")
+    for oid, answer in M3_RESOLVED.items():
+        if oid in resolved and answer not in resolution(dec, oid):
+            errs.append("%s resolution does not record %s" % (oid, answer))
+    if "OD-28" in resolved:  # self-approval allowed in EPIC 17 must not change EPIC 07
+        if "EPIC 07 self-approval unchanged" not in disc or "EPIC 07 Timesheet self-approval stays denied" not in sec_md:
+            errs.append("OD-28: EPIC 17 self-approval without the EPIC 07 self-approval denial being preserved in spec / security")
+    if "OD-29" in resolved:  # WorkTypes, no new task entity
+        drow = next((l for l in design.splitlines() if l.startswith("| `DisciplineEffortRegistrations`")), "")
+        if re.search(r"\b(TaskItemId|TaskType|ProjectTasks?|TaskDefinitions?)\b", disc + drow) or "WorkType" not in drow:
+            errs.append("OD-29: discipline effort must reference WorkTypes, not a task entity")
+    if "OD-30" in resolved:  # no stored / editable discipline total
+        drow = next((l for l in design.splitlines() if l.startswith("| `DisciplineEffortRegistrations`")), "")
+        if re.search(r"`Discipline(Effort)?Total`|`Total`", drow + disc) or "no stored or editable discipline total" not in disc:
+            errs.append("OD-30: a stored / editable discipline total is defined")
+    if "OD-18" in resolved:  # no reopen
+        cells = _cap_row(sec_md, "EFF.Unlock")
+        if not cells or any(c != "NOT_APPLICABLE" for c in cells):
+            errs.append("OD-18: EFF.Unlock must be NOT_APPLICABLE for every role")
+        if re.search(r"Approved(Locked)?\s*(→|->)\s*Draft", disc.replace("no Approved → Draft", "")):
+            errs.append("OD-18: discipline-effort defines an Approved -> Draft transition")
+    if "OD-46" in resolved:  # own matrix, not inherited from M2
+        view, pview = _cap_row(sec_md, "EFF.DisciplineView"), _cap_row(sec_md, "EFF.ProjectView")
+        if not view or view == pview or view[0] != "self" or view[1] != "discipline" or "OPEN_DECISION" in view:
+            errs.append("OD-46: EFF.DisciplineView must be its own matrix (EMP self, TL discipline), not inherited")
+        if "EPIC 16 authoritative PM" not in sec_md:
+            errs.append("OD-46: the PM view grant must use the EPIC 16 authoritative PM")
+        for cap in ("EFF.DisciplineEdit", "EFF.DisciplineApprove"):
+            c = _cap_row(sec_md, cap)
+            if not c or "OPEN_DECISION" in c or any(x == "company" for x in c):
+                errs.append("OD-46: %s must be decided and never company-wide" % cap)
+    if "SHALL NOT store actual effort" not in disc:
+        errs.append("EPIC 17 must not store actual effort (OD-19 / OD-33 / OD-49)")
     return errs
 
 
