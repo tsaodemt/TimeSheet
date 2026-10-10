@@ -27,8 +27,9 @@ Each criterion is observable and traceable (requirement / legacy row / decision)
 | AC-EFF16-02 | Stored allocations are in man-days with at most 2 decimals (OD-14 resolved); input with more than 2 decimals or a negative value is rejected server-side with VALIDATION_VALUE (no rounding/truncation); 0 and large values are accepted (minimum 0, no business maximum, OD-44; platform range only as TECHNICAL_LIMIT); keep blank (not registered) distinct from explicit 0 (OD-40 resolved), one lifetime value per project × recipient with no phase or period key (OD-22, OD-23), entered manually by the PM with no formula or import (OD-16) | NR-EFF-01 |
 | AC-EFF16-03 | A.I has no approval/lock workflow in current scope; a successful guarded PM save is effective immediately and produces no Approval event | resolved OD-26 |
 | AC-EFF16-04 | Actual effort is derived from existing TimesheetEntries (OD-19 resolved): no new actual-effort list, workflow or entry screen; existing trusted owner/on-behalf semantics unchanged; forged owner claims never grant ownership; man-days = Σ Approved hours ÷ `HoursPerManDay` in the contract, Draft excluded (OD-33 resolved) (OD-41 NOT_APPLICABLE) | NR-EFF-05, OD-19, OD-33, OD-41 |
-| AC-EFF16-05 | Only PMO can set / change / remove a project's authoritative PM; each change is audited; client PM claims are ignored | OD-24 |
+| AC-EFF16-05 | Only PMO can assign / change a project's authoritative PM; the PM must be an ACTIVE employee resolved server-side (inactive / unknown → VALIDATION_LOOKUP); each change is audited with old and new PM; client PM claims are ignored | OD-24 |
 | AC-EFF16-06 | Project Effort (planned and Approved actual total) is visible live to the project's PM (own projects only), PMO and Executive; every other role is denied server-side (0 unexpected allow / deny) | OD-37 |
+| AC-EFF16-07 | The project-level Approved actual total (hours and man-days = hours ÷ `HoursPerManDay`) equals the synthetic expected total (Draft and Deleted excluded) and no Project Effort response contains a Timesheet row, employee or date | OD-19, OD-33, OD-37 |
 
 ## EPIC 17 Discipline Effort (after M3 decisions)
 

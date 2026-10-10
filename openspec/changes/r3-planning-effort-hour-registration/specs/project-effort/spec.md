@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: PM project effort registration (NR-EFF-01)
-The system SHALL let the project's authoritative PM (OD-24) register Project Effort for the recipient categories named in the customer document (Quản lý phòng, PM and the disciplines điện, lạnh, nước, BIM) through a guarded flow. Values SHALL be entered manually by the PM (OD-16): no formula, no derivation from finance data and no import. The grain SHALL be project × recipient with no phase dimension (OD-22) and one project-lifetime value per recipient with no period dimension or registration window (OD-23); every change SHALL be audited. `QuanLyPhong` is a recipient category for A.I storage; OD-31 is required later for mapping that category to a human role/person in B.III reporting, not to create the A.I row.
+The system SHALL let the project's authoritative PM (OD-24) register Project Effort for the recipient categories named in the customer document (Quản lý phòng, PM and the disciplines điện, lạnh, nước, BIM) through a guarded flow. Values SHALL be entered manually by the PM (OD-16): no formula, no derivation from finance data and no import. The recipients SHALL be the categories `QLP` (Quản lý phòng), `PM` and one per configured discipline (AppSettings `ProjectEffortRecipientDisciplines`, discipline codes; default per OD-43 = the four disciplines named by rev01: ELE (điện), HVAC (lạnh), PSF (nước), BIM); the stable recipient key is `QLP`, `PM` or `D:<DisciplineLegacyId>` and the allocation key is `<ProjectLegacyId>|<RecipientKey>`. The grain SHALL be project × recipient with no phase dimension (OD-22) and one project-lifetime value per recipient with no period dimension or registration window (OD-23); every change SHALL be audited. `QuanLyPhong` is a recipient category for A.I storage; OD-31 is required later for mapping that category to a human role/person in B.III reporting, not to create the A.I row.
 
 #### Scenario: Only the project's PM registers
 - **GIVEN** user P is the authoritative PM of project A but not of project B
@@ -13,11 +13,15 @@ The system SHALL let the project's authoritative PM (OD-24) register Project Eff
 - **THEN** project A has exactly one BIM value (14), with no phase or period key, and both changes are audited
 
 ### Requirement: Authoritative project PM (OD-24)
-Each project SHALL have at most one authoritative PM, a person identified by a stable employee key and stored with the project. Only PMO SHALL set, change or remove it, through a guarded and audited flow. The server SHALL resolve the PM from this stored value; a client-supplied PM, role or scope claim SHALL be ignored. PMO and Executive SHALL NOT edit allocations merely by role. A project without a PM SHALL NOT be editable by anyone.
+Each project SHALL have zero or one authoritative PM. The PM SHALL be an ACTIVE `Employees` row selected by PMO; the server SHALL resolve it by the employee's item and store its stable LegacyId (never a caller-supplied UPN or free text) in the protected list `ProjectPmAssignments`, one item per project keyed by the project's LegacyId (the master `Projects` list is not changed). Only PMO SHALL assign or change it, through a guarded and audited flow recording the old and new PM; no clearing operation is specified. No global role is required of the designated PM. The server SHALL resolve the PM from this stored value; a client-supplied PM, role or scope claim SHALL be ignored. PMO and Executive SHALL NOT edit allocations merely by role. A project without a PM SHALL NOT be editable by anyone.
 
 #### Scenario: PMO designates the PM
 - **WHEN** a PMO user sets employee P as PM of project A
 - **THEN** P can save project A's allocations, the change is audited, and the previous PM (if any) can no longer save them
+
+#### Scenario: Inactive or unknown employee refused
+- **WHEN** a PMO user designates an inactive or non-existent employee as PM
+- **THEN** the response is VALIDATION_LOOKUP and nothing is written
 
 #### Scenario: Non-PMO cannot designate
 - **WHEN** an Executive or Team Leader user tries to set the PM of a project
@@ -29,11 +33,15 @@ Each project SHALL have at most one authoritative PM, a person identified by a s
 - **THEN** the response is SCOPE_NOT_ALLOWED and nothing is written
 
 ### Requirement: Project effort visibility (OD-37)
-Project Effort data (planned values and the project-level Approved actual total) SHALL be visible only to the project's authoritative PM (own projects), PMO (all projects) and Executive (all projects). Every other role SHALL be denied server-side. This SHALL NOT inherit the legacy Hour Registration visibility (OD-05). Team Leader and Quản lý phòng visibility is not granted here (EPIC 17: OD-46; reporting: OD-31). Existing Timesheet read rules are unchanged.
+Project Effort data (planned values and the project-level Approved actual total) SHALL be visible only to the project's authoritative PM (own projects), PMO (all projects) and Executive (all projects). The aggregated actual total SHALL be served as part of `EFF.ProjectView`; it SHALL NOT expose any `TimesheetEntries` row, employee detail or other Timesheet data (aggregated actual visibility is not Timesheet row visibility). Every other role SHALL be denied server-side. This SHALL NOT inherit the legacy Hour Registration visibility (OD-05). Team Leader and Quản lý phòng visibility is not granted here (EPIC 17: OD-46; reporting: OD-31). Existing Timesheet read rules are unchanged.
 
 #### Scenario: Other roles denied
 - **WHEN** a Team Leader, HR, Finance or Employee user (not the project's PM) reads project A's Project Effort
 - **THEN** the response is ROLE_NOT_ALLOWED or SCOPE_NOT_ALLOWED and no data is returned
+
+#### Scenario: No Timesheet row leakage
+- **WHEN** an authorised viewer reads project A's Project Effort
+- **THEN** the response contains the Approved actual total in hours and man-days only, and no Timesheet row, employee or date
 
 #### Scenario: PM sees own projects only
 - **GIVEN** P is the PM of project A only
@@ -97,7 +105,7 @@ require a new explicit decision and spec delta.
 - **THEN** no project effort allocation changes
 
 ### Requirement: Actual project effort from existing timesheet entries (NR-EFF-05, OD-19)
-Actual project effort SHALL be derived from the existing `TimesheetEntries` (OD-19 resolved by owner decision 2026-10-10). R3 SHALL NOT create a new actual-effort entry list, a duplicate actual-effort workflow or a new employee actual-effort entry screen. The existing Timesheet semantics SHALL be preserved unchanged: trusted actor identity, the business owner / Employee relationship, existing authorised on-behalf editing, existing entry status semantics and the existing security model; no existing Timesheet function SHALL be restricted. Caller-supplied owner identity SHALL never be trusted. OD-19 fixes the source only. Only `TimesheetEntries` in the Approved state SHALL count as actual effort (OD-33 resolved = Approved only); Draft and other states SHALL be excluded. Actual effort in man-days SHALL be computed by the reporting/query contract as Σ Approved hours ÷ `HoursPerManDay`; `TimesheetEntries` SHALL NOT be rewritten. OD-41 is NOT_APPLICABLE.
+Actual project effort SHALL be derived from the existing `TimesheetEntries` (OD-19 resolved by owner decision 2026-10-10). R3 SHALL NOT create a new actual-effort entry list, a duplicate actual-effort workflow or a new employee actual-effort entry screen. The existing Timesheet semantics SHALL be preserved unchanged: trusted actor identity, the business owner / Employee relationship, existing authorised on-behalf editing, existing entry status semantics and the existing security model; no existing Timesheet function SHALL be restricted. Caller-supplied owner identity SHALL never be trusted. OD-19 fixes the source only. Only `TimesheetEntries` in the Approved state SHALL count as actual effort (OD-33 resolved = Approved only); Draft and other states SHALL be excluded. Actual effort in man-days SHALL be computed by the reporting/query contract as Σ Approved hours ÷ `HoursPerManDay` per project (project level only; no per-recipient actual is defined) and SHALL NOT be stored; every Approved row of the project SHALL be included (paged reads; an incomplete read SHALL fail closed with a typed error, never a partial total); `TimesheetEntries` SHALL NOT be rewritten. OD-41 is NOT_APPLICABLE.
 
 #### Scenario: Forged owner is never trusted
 - **WHEN** a caller submits another person's identity as an actual-effort owner claim

@@ -2,9 +2,7 @@
 
 Status 2026-10-10: **DECISION CLOSURE COMPLETE — NO IMPLEMENTATION.** M1 / S12.5 Hour Registration is DONE (legacy
 parity) and is not reopened. Every M2 decision is now answered by the owner. **M2 decision gate: CLEAR (0 open).
-M2_IMPLEMENTATION_GATE = DECISIONS_COMPLETE — AWAITING OWNER RELEASE**: implementation starts only after the owner
-accepts the M2 data/security model, flow contracts, UX, tests and STAGING prerequisites (R3-G0 for M2, `design.md` §14)
-and the tasks are re-baselined (task 0.5). Register: `decisions.md`. Checker: `tools/spec/check_r3_open_spec.py`.
+M2_IMPLEMENTATION_GATE = RELEASED** by the project owner 2026-10-10; M2 tasks rebaselined (`tasks.md` §2). Register: `decisions.md`. Checker: `tools/spec/check_r3_open_spec.py`.
 Vietnamese record: `M2-DECISION-SUMMARY.md`.
 
 Evidence classes: **LEGACY_FACT** · **CUSTOMER_REQUIREMENT** · **OWNER_DECISION** · **TARGET_SECURITY_REQUIREMENT** ·
@@ -49,7 +47,7 @@ visibility).
 | `EFF.ProjectView` | PMO, Executive (all projects) | the project's PM (own projects) |
 | `EFF.ProjectEdit` | none | the project's PM (own projects) |
 | `EFF.ProjectPmAssign` | PMO | – |
-| `EFF.ActualView` (project-level Approved actual total) | PMO, Executive | the project's PM (own projects) |
+| Project-level Approved actual total | served under `EFF.ProjectView` (aggregate only, no Timesheet rows) | the project's PM (own projects) |
 | `EFF.ProjectApprove` | NOT_APPLICABLE (OD-26) | – |
 
 Existing Timesheet capabilities are unchanged.
@@ -69,7 +67,7 @@ Existing Timesheet capabilities are unchanged.
 
 - Key: `<ProjectLegacyId>|<RecipientKey>` with `RecipientKey` = `QLP` / `PM` / `D:<DisciplineLegacyId>`; no phase or period segment. SharePoint item ids are local helpers only.
 - `Effort` in man-days (≤ 2 dp, more rejected; ≥ 0; no business maximum) with an explicit not-registered state distinct from 0.
-- `Projects` gains the authoritative PM (stable employee key), written only by PMO through `EFF-SetProjectPm`.
+- Authoritative PM: new protected list `ProjectPmAssignments` (one item per project, unique key = project LegacyId, PM = ACTIVE employee's LegacyId), written only by PMO through `EFF-SetProjectPm`; master `Projects` unchanged; no clearing operation.
 - Not added: status/approval, cost, salary, rate, evaluation, phase, period, source reference, EPIC 17/18 fields, any `HourRegistrations` field or link, any actual-effort list.
 
 ## 8. Reporting boundary

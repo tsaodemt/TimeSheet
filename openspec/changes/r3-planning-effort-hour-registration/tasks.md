@@ -23,13 +23,19 @@
 - [x] 1.6 STAGING: provision list, deploy flows, publish app, live proof with synthetic projects, per-role live results — DONE 2026-10-10: 13×5 round trip, update/clear, validation, stale ETag (preflight), removed/re-added phase, Paused project; 12/12 roles as specified; Closed status not testable (no Closed state in the target schema); post-preflight conflict (PARTIAL) proven offline only
 - [ ] 1.7 (open — blocked by OD-11, migration gate; not part of the S12.5 screen closure) Migration of legacy E14 per OD-11 (199 items incl. 4 explicit zeros, blanks → no item; Σ per project reconciled; stale rows per OD-08)
 
-## 2. M2 — EPIC 16 Project Effort (blocked by 0.3)
+## 2. M2 — EPIC 16 Project Effort (decisions complete; rebaselined 2026-10-10)
 
-- [ ] 2.1 Data model for `ProjectEffortAllocations`: man-days ≤ 2 dp, more rejected (OD-14), ≥ 0 / no business maximum (OD-44), blank ≠ 0 (OD-40), own schema (OD-25); project × recipient, lifetime, manual entry (OD-16/22/23); PM column on `Projects` (OD-24) (`QuanLyPhong` stored as recipient category; OD-31 is a later visibility mapping)
-- [ ] 2.2 Project-PM scope in the guard + `EFF-SetProjectPm` (PMO only) + capability seed `EFF.ProjectView/Edit/PmAssign`, `EFF.ActualView` per OD-24/OD-37 (design + tests)
-- [ ] 2.3 `EFF-ReadProjectAllocation` / `EFF-SaveProjectAllocation` (no A.I approval flow in current scope; resolved OD-26)
-- [ ] 2.4 Actual effort from existing TimesheetEntries (OD-19): no new list/flow/screen; reporting/query contract Σ Approved hours ÷ `HoursPerManDay` (OD-33); regression tests that existing Timesheet ownership/on-behalf/status semantics are unchanged (OD-41 NOT_APPLICABLE)
-- [ ] 2.5 Canvas journey 7.2(1) and live proof
+Prerequisites (verified on STAGING read-only 2026-10-10): `Projects` has no PM field and unique permissions (master data, unchanged);
+`Employees.IsActive` / `LegacyId` exist; `Disciplines` ELE, HVAC, PSF, BIM, QL; AppSettings `HoursPerManDay` = 8;
+`TimesheetEntries` has `Project` (indexed lookup), `Hours`, `EntryStatus` (Draft / Approved / Deleted).
+
+- [ ] 2.1 Schema definitions + tests: `ProjectPmAssignments` (PM, OD-24) and `ProjectEffortAllocations` (project × recipient, man-days ≤ 2 dp, ≥ 0, no maximum, blank ≠ 0, portable keys; no phase / period / approval / M1 link / cost); AppSettings `ProjectEffortRecipientDisciplines` (OD-43 default ELE,HVAC,PSF,BIM)
+- [ ] 2.2 Capability seed + guard project-PM scope: `EFF.ProjectView` (PMO, EXE + PM scope), `EFF.ProjectEdit` (PM scope only), `EFF.ProjectPmAssign` (PMO); role × capability tests incl. AppAdmin / IT Support DENY
+- [ ] 2.3 Reference model + tests: PM assignment, read (list / detail, Approved actual aggregation, no row leakage), save (preflight, ETag, typed errors, changed-only, audit)
+- [ ] 2.4 Flows `EFF-SetProjectPm`, `EFF-ReadProjectEffort`, `EFF-SaveProjectEffort` generated; reference-vs-flow tests (simulator) incl. paging of TimesheetEntries
+- [ ] 2.5 Canvas Project Effort screen (navigation, project picker from the flow, PM display + PMO assignment, recipient entry, planned total, Approved actual, comparison, blank vs 0, dirty / save / reload / typed errors) + generator assertions
+- [ ] 2.6 STAGING: provision lists + AppSettings key, deploy flows (run-only), publish app; live E2E, 12-role matrix, security probes, audit; evidence; backlog
+- Data impact: new lists only; no migration (no legacy data; OD-25 no seeding); existing Timesheet and M1 untouched
 
 ## 3. M3 — EPIC 17 Discipline Effort (blocked by 0.3, M2 data model)
 
