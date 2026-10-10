@@ -579,6 +579,26 @@ class Approve(_Both):
         self.assertNotIn("Unlock", json.dumps(dr.GRANTS))
 
 
+def _strings(x):
+    if isinstance(x, dict):
+        for v in x.values():
+            yield from _strings(v)
+    elif isinstance(x, list):
+        for v in x:
+            yield from _strings(v)
+    elif isinstance(x, str):
+        yield x
+
+
+def _names(d):
+    for k, a in d.items():
+        yield k
+        for sub in [a.get("actions"), (a.get("else") or {}).get("actions"), (a.get("default") or {}).get("actions")] + [
+                c.get("actions") for c in (a.get("cases") or {}).values()]:
+            if isinstance(sub, dict):
+                yield from _names(sub)
+
+
 class Boundaries(unittest.TestCase):
     def test_DE20_lists_touched_and_writes(self):
         for name, fl in (("read", READ), ("save", SAVE), ("approve", APPROVE)):
@@ -590,6 +610,15 @@ class Boundaries(unittest.TestCase):
             posts = re.findall(r"\"parameters/method\": \"POST\", \"parameters/uri\": \"_api/web/lists/getbytitle\('([^']*)'\)", t)
             self.assertTrue(set(posts) <= {ds.REG_LIST, ds.LOCK_LIST, "_Audit", "_ConfAudit"}, posts)
             self.assertNotIn('"DELETE"', t)
+            # action names are unique across the whole definition (the designer silently refuses a duplicate, M3 deploy)
+            names = list(_names(fl))
+            self.assertEqual(len(names), len(set(names)), (name, sorted({n for n in names if names.count(n) > 1})))
+            # the platform limits one expression to 8192 characters (live designer error, M3 deploy)
+            for x in _strings(fl):
+                self.assertLessEqual(len(x), 8192, (name, x[:120]))
+            # the platform rejects a SetVariable whose value reads the same variable (live save error, M3 deploy)
+            for m in re.finditer(r'"type": "SetVariable", "runAfter": \{[^}]*\}, "inputs": \{"name": "(\w+)", "value": "([^"]*)"', t):
+                self.assertNotIn("variables('%s')" % m.group(1), m.group(2), (name, m.group(1)))
 
     def test_DE21_epic07_self_approval_still_denied(self):
         """OD-28 allows self-approval in EPIC 17 only: the EPIC 07 approval rules keep TS.SelfApprove ungranted."""

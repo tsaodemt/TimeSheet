@@ -144,7 +144,9 @@ def read_actions(*, role_groups, site, domain, emp_list, audit_list, conf_audit_
                         "Page_rows": {"type": "Select", "runAfter": {"Get_page": ANY}, "inputs": {"from": "@%s" % _rows("Get_page"), "select": {
                             "id": "@item()?['Id']", "h": "@float(if(equals(item()?['Hours'], null), '0', %s))" % nz("item()?['Hours']"),
                             "d": "@%s" % nz("item()?['DisciplineCode']")}}},
-                        "Add_page": {"type": "SetVariable", "runAfter": S("Page_rows"), "inputs": {"name": "Ts", "value": "@union(variables('Ts'), body('Page_rows'))"}},
+                        # no self-referencing SetVariable (rejected by the platform): append the page item by item
+                        "Add_page": {"type": "Foreach", "runAfter": S("Page_rows"), "foreach": "@body('Page_rows')", "actions": {
+                            "Add_t": {"type": "AppendToArrayVariable", "runAfter": {}, "inputs": {"name": "Ts", "value": "@items('Add_page')"}}}},
                         "Set_more": {"type": "SetVariable", "runAfter": {"Add_page": ALL}, "inputs": {"name": "Next", "value":
                                      "@if(and(%s, not(empty(%s))), concat('_api/', last(split(%s, '/_api/'))), %s)" % (_okd("Get_page"), nz(nxt), nz(nxt), EMPTY)}},
                         "Set_fail": {"type": "SetVariable", "runAfter": S("Set_more"), "inputs": {"name": "PageFail", "value": "@not(%s)" % _okd("Get_page")}}}}
@@ -243,20 +245,22 @@ def _pre_loop():
     stored = nz("%s?['Effort']" % F)
     has_val = "and(%s, not(equals(%s?['Effort'], null)))" % (found, F)
     se = nz("%s?['odata.etag']" % F)
-    vok = _value_ok(v)
-    same = ("if(equals(%(st)s, 'blank'), not(%(hv)s), and(%(hv)s, equals(%(sc)s, %(vc)s)))"
-            % dict(st=st, hv=has_val, sc=cents(stored), vc=cents("if(%s, %s, '0')" % (vok, v))))
+    # split into small Composes: the platform limits one expression to 8192 characters
+    a["P_vok"] = c("@" + _value_ok(v), S("Find"))
+    vok = "outputs('P_vok')"
+    a["P_newc"] = c("@if(equals(%s, 'blank'), 0, %s)" % (st, cents("if(%s, %s, '0')" % (vok, v))), S("P_vok"))
+    a["P_oldc"] = c("@if(%s, %s, 0)" % (has_val, cents(stored)), S("P_newc"))
+    a["P_same"] = c("@if(equals(%s, 'blank'), not(%s), and(%s, equals(outputs('P_oldc'), outputs('P_newc'))))" % (st, has_val, has_val), S("P_oldc"))
     code = ("if(or(equals(%(W)s, null), and(not(%(found)s), not(equals(%(W)s?['IsActive'], true)))), 'VALIDATION_LOOKUP', "
             "if(not(or(equals(%(st)s, 'blank'), equals(%(st)s, 'value'))), 'VALIDATION_VALUE', "
             "if(and(equals(%(st)s, 'value'), not(%(vok)s)), 'VALIDATION_VALUE', "
             "if(and(equals(%(st)s, 'value'), %(long)s), 'TECHNICAL_LIMIT', "
             "if(and(%(found)s, equals(%(F)s?['Status'], '%(ap)s')), 'LOCKED', "
             "if(or(and(not(%(found)s), not(empty(%(et)s))), and(%(found)s, not(equals(%(et)s, %(se)s)))), 'CONFLICT', "
-            "if(%(same)s, 'NO_CHANGE', 'WRITE')))))))"
-            % dict(W=W, found=found, st=st, vok=vok, long=_too_long(v), F=F, ap=ds.APPROVED, et=et, se=se, same=same))
-    a["P_code"] = c("@" + code, S("Find"))
-    newc = "if(equals(%s, 'blank'), 0, %s)" % (st, cents("if(%s, %s, '0')" % (vok, v)))
-    a["P_delta"] = c("@if(equals(outputs('P_code'), 'WRITE'), sub(%s, if(%s, %s, 0)), 0)" % (newc, has_val, cents(stored)), S("P_code"))
+            "if(outputs('P_same'), 'NO_CHANGE', 'WRITE')))))))"
+            % dict(W=W, found=found, st=st, vok=vok, long=_too_long(v), F=F, ap=ds.APPROVED, et=et, se=se))
+    a["P_code"] = c("@" + code, S("P_same"))
+    a["P_delta"] = c("@if(equals(outputs('P_code'), 'WRITE'), sub(outputs('P_newc'), outputs('P_oldc')), 0)", S("P_code"))
     a["Add_pre"] = {"type": "AppendToArrayVariable", "runAfter": S("P_delta"), "inputs": {"name": "Pre", "value": {
         "workTypeId": "@%s" % _rq(wt), "state": "@%s" % st, "value": "@%s" % v, "etag": "@%s" % et, "code": "@{outputs('P_code')}",
         "itemId": "@if(%s, %s?['Id'], 0)" % (found, F), "stored": "@%s" % se, "old": "@%s" % stored,
@@ -518,11 +522,11 @@ def approve_actions(*, role_groups, site, domain, emp_list, audit_list, conf_aud
                                     environment=environment, source_flow=source_flow, target_id_expr="string(%s?['itemId'])" % Rw,
                                     target_legacy_id_expr=nz(rr("RegKey")), change_fields={"Status": "'%s'" % ds.APPROVED}, after="R_final", name="Row_audit")
     write_audit = ev.pop("Write_Row_audit")
-    row["If_ok"] = {"type": "If", "runAfter": S("R_final"), "expression": {"equals": ["@" + okr, True]},
+    row["If_row_ok"] = {"type": "If", "runAfter": S("R_final"), "expression": {"equals": ["@" + okr, True]},
                     "actions": dict({k: dict(v, runAfter=({} if k == "Row_audit_change" else v["runAfter"])) for k, v in ev.items()}, Write_Row_audit=write_audit,
                                     Mark_degraded={"type": "SetVariable", "runAfter": {"Write_Row_audit": ["Failed", "TimedOut"]}, "inputs": {"name": "Degraded", "value": True}}),
                     "else": {"actions": {}}}
-    row["Add_result"] = {"type": "AppendToArrayVariable", "runAfter": {"If_ok": ANY}, "inputs": {"name": "Results", "value": {
+    row["Add_result"] = {"type": "AppendToArrayVariable", "runAfter": {"If_row_ok": ANY}, "inputs": {"name": "Results", "value": {
         "itemId": "@%s?['itemId']" % Rw, "resultcode": "@{outputs('R_final')}", "etag": "@{if(%s, %s, %s)}" % (okr, nz("%s?['odata.etag']" % _ab("Get_after")), EMPTY)}}}
     row["Count"] = {"type": "IncrementVariable", "runAfter": S("Add_result"), "inputs": {"name": "Approved", "value": "@if(%s, 1, 0)" % okr}}
     reads["Rows_loop"] = {"type": "Foreach", "runAfter": {"Get_type": ANY}, "foreach": "@variables('Rows')", "runtimeConfiguration": {"concurrency": {"repetitions": LOOP}},
