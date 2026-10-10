@@ -778,7 +778,7 @@ def screens() -> dict:
                 "Visible": _f('!IsBlank(varDePid) && varDeScope <> "self"')},
                 "Children": [
                     {"btnDeSel": ctl("Classic/Button@2.2.0", Text='If(ThisItem.id in colDeSel.id, "[x]", "[ ]")', X="0", Y="5", Width="40", Height="35",
-                                     Visible=DE_SELECTABLE, AccessibleLabel='"Chọn " & ThisItem.emp & " / " & ThisItem.wtLabel',
+                                     Visible=DE_SELECTABLE,
                                      OnSelect="If(ThisItem.id in colDeSel.id, ClearCollect(colDeSelTmp, Filter(colDeSel, id <> ThisItem.id)); ClearCollect(colDeSel, colDeSelTmp), "
                                               "Collect(colDeSel, {id: ThisItem.id, etag: ThisItem.etag}))")},
                     {"icoDeTeamLock": ctl("Classic/Icon@2.5.0", Icon="Icon.Lock", X="8", Y="10", Width="24", Height="24", Visible='ThisItem.status = "ApprovedLocked"',

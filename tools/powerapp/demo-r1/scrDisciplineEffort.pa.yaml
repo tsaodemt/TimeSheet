@@ -457,7 +457,6 @@ Screens:
               Width: =40
               Height: =35
               Visible: =varDeCanApprove && ThisItem.status = "Draft" && ThisItem.state = "VALUE" && ThisItem.disc = varDeMyDisc
-              AccessibleLabel: ="Chọn " & ThisItem.emp & " / " & ThisItem.wtLabel
               OnSelect: '=If(ThisItem.id in colDeSel.id, ClearCollect(colDeSelTmp, Filter(colDeSel, id <> ThisItem.id)); ClearCollect(colDeSel, colDeSelTmp), Collect(colDeSel, {id: ThisItem.id, etag: ThisItem.etag}))'
         - icoDeTeamLock:
             Control: Classic/Icon@2.5.0

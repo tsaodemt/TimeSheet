@@ -16,6 +16,18 @@ KW = dict(role_groups=tg.ROLE_GROUPS, site="https://tenant-a.invalid/sites/x", d
           conf_audit_list="_ConfAudit", environment="STAGING")
 
 
+def kids_of(scr):
+    out = {}
+
+    def walk(children):
+        for x in children:
+            for k, v in x.items():
+                out[k] = v
+                walk(v.get("Children", []))
+    walk(scr["Children"])
+    return out
+
+
 def kids(screen):
     out = {}
 
@@ -137,6 +149,13 @@ class DisciplineEffortCanvas(unittest.TestCase):
         for k, v in app.MESSAGES.items():
             if k.startswith("DE_") or k in ("MSG_OVER_CEILING", "MSG_CEILING_NOT_REGISTERED"):
                 self.assertNotRegex(v, r"(?i)sharepoint|list|flow|http|stack|A\.I\.3")
+
+    def test_DC13_studio_paste_accepts_the_properties(self):
+        # live: Studio rejected the pasted screen ("something wrong with the pasted code") for AccessibleLabel on Classic/Button@2.2.0
+        for scr in SCR.values():
+            for k, v in kids_of(scr).items():
+                if v.get("Control") == "Classic/Button@2.2.0":
+                    self.assertNotIn("AccessibleLabel", v["Properties"], k)
 
     def test_DC12_geometry_and_chained_blocks(self):
         y = lambda k, p="Y": int(P(k, p))  # noqa: E731
