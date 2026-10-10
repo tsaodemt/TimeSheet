@@ -54,6 +54,8 @@ Prerequisites (verified on STAGING read-only 2026-10-10): `Projects` has no PM f
 - [x] 5.4 STAGING: deploy (run-only), publish (v16); live reconciliation, role matrix incl. Approver, security (no rows, no money); evidence; backlog; integrated R3 chain
 - Out of M4: KPI, salary review, bonus / reward, resource scoring / ranking, advanced evaluation analytics (NR-EFF-09 deferred)
 
+- [x] 5.5 Post-M4 clarification: explicit M4 Employee rule (not derived from OD-46), lifetime-only boundary + parity item PARITY-RPT-PERIOD-LIFETIME, directional variance labels (M2 actual − plan, M4 plan − actual)
+
 ## 4. Closure
 
 - [ ] 4.1 Offline/reference reporting data-contract reconciliation checks (AC-R3-02); do not deploy EPIC18 analytics

@@ -14,7 +14,7 @@ register and the approved M2 / M3 facts; it implements nothing.
 | Discipline planned effort | OD-30, OD-45, OD-47, OD-48 | `DisciplineEffortRegistrations`: man-days per Employee × Project × WorkType, project lifetime; discipline total = aggregate |
 | Actual effort | OD-19, OD-33, OD-49 | Σ **Approved** `TimesheetEntries.Hours` ÷ `HoursPerManDay` (8), per project and per `DisciplineCode`; computed, never stored |
 | Revision | OD-34 | audit only — reports read the current value; no revision history measure |
-| Time dimension of the plan | OD-23, OD-48 | lifetime only — a period filter can apply to actual hours only, never to planned values |
+| Time dimension of the plan | OD-23, OD-48 | lifetime only — M4 reports are project-lifetime only; legacy / EPIC 11 period reporting is parity item PARITY-RPT-PERIOD-LIFETIME |
 | Legacy M1 registration | OD-25, OD-05 | `HourRegistrations` (Đăng ký công) is a separate capability; the shared man-day unit does not link it to EPIC 16 |
 | Visibility of EPIC 16 facts | OD-37 | project PM (own projects), PMO, Executive |
 | Visibility of EPIC 17 facts | OD-46 | own rows; TL own discipline; PM own projects; PMO / Executive company; others deny |

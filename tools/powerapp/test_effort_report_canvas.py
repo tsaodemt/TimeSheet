@@ -72,7 +72,7 @@ class EffortReportCanvas(unittest.TestCase):
         self.assertIn('If(ThisItem.planState = "BLANK", "chưa đăng ký"', P("lblRptPRow", "Text"))
         self.assertIn('"chưa có kế hoạch duyệt"', P("lblRptDRow", "Text"))
         info = P("lblRptInfo", "Text")
-        for need in ("Chênh lệch = kế hoạch − thực hiện", "đã duyệt", "Kế hoạch bộ môn = dòng đã phê duyệt", "Kế hoạch = Công dự án"):
+        for need in ("Còn lại = kế hoạch − thực hiện", "toàn bộ vòng đời dự án", "đã duyệt", "Kế hoạch bộ môn = dòng đã phê duyệt", "Kế hoạch = Công dự án"):
             self.assertIn(need, info)
         self.assertIn(app.MSG % '"RPT_EMPTY"', P("lblRptEmpty", "Text"))
 

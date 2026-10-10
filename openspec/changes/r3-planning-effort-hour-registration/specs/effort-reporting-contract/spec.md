@@ -45,7 +45,7 @@ A report row with a planned value and no included Approved Timesheet row SHALL b
 - **THEN** the row is shown with actual 0 and variance 5
 
 ### Requirement: Project and discipline report measures
-The project report SHALL use the EPIC 16 Project Effort total as the plan (OD-52 resolved); M1 `HourRegistrations` SHALL be shown only as a separate column, never added to, netted with or substituted for the plan. The discipline report SHALL count only ApprovedLocked EPIC 17 registrations as the plan (OD-51 resolved); Draft registrations SHALL be excluded and no "including drafts" figure SHALL be shown. Actual = Σ Approved Timesheet hours ÷ `HoursPerManDay`; variance = planned − actual; plan and actual are project-lifetime figures.
+The project report SHALL use the EPIC 16 Project Effort total as the plan (OD-52 resolved); M1 `HourRegistrations` SHALL be shown only as a separate column, never added to, netted with or substituted for the plan. The discipline report SHALL count only ApprovedLocked EPIC 17 registrations as the plan (OD-51 resolved); Draft registrations SHALL be excluded and no "including drafts" figure SHALL be shown. Actual = Σ Approved Timesheet hours ÷ `HoursPerManDay`; variance = planned − actual, labelled with its direction ("Còn lại (Kế hoạch − Thực hiện)"); plan and actual are project-lifetime figures. The M4 planning reports are project-lifetime only; legacy / EPIC 11 report periods and date ranges are not decided by this requirement (parity item PARITY-RPT-PERIOD-LIFETIME).
 
 #### Scenario: Draft plan and Draft actual are excluded
 - **GIVEN** a discipline with ApprovedLocked 1.75, Draft 0.75, Approved Timesheet 16 h and Draft Timesheet 8 h, `HoursPerManDay` = 8
@@ -58,7 +58,7 @@ The project report SHALL use the EPIC 16 Project Effort total as the plan (OD-52
 - **THEN** planned is 17.5 and M1 registered 10 is a separate value; neither is added to the other
 
 ### Requirement: Report scope
-Report visibility SHALL follow the M4 report matrix: project report — project PM (own projects), PMO, Executive, Approver (= Quản lý phòng for M4 only, OD-31); discipline report — Team Leader (own discipline), project PM (own projects), PMO, Executive, Approver. Employee and technical / confidential roles SHALL be denied. The OD-31 mapping SHALL NOT change any M2, M3, EPIC 07 or Timesheet right.
+Report visibility SHALL follow the M4 report matrix: project report — project PM (own projects), PMO, Executive, Approver (= Quản lý phòng for M4 only, OD-31); discipline report — Team Leader (own discipline), project PM (own projects), PMO, Executive, Approver. Employee and technical / confidential roles SHALL be denied the M4 aggregate reports; this denial SHALL NOT remove any existing own-data capability (own Timesheet, the own-discipline summary of the M3 screen, R1 / R2 behaviour). The OD-31 mapping SHALL NOT change any M2, M3, EPIC 07 or Timesheet right.
 
 #### Scenario: Approver reads reports but gains no planning right
 - **GIVEN** a caller holding only Approver and Employee

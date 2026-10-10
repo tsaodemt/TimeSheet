@@ -3,6 +3,8 @@
 RPT.ProjectView    : PMO, EXE, APR company (APR = Quản lý phòng for M4 reporting only, OD-31) + project-PM grant (own projects).
 RPT.DisciplineView : PMO, EXE, APR company; TL discipline (own authoritative discipline) + project-PM grant (own projects).
 Employee, HR, Salary Viewer, Finance, App Administrator, IT Support, Confidential Owner, Migration Owner: none.
+Employee: explicit M4 rule (not derived from OD-46) — no NEW aggregate report; own Timesheet, the M3 own-discipline summary and every
+other existing own-data capability are unchanged.
 Grants are additive (union of rows). A report capability never grants a write capability or direct list access; the OD-31 mapping
 changes no M2 / M3 / EPIC 07 / Timesheet right. The M1 registered column is returned only to REG.View holders (OD-05, OD-52).
 """
