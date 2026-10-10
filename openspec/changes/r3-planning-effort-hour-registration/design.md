@@ -314,7 +314,7 @@ STAGING prerequisites confirmed (no new permission beyond the TS Service pattern
 
 **Status 2026-10-09:** the project owner approved Open Spec V3 as the specification baseline — **R3-G0 = APPROVED**
 (spec gate). Milestone implementation gates stay **BLOCKED** until each milestone's blocking decisions are recorded
-(M1 decision preparation: `M1-DECISION-PACK.md`). M1 DONE 2026-10-10. **M2 released for implementation by the project owner 2026-10-10** (all M2 decisions resolved, tasks §2 rebaselined); M3 stays BLOCKED on its gate set.
+(M1 decision preparation: `M1-DECISION-PACK.md`). M1 DONE 2026-10-10. **M2 released for implementation by the project owner 2026-10-10** (all M2 decisions resolved, tasks §2 rebaselined) and **DONE on STAGING 2026-10-10** (lists, three EFF flows, Canvas v14; detail read ≈ 15 s, save ≈ 8–16 s, list ≈ 5 s — below the Power Apps 120 s wait); M3 stays BLOCKED on its gate set.
 
 ## 15. Timeline (TARGET / PROPOSED, not guaranteed)
 

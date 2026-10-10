@@ -23,18 +23,18 @@
 - [x] 1.6 STAGING: provision list, deploy flows, publish app, live proof with synthetic projects, per-role live results — DONE 2026-10-10: 13×5 round trip, update/clear, validation, stale ETag (preflight), removed/re-added phase, Paused project; 12/12 roles as specified; Closed status not testable (no Closed state in the target schema); post-preflight conflict (PARTIAL) proven offline only
 - [ ] 1.7 (open — blocked by OD-11, migration gate; not part of the S12.5 screen closure) Migration of legacy E14 per OD-11 (199 items incl. 4 explicit zeros, blanks → no item; Σ per project reconciled; stale rows per OD-08)
 
-## 2. M2 — EPIC 16 Project Effort (decisions complete; rebaselined 2026-10-10)
+## 2. M2 — EPIC 16 Project Effort — DONE 2026-10-10 on STAGING (private evidence `_investigation/r3/m2-epic16/LIVE-M2.md`)
 
 Prerequisites (verified on STAGING read-only 2026-10-10): `Projects` has no PM field and unique permissions (master data, unchanged);
 `Employees.IsActive` / `LegacyId` exist; `Disciplines` ELE, HVAC, PSF, BIM, QL; AppSettings `HoursPerManDay` = 8;
 `TimesheetEntries` has `Project` (indexed lookup), `Hours`, `EntryStatus` (Draft / Approved / Deleted).
 
-- [ ] 2.1 Schema definitions + tests: `ProjectPmAssignments` (PM, OD-24) and `ProjectEffortAllocations` (project × recipient, man-days ≤ 2 dp, ≥ 0, no maximum, blank ≠ 0, portable keys; no phase / period / approval / M1 link / cost); AppSettings `ProjectEffortRecipientDisciplines` (OD-43 default ELE,HVAC,PSF,BIM)
-- [ ] 2.2 Capability seed + guard project-PM scope: `EFF.ProjectView` (PMO, EXE + PM scope), `EFF.ProjectEdit` (PM scope only), `EFF.ProjectPmAssign` (PMO); role × capability tests incl. AppAdmin / IT Support DENY
-- [ ] 2.3 Reference model + tests: PM assignment, read (list / detail, Approved actual aggregation, no row leakage), save (preflight, ETag, typed errors, changed-only, audit)
-- [ ] 2.4 Flows `EFF-SetProjectPm`, `EFF-ReadProjectEffort`, `EFF-SaveProjectEffort` generated; reference-vs-flow tests (simulator) incl. paging of TimesheetEntries
-- [ ] 2.5 Canvas Project Effort screen (navigation, project picker from the flow, PM display + PMO assignment, recipient entry, planned total, Approved actual, comparison, blank vs 0, dirty / save / reload / typed errors) + generator assertions
-- [ ] 2.6 STAGING: provision lists + AppSettings key, deploy flows (run-only), publish app; live E2E, 12-role matrix, security probes, audit; evidence; backlog
+- [x] 2.1 Schema definitions + tests (`tools/effort/pe_schema.py`; STAGING lists provisioned, unique permissions: owners + service role only): `ProjectPmAssignments` (PM, OD-24) and `ProjectEffortAllocations` (project × recipient, man-days ≤ 2 dp, ≥ 0, no maximum, blank ≠ 0, portable keys; no phase / period / approval / M1 link / cost); AppSettings `ProjectEffortRecipientDisciplines` (OD-43 default ELE,HVAC,PSF,BIM)
+- [x] 2.2 Capability seed + guard project-PM scope (`tools/effort/effort_rules.py`): `EFF.ProjectView` (PMO, EXE + PM scope), `EFF.ProjectEdit` (PM scope only), `EFF.ProjectPmAssign` (PMO); role × capability tests incl. AppAdmin / IT Support DENY
+- [x] 2.3 Reference model + tests (`tools/effort/project_effort.py`, PE01–PE20 lazy + eager): PM assignment, read (list / detail, Approved actual aggregation, no row leakage), save (preflight, ETag, typed errors, changed-only, audit)
+- [x] 2.4 Flows `EFF-SetProjectPm`, `EFF-ReadProjectEffort`, `EFF-SaveProjectEffort` generated (`tools/powerautomate/build_effort_flows.py`; simulator gained do-until); reference-vs-flow tests (simulator) incl. paging of TimesheetEntries
+- [x] 2.5 Canvas Project Effort screen (PC01–PC13; live fix: chained blocks need `;`) (navigation, project picker from the flow, PM display + PMO assignment, recipient entry, planned total, Approved actual, comparison, blank vs 0, dirty / save / reload / typed errors) + generator assertions
+- [x] 2.6 STAGING: provision lists + AppSettings key, deploy flows (run-only), publish app (v14); live E2E, 12-role matrix, security probes, audit; evidence; backlog — DONE 2026-10-10
 - Data impact: new lists only; no migration (no legacy data; OD-25 no seeding); existing Timesheet and M1 untouched
 
 ## 3. M3 — EPIC 17 Discipline Effort (blocked by 0.3, M2 data model)

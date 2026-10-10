@@ -47,6 +47,16 @@
   "REG_PARTIAL": "Đã lưu một phần: một số ô vừa được người khác thay đổi. Dữ liệu đã được tải lại; các ô chưa lưu vẫn được giữ.",
   "REG_INVALID": "Giá trị phải là số lớn hơn hoặc bằng 0, tối đa 2 chữ số thập phân.",
   "REG_LEAVE": "Có thay đổi chưa lưu. Bỏ các thay đổi này?",
-  "REG_NO_ACCESS": "Bạn không có quyền xem Đăng ký công."
+  "REG_NO_ACCESS": "Bạn không có quyền xem Đăng ký công.",
+  "EFF_OK": "Đã lưu công dự án.",
+  "EFF_REFUSED": "Chưa lưu: có giá trị không hợp lệ hoặc vừa được người khác thay đổi. Dữ liệu đã được tải lại; các giá trị bạn sửa vẫn được giữ.",
+  "EFF_PARTIAL": "Đã lưu một phần: một số giá trị vừa được người khác thay đổi. Dữ liệu đã được tải lại; các giá trị chưa lưu vẫn được giữ.",
+  "EFF_INVALID": "Giá trị phải là số lớn hơn hoặc bằng 0, tối đa 2 chữ số thập phân.",
+  "EFF_LEAVE": "Có thay đổi chưa lưu. Bỏ các thay đổi này?",
+  "EFF_NO_ACCESS": "Bạn không có quyền xem Công dự án.",
+  "EFF_NO_PM": "Dự án chưa có PM: chưa thể nhập công dự án.",
+  "EFF_PM_OK": "Đã cập nhật PM của dự án.",
+  "EFF_PM_SAME": "PM của dự án không thay đổi.",
+  "EFF_CONFIG_INVALID": "Cấu hình Công dự án chưa hợp lệ. Vui lòng liên hệ quản trị."
  }
 }

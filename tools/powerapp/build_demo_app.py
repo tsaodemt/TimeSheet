@@ -24,8 +24,11 @@ FLOW_APPOPEN, FLOW_READ, FLOW_SAVE = "'TS-AppOpen'", "'TS-ReadOwn'", "'TS-SaveEn
 FLOW_TEAM, FLOW_APPROVE = "'TS-ReadTeam'", "'TS-Approve'"  # S07.2 team approval (guarded; no direct entry access)
 FLOW_UNAPPROVE = "'TS-Unapprove'"  # S07.3 explicit per-row unapproval
 FLOW_REG_READ, FLOW_REG_SAVE = "'REG-ReadMatrix'", "'REG-SaveMatrix'"  # R3 M1 S12.5 Hour Registration (guarded; no direct list access)
+# R3 M2 EPIC 16 Project Effort (guarded; no direct list access)
+FLOW_EFF_READ, FLOW_EFF_SAVE, FLOW_EFF_PM = "'EFF-ReadProjectEffort'", "'EFF-SaveProjectEffort'", "'EFF-SetProjectPm'"
 REFERENCE_SOURCES = ("Projects", "ProjectPhases", "Phases", "WorkTypes", "Shifts", "HourTypes")
-PROTECTED_LISTS = ("TimesheetEntries", "AuditLog", "Employees", "AppSettings", "HourRegistrations")
+PROTECTED_LISTS = ("TimesheetEntries", "AuditLog", "Employees", "AppSettings", "HourRegistrations", "ProjectPmAssignments",
+                   "ProjectEffortAllocations")
 PAGE_SIZE = 100
 
 # PROVISIONAL DEMO WORDING (R1-Q4 open): neutral, no internals; the correlation id is appended by the app.
@@ -80,6 +83,17 @@ MESSAGES = {
     "REG_INVALID": "Giá trị phải là số lớn hơn hoặc bằng 0, tối đa 2 chữ số thập phân.",
     "REG_LEAVE": "Có thay đổi chưa lưu. Bỏ các thay đổi này?",
     "REG_NO_ACCESS": "Bạn không có quyền xem Đăng ký công.",
+    # R3 M2 EPIC 16 Project Effort (Công dự án)
+    "EFF_OK": "Đã lưu công dự án.",
+    "EFF_REFUSED": "Chưa lưu: có giá trị không hợp lệ hoặc vừa được người khác thay đổi. Dữ liệu đã được tải lại; các giá trị bạn sửa vẫn được giữ.",
+    "EFF_PARTIAL": "Đã lưu một phần: một số giá trị vừa được người khác thay đổi. Dữ liệu đã được tải lại; các giá trị chưa lưu vẫn được giữ.",
+    "EFF_INVALID": "Giá trị phải là số lớn hơn hoặc bằng 0, tối đa 2 chữ số thập phân.",
+    "EFF_LEAVE": "Có thay đổi chưa lưu. Bỏ các thay đổi này?",
+    "EFF_NO_ACCESS": "Bạn không có quyền xem Công dự án.",
+    "EFF_NO_PM": "Dự án chưa có PM: chưa thể nhập công dự án.",
+    "EFF_PM_OK": "Đã cập nhật PM của dự án.",
+    "EFF_PM_SAME": "PM của dự án không thay đổi.",
+    "EFF_CONFIG_INVALID": "Cấu hình Công dự án chưa hợp lệ. Vui lòng liên hệ quản trị.",
 }
 
 
@@ -125,7 +139,8 @@ APP_ONSTART = """
 ClearCollect(colMessages, %s);
 Set(varBusy, false); Set(varSaving, false); Set(varReloadRequired, false); Set(varNoTeam, false); Set(varApproving, false);
 Set(varConfirm, false); Set(varTeamMode, ""); Set(varNoUnapprove, false); Set(varUnConfirm, false); Set(varPendingCount, Blank());
-Set(varNoReg, false); Set(varRegPid, Blank()); Set(varRegCanEdit, false); Set(varRegLeave, false); Set(varRegSwitch, false)
+Set(varNoReg, false); Set(varRegPid, Blank()); Set(varRegCanEdit, false); Set(varRegLeave, false); Set(varRegSwitch, false);
+Set(varNoEff, false); Set(varEffPid, Blank()); Set(varEffCanEdit, false); Set(varEffCanAssign, false); Set(varEffLeave, false); Set(varEffSwitch, false)
 """ % _table(MESSAGES)
 
 # Power Apps Studio rejects Navigate in the start screen's OnVisible ("would automatically always navigate away"):
@@ -293,6 +308,68 @@ Collect(colRegYears, ForAll(Sequence(34, 2017), {y: Text(Value)}));  // legacy F
 If(!IsBlank(varRegPid), """ + REG_READ.strip() + """)
 """
 
+# R3 M2 EPIC 16 Project Effort ("Công dự án"). Projects the caller may view come from EFF-ReadProjectEffort list mode
+# (PMO / Executive: all; the designated PM: own projects); one project's recipients, PM, planned total and Approved actual
+# total come from detail mode. Edits are held in colEffEdit {k, t}; only changed recipients go to EFF-SaveProjectEffort.
+# Editable only when the server says canedit (the project's PM); PMO assigns / changes the PM via EFF-SetProjectPm.
+EFF_LIST = """
+Set(varBusy, true);
+Set(varEffList, %(F)s.Run("0"));
+Set(varBusy, false);
+If(varEffList.ok = "true",
+    Set(varEffCanAssign, varEffList.canassignpm = "true");
+    ClearCollect(colEffProjects, ForAll(Table(ParseJSON(varEffList.projects)), {id: Value(ThisRecord.Value.id), code: Text(ThisRecord.Value.code),
+        name: Text(ThisRecord.Value.name), pmName: Text(ThisRecord.Value.pmName), canEdit: Boolean(ThisRecord.Value.canEdit)})),
+    Clear(colEffProjects);
+    If(varEffList.resultcode = "ROLE_NOT_ALLOWED", Set(varNoEff, true));
+    Notify(If(varEffList.resultcode = "ROLE_NOT_ALLOWED", %(NA)s, %(MSG)s) & " (" & varEffList.correlationid & ")", NotificationType.Error))
+""" % {"F": FLOW_EFF_READ, "NA": MSG % '"EFF_NO_ACCESS"', "MSG": MSG % "varEffList.messagecode"}
+EFF_READ = """
+Set(varBusy, true);
+Set(varEff, %(F)s.Run(Text(varEffPid)));
+Set(varBusy, false);
+If(varEff.ok = "true",
+    Set(varEffCanEdit, varEff.canedit = "true");
+    Set(varEffCanAssign, varEff.canassignpm = "true");
+    Set(varEffPmName, Text(ParseJSON(varEff.pm).name)); Set(varEffPmCode, Text(ParseJSON(varEff.pm).code));
+    ClearCollect(colEffRecs, ForAll(Table(ParseJSON(varEff.recipients)), {key: Text(ThisRecord.Value.key), label: Text(ThisRecord.Value.label),
+        state: Text(ThisRecord.Value.state), value: Text(ThisRecord.Value.value), etag: Text(ThisRecord.Value.etag)}));
+    ClearCollect(colEffEmps, ForAll(Table(ParseJSON(varEff.employees)), {id: Value(ThisRecord.Value.id), name: Text(ThisRecord.Value.name),
+        code: Text(ThisRecord.Value.code)})),
+    Set(varEffCanEdit, false); Clear(colEffRecs); Clear(colEffEmps); Set(varEffPmName, ""); Set(varEffPmCode, "");
+    Notify(If(varEff.resultcode = "CONFIG_INVALID", %(CI)s, %(MSG)s) & " (" & varEff.correlationid & ")", NotificationType.Error))
+""" % {"F": FLOW_EFF_READ, "CI": MSG % '"EFF_CONFIG_INVALID"', "MSG": MSG % "varEff.messagecode"}
+EFF_DIRTY = 'Filter(colEffEdit As e, e.t <> Coalesce(LookUp(colEffRecs, key = e.k).value, ""))'
+EFF_INVALID = 'Filter(colEffEdit As e, !IsBlank(Trim(e.t)) && !IsMatch(Trim(e.t), "[0-9]+([.,][0-9]{1,2})?"))'
+EFF_SAVE = """
+Set(varSaving, true);
+Set(varEffSave, %(F)s.Run(Text(varEffPid), JSON(ForAll(%(DIRTY)s As c, {key: c.k,
+    state: If(IsBlank(Trim(c.t)), "blank", "value"), value: Substitute(Trim(c.t), ",", "."),
+    etag: Coalesce(LookUp(colEffRecs, key = c.k).etag, "")}), JSONFormat.Compact), GUID()));
+Set(varSaving, false);
+ClearCollect(colEffRes, ForAll(Table(ParseJSON(varEffSave.results)), {k: Text(ThisRecord.Value.key), rc: Text(ThisRecord.Value.resultcode)}));
+// committed / unchanged recipients leave the edit set; refused or conflicting ones stay dirty against the reloaded values
+ClearCollect(colEffEditTmp, Filter(colEffEdit As e, !(e.k in Filter(colEffRes, rc = "OK" || rc = "NO_CHANGE").k)));
+ClearCollect(colEffEdit, colEffEditTmp);
+Notify(Switch(varEffSave.resultcode, "OK", %(OK)s, "REFUSED", %(REF)s, "PARTIAL", %(PAR)s, %(MSG)s) & " (" & varEffSave.correlationid & ")",
+    Switch(varEffSave.resultcode, "OK", NotificationType.Success, "PARTIAL", NotificationType.Warning, NotificationType.Error));
+""" % {"F": FLOW_EFF_SAVE, "DIRTY": EFF_DIRTY, "OK": MSG % '"EFF_OK"', "REF": MSG % '"EFF_REFUSED"', "PAR": MSG % '"EFF_PARTIAL"',
+       "MSG": MSG % "varEffSave.messagecode"} + EFF_READ
+EFF_SETPM = """
+Set(varSaving, true);
+Set(varEffPmRes, %(F)s.Run(Text(varEffPid), Text(ddEffPm.Selected.id), varEff.pmetag));
+Set(varSaving, false);
+Notify(Switch(varEffPmRes.resultcode, "OK", %(OK)s, "NO_CHANGE", %(SAME)s, %(MSG)s) & " (" & varEffPmRes.correlationid & ")",
+    If(varEffPmRes.ok = "true", NotificationType.Success, NotificationType.Error));
+""" % {"F": FLOW_EFF_PM, "OK": MSG % '"EFF_PM_OK"', "SAME": MSG % '"EFF_PM_SAME"', "MSG": MSG % "varEffPmRes.messagecode"} + EFF_LIST.strip() + ";\n" + EFF_READ
+EFF_OPEN = "Set(varEffPid, ddEffProject.Selected.id); Clear(colEffEdit);\n" + EFF_READ.strip()
+EFF_ONVISIBLE = """
+Set(varEffLeave, false); Set(varEffSwitch, false);
+""" + EFF_LIST.strip() + """;
+If(!IsBlank(varEffPid), """ + EFF_READ.strip() + """)
+"""
+EFF_NUM = 'If(IsBlank(%s), "", Text(Value(%s), "#,##0.00"))'
+
 
 def _mode(label, value):
     return ("Set(varTeamMode, %s); Set(varConfirm, false); Set(varUnConfirm, false); Clear(colSel); Clear(colApprRes); "
@@ -343,6 +420,8 @@ def screens() -> dict:
                                Text='"Chờ phê duyệt: " & If(varPendingMore, "%d+", Text(varPendingCount))' % PENDING_PAGE)},
             {"btnReg": ctl("Classic/Button@2.2.0", Text='"Đăng ký công"', X="1020", Y="130", Width="200", Visible="!varNoReg",
                            OnSelect="Navigate(scrHourRegistration, ScreenTransition.None)")},
+            {"btnEff": ctl("Classic/Button@2.2.0", Text='"Công dự án"', X="1020", Y="80", Width="200", Height="40", Visible="!varNoEff",
+                           OnSelect="Navigate(scrProjectEffort, ScreenTransition.None)")},
             {"galEntries": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
                 "Items": _f("SortByColumns(colRows, \"workDate\", SortOrder.Descending, \"id\", SortOrder.Descending)"),
                 "X": "=20", "Y": "=180", "Width": "=Parent.Width - 40", "Height": "=Parent.Height - 260", "TemplateSize": "=70",
@@ -475,6 +554,64 @@ def screens() -> dict:
                                                AccessibleLabel='ThisItem.name & " / " & LookUp(colRegPhases, id = ThisItem.phid).name',
                                                OnChange="ClearCollect(colRegEditTmp, Filter(colRegEdit, k <> %s)); Collect(colRegEditTmp, {k: %s, ph: ThisItem.phid, d: ThisItem.id, t: Self.Text}); ClearCollect(colRegEdit, colRegEditTmp)"
                                                         % (REG_CELL, REG_CELL))}]}}]}}]},
+        "scrProjectEffort": {"Properties": {"OnVisible": _f(EFF_ONVISIBLE)}, "Children": [
+            {"lblEffTitle": hdr("Công dự án")},
+            {"lblEffBusy": ctl("Label@2.5.1", Text='If(varBusy || varSaving, "Working…", "")', X="20", Y="60", Width="400", Height="30")},
+            {"btnEffBack": ctl("Classic/Button@2.2.0", Text='"Back"', X="20", Y="100", Width="120",
+                               OnSelect="If(CountRows(%s) > 0, Set(varEffLeave, true), Navigate(scrMyTimesheets, ScreenTransition.None))" % EFF_DIRTY)},
+            {"ddEffProject": ctl("Classic/DropDown@2.3.1", X="160", Y="100", Width="260", Items='SortByColumns(colEffProjects, "code", SortOrder.Ascending)',
+                                 Default='If(IsBlank(varEffPid), "", LookUp(colEffProjects, id = varEffPid).code)', AllowEmptySelection="true",
+                                 OnChange="If(CountRows(%s) > 0, Set(varEffSwitch, true), %s)" % (EFF_DIRTY, EFF_OPEN),
+                                 **{"Items.Value": "code"})},
+            {"lblEffProject": ctl("Label@2.5.1", Text='If(IsBlank(varEffPid), "", ddEffProject.Selected.name)', X="440", Y="100", Width="420", Height="40")},
+            {"btnEffReload": ctl("Classic/Button@2.2.0", Text='"Tải lại"', X="880", Y="100", Width="120",
+                                 DisplayMode="If(IsBlank(varEffPid) || varBusy || varSaving, DisplayMode.Disabled, DisplayMode.Edit)",
+                                 OnSelect="If(CountRows(%s) > 0, Set(varEffSwitch, true), %s)" % (EFF_DIRTY, EFF_READ.strip()))},
+            {"btnEffSave": ctl("Classic/Button@2.2.0", Text='If(varSaving, "Saving…", "Lưu (" & CountRows(%s) & ")")' % EFF_DIRTY,
+                               X="1020", Y="100", Width="160", Visible="varEffCanEdit",
+                               DisplayMode="If(varSaving || varBusy || IsBlank(varEffPid) || CountRows(%s) = 0 || CountRows(%s) > 0, DisplayMode.Disabled, DisplayMode.Edit)"
+                                           % (EFF_DIRTY, EFF_INVALID),
+                               OnSelect=EFF_SAVE)},
+            {"lblEffPm": ctl("Label@2.5.1", X="20", Y="150", Width="620", Height="30",
+                             Text='If(IsBlank(varEffPid), "", "PM: " & If(IsBlank(varEffPmName), "(chưa có)", varEffPmName & " (" & varEffPmCode & ")"))')},
+            {"ddEffPm": ctl("Classic/DropDown@2.3.1", X="660", Y="145", Width="300", Items='SortByColumns(colEffEmps, "name", SortOrder.Ascending)',
+                            Visible="varEffCanAssign && !IsBlank(varEffPid)", AllowEmptySelection="true", Default='""', **{"Items.Value": "name"})},
+            {"btnEffSetPm": ctl("Classic/Button@2.2.0", Text='"Gán PM"', X="980", Y="145", Width="120", Height="40",
+                                Visible="varEffCanAssign && !IsBlank(varEffPid)",
+                                DisplayMode="If(varSaving || varBusy || IsBlank(ddEffPm.Selected) || CountRows(%s) > 0, DisplayMode.Disabled, DisplayMode.Edit)" % EFF_DIRTY,
+                                OnSelect=EFF_SETPM)},
+            {"lblEffInfo": ctl("Label@2.5.1", X="20", Y="190", Width="1200", Height="30",
+                               Text='If(IsBlank(varEffPid), "", If(varEffCanEdit, "", If(IsBlank(varEffPmName), %s, "Chỉ xem")) & "  ·  Đơn vị: công (ngày công)" & If(CountRows(%s) > 0, "  ·  " & %s, ""))'
+                                    % (MSG % '"EFF_NO_PM"', EFF_INVALID, MSG % '"EFF_INVALID"'))},
+            {"lblEffLeave": ctl("Label@2.5.1", Text=MSG % '"EFF_LEAVE"', X="20", Y="225", Width="560", Height="30", FontWeight="FontWeight.Bold",
+                                Visible="varEffLeave || varEffSwitch")},
+            {"btnEffLeaveYes": ctl("Classic/Button@2.2.0", Text='"Yes"', X="600", Y="225", Width="90", Height="40", Visible="varEffLeave || varEffSwitch",
+                                   OnSelect="Clear(colEffEdit); If(varEffLeave, Set(varEffLeave, false); Navigate(scrMyTimesheets, ScreenTransition.None), "
+                                            "Set(varEffSwitch, false); Set(varEffPid, ddEffProject.Selected.id);\n" + EFF_READ.strip() + ")")},
+            {"btnEffLeaveNo": ctl("Classic/Button@2.2.0", Text='"No"', X="700", Y="225", Width="90", Height="40", Visible="varEffLeave || varEffSwitch",
+                                  OnSelect="Set(varEffLeave, false); Set(varEffSwitch, false); Reset(ddEffProject)")},
+            {"galEffRows": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
+                "Items": _f("colEffRecs"), "X": "=20", "Y": "=275", "Width": "=640", "Height": "=Parent.Height - 295", "TemplateSize": "=50",
+                "Visible": _f("!IsBlank(varEffPid)")},
+                "Children": [
+                    {"lblEffRec": ctl("Label@2.5.1", X="0", Y="5", Width="300", Height="40", Text="ThisItem.label")},
+                    {"txtEffVal": ctl("Classic/TextInput@2.3.2", X="320", Y="5", Width="140", Height="40", Align="Align.Right", HintText='"—"',
+                                      Default='If(IsBlank(LookUp(colEffEdit, k = ThisItem.key)), ThisItem.value, LookUp(colEffEdit, k = ThisItem.key).t)',
+                                      DisplayMode="If(varEffCanEdit && !varSaving, DisplayMode.Edit, DisplayMode.View)",
+                                      Fill='If(Self.Text <> ThisItem.value, RGBA(255, 244, 206, 1), RGBA(255, 255, 255, 1))',
+                                      BorderColor='If(!IsBlank(Trim(Self.Text)) && !IsMatch(Trim(Self.Text), "[0-9]+([.,][0-9]{1,2})?"), RGBA(196, 49, 75, 1), RGBA(166, 166, 166, 1))',
+                                      AccessibleLabel="ThisItem.label",
+                                      OnChange="ClearCollect(colEffEditTmp, Filter(colEffEdit, k <> ThisItem.key)); Collect(colEffEditTmp, {k: ThisItem.key, t: Self.Text}); ClearCollect(colEffEdit, colEffEditTmp)")},
+                    {"lblEffState": ctl("Label@2.5.1", X="470", Y="5", Width="150", Height="40",
+                                        Text='If(ThisItem.state = "BLANK", "chưa đăng ký", "công")')}]}},
+            {"lblEffPlanned": ctl("Label@2.5.1", X="700", Y="275", Width="600", Height="40",
+                                  Visible="!IsBlank(varEffPid)", Text='"Công đăng ký (kế hoạch): " & %s & " công"' % (EFF_NUM % ("varEff.plannedtotal", "varEff.plannedtotal")))},
+            {"lblEffActual": ctl("Label@2.5.1", X="700", Y="320", Width="600", Height="40",
+                                 Visible="!IsBlank(varEffPid)",
+                                 Text='"Công thực hiện (chấm công đã duyệt): " & %s & " công (" & %s & " giờ; " & varEff.hourspermanday & " giờ = 1 công)"'
+                                      % (EFF_NUM % ("varEff.actualmandays", "varEff.actualmandays"), EFF_NUM % ("varEff.actualhours", "varEff.actualhours")))},
+            {"lblEffVar": ctl("Label@2.5.1", X="700", Y="365", Width="600", Height="40", FontWeight="FontWeight.Bold",
+                              Visible="!IsBlank(varEffPid)", Text='"Chênh lệch (thực hiện − kế hoạch): " & %s & " công"' % (EFF_NUM % ("varEff.variance", "varEff.variance")))}]},
         "scrEntry": {"Children": [
             {"lblTitle": ctl("Label@2.5.1", Text='If(IsBlank(varEdit), "New entry", "Edit draft")', X="20", Y="10", Width="600", Height="50",
                              Size="20", FontWeight="FontWeight.Bold")}, {"lblBusy": busy},
