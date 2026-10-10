@@ -129,6 +129,16 @@ Screens:
           Height: =40
           Visible: =!varNoEff
           OnSelect: =Navigate(scrProjectEffort, ScreenTransition.None)
+    - btnRpt:
+        Control: Classic/Button@2.2.0
+        Properties:
+          Text: ="Báo cáo"
+          X: =1240
+          Y: =80
+          Width: =120
+          Height: =40
+          Visible: =!(varNoRptP && varNoRptD)
+          OnSelect: =Navigate(scrEffortReport, ScreenTransition.None)
     - btnDe:
         Control: Classic/Button@2.2.0
         Properties:

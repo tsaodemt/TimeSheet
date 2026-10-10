@@ -71,6 +71,8 @@
   "MSG_CEILING_NOT_REGISTERED": "Bộ môn chưa có trần công trong Công dự án: chưa thể nhập giá trị.",
   "MSG_VALIDATION_VALUE": "Giá trị phải là số lớn hơn hoặc bằng 0, tối đa 2 chữ số thập phân.",
   "MSG_TECHNICAL_LIMIT": "Giá trị vượt giới hạn kỹ thuật.",
-  "MSG_NO_CHANGE": "Không có thay đổi."
+  "MSG_NO_CHANGE": "Không có thay đổi.",
+  "RPT_NO_ACCESS": "Bạn không có quyền xem báo cáo này.",
+  "RPT_EMPTY": "Không có dữ liệu trong phạm vi của bạn."
  }
 }

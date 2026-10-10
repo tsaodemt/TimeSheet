@@ -119,6 +119,14 @@ class Pack(unittest.TestCase):
             self.assertEqual([x for x, a in f[n].items() if "SiteUrl" in (a.get("runAfter") or {})], ["Site_guard"], n)
         self.assertEqual({k: v for k, v in f.items() if k not in names}, pack.flows(CONFIG), "other flows unchanged")
 
+    def test_PK06_report_flows_guarded_single_site_read_only(self):
+        g = [[k, "00000000-0000-4000-8000-0000000000%02x" % i] for i, k in enumerate(("TL", "APR", "EXE", "PMO", "HR", "ITS"))]
+        f = pack.flows(dict(copy.deepcopy(CONFIG), reportRoleGroups=g))
+        for n in ("RPT-ProjectReport", "RPT-DisciplineReport"):
+            self.assertEqual(f[n]["Site_guard"]["expression"]["equals"][1], SITE, n)
+            self.assertEqual([x for x, a in f[n].items() if "SiteUrl" in (a.get("runAfter") or {})], ["Site_guard"], n)
+        self.assertEqual({k: v for k, v in f.items() if not k.startswith("RPT-")}, pack.flows(CONFIG), "other flows unchanged")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

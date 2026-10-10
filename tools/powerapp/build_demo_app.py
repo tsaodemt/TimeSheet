@@ -28,6 +28,8 @@ FLOW_REG_READ, FLOW_REG_SAVE = "'REG-ReadMatrix'", "'REG-SaveMatrix'"  # R3 M1 S
 FLOW_EFF_READ, FLOW_EFF_SAVE, FLOW_EFF_PM = "'EFF-ReadProjectEffort'", "'EFF-SaveProjectEffort'", "'EFF-SetProjectPm'"
 # R3 M3 EPIC 17 Discipline Effort (guarded; no direct list access)
 FLOW_DE_READ, FLOW_DE_SAVE, FLOW_DE_APPROVE = "'EFF-ReadDisciplineEffort'", "'EFF-SaveDisciplineEffort'", "'EFF-ApproveDisciplineEffort'"
+# R3 M4 current-scope reports (OD-50: in-app, guarded, aggregate-only)
+FLOW_RPT_PROJECT, FLOW_RPT_DISCIPLINE = "'RPT-ProjectReport'", "'RPT-DisciplineReport'"
 REFERENCE_SOURCES = ("Projects", "ProjectPhases", "Phases", "WorkTypes", "Shifts", "HourTypes")
 PROTECTED_LISTS = ("TimesheetEntries", "AuditLog", "Employees", "AppSettings", "HourRegistrations", "ProjectPmAssignments",
                    "ProjectEffortAllocations", "DisciplineEffortRegistrations", "DisciplineEffortLocks")
@@ -111,6 +113,9 @@ MESSAGES = {
     "MSG_VALIDATION_VALUE": "Giá trị phải là số lớn hơn hoặc bằng 0, tối đa 2 chữ số thập phân.",
     "MSG_TECHNICAL_LIMIT": "Giá trị vượt giới hạn kỹ thuật.",
     "MSG_NO_CHANGE": "Không có thay đổi.",
+    # R3 M4 Báo cáo công (current scope: effort only, OD-20)
+    "RPT_NO_ACCESS": "Bạn không có quyền xem báo cáo này.",
+    "RPT_EMPTY": "Không có dữ liệu trong phạm vi của bạn.",
 }
 
 
@@ -159,7 +164,8 @@ Set(varConfirm, false); Set(varTeamMode, ""); Set(varNoUnapprove, false); Set(va
 Set(varNoReg, false); Set(varRegPid, Blank()); Set(varRegCanEdit, false); Set(varRegLeave, false); Set(varRegSwitch, false);
 Set(varNoEff, false); Set(varEffPid, Blank()); Set(varEffCanEdit, false); Set(varEffCanAssign, false); Set(varEffLeave, false); Set(varEffSwitch, false);
 Set(varNoDe, false); Set(varDePid, Blank()); Set(varDeCanEdit, false); Set(varDeCanApprove, false); Set(varDeLeave, false); Set(varDeSwitch, false);
-Set(varDeConfirm, false)
+Set(varDeConfirm, false);
+Set(varNoRpt, false); Set(varNoRptP, false); Set(varNoRptD, false); Set(varRptTab, "project")
 """ % _table(MESSAGES)
 
 # Power Apps Studio rejects Navigate in the start screen's OnVisible ("would automatically always navigate away"):
@@ -457,6 +463,46 @@ DE_NUM = 'If(IsBlank(%s), "", Text(Value(%s), "#,##0.00"))'
 DE_SELECTABLE = 'varDeCanApprove && ThisItem.status = "Draft" && ThisItem.state = "VALUE" && ThisItem.disc = varDeMyDisc'
 
 
+# R3 M4 current-scope reports ("Báo cáo công"). Aggregates come from the guarded report flows (OD-50); the screen computes no total.
+# Project report: plan = EPIC 16 Project Effort (OD-52), actual = Approved timesheet hours ÷ HoursPerManDay, variance = plan − actual,
+# M1 "Đăng ký công" as a separate column only when the server says showregistered. Discipline report: plan = ApprovedLocked only
+# (OD-51). Plan with no actual is a row with actual 0 (OD-13). No money (OD-20).
+RPT_PROJECT = """
+Set(varBusy, true);
+Set(varRptP, %(F)s.Run(GUID()));
+Set(varBusy, false);
+If(varRptP.ok = "true",
+    Set(varNoRptP, false);
+    ClearCollect(colRptP, ForAll(Table(ParseJSON(varRptP.rows)), {id: Value(ThisRecord.Value.projectId), code: Text(ThisRecord.Value.code),
+        name: Text(ThisRecord.Value.name), planState: Text(ThisRecord.Value.planState), planned: Text(ThisRecord.Value.planned),
+        hours: Text(ThisRecord.Value.actualHours), actual: Text(ThisRecord.Value.actualManDays), variance: Text(ThisRecord.Value.variance),
+        registered: Text(ThisRecord.Value.registered)}));
+    Set(varRptPT, {planned: Text(ParseJSON(varRptP.totals).planned), hours: Text(ParseJSON(varRptP.totals).actualHours),
+        actual: Text(ParseJSON(varRptP.totals).actualManDays), variance: Text(ParseJSON(varRptP.totals).variance),
+        registered: Text(ParseJSON(varRptP.totals).registered)}),
+    Clear(colRptP); Set(varRptPT, Blank());
+    If(varRptP.resultcode = "ROLE_NOT_ALLOWED", Set(varNoRptP, true));
+    Notify(If(varRptP.resultcode = "ROLE_NOT_ALLOWED", %(NA)s, %(MSG)s) & " (" & varRptP.correlationid & ")", NotificationType.Error))
+""" % {"F": FLOW_RPT_PROJECT, "NA": MSG % '"RPT_NO_ACCESS"', "MSG": MSG % "varRptP.messagecode"}
+RPT_DISCIPLINE = """
+Set(varBusy, true);
+Set(varRptD, %(F)s.Run(GUID()));
+Set(varBusy, false);
+If(varRptD.ok = "true",
+    Set(varNoRptD, false);
+    ClearCollect(colRptD, ForAll(Table(ParseJSON(varRptD.rows)), {id: Value(ThisRecord.Value.projectId), code: Text(ThisRecord.Value.code),
+        disc: Text(ThisRecord.Value.disciplineCode), discName: Text(ThisRecord.Value.disciplineName), planState: Text(ThisRecord.Value.planState),
+        planned: Text(ThisRecord.Value.planned), hours: Text(ThisRecord.Value.actualHours), actual: Text(ThisRecord.Value.actualManDays),
+        variance: Text(ThisRecord.Value.variance)})),
+    Clear(colRptD);
+    If(varRptD.resultcode = "ROLE_NOT_ALLOWED", Set(varNoRptD, true));
+    Notify(If(varRptD.resultcode = "ROLE_NOT_ALLOWED", %(NA)s, %(MSG)s) & " (" & varRptD.correlationid & ")", NotificationType.Error))
+""" % {"F": FLOW_RPT_DISCIPLINE, "NA": MSG % '"RPT_NO_ACCESS"', "MSG": MSG % "varRptD.messagecode"}
+RPT_LOAD = 'If(varRptTab = "project", ' + RPT_PROJECT.strip() + ', ' + RPT_DISCIPLINE.strip() + ')'
+RPT_ONVISIBLE = RPT_LOAD
+RPT_NUM = 'If(IsBlank(%s), "—", Text(Value(%s), "#,##0.00"))'
+
+
 def _mode(label, value):
     return ("Set(varTeamMode, %s); Set(varConfirm, false); Set(varUnConfirm, false); Clear(colSel); Clear(colApprRes); "
             "Set(varTeamAfter, Blank());\n" % value) + TEAM_READ
@@ -508,6 +554,8 @@ def screens() -> dict:
                            OnSelect="Navigate(scrHourRegistration, ScreenTransition.None)")},
             {"btnEff": ctl("Classic/Button@2.2.0", Text='"Công dự án"', X="1020", Y="80", Width="200", Height="40", Visible="!varNoEff",
                            OnSelect="Navigate(scrProjectEffort, ScreenTransition.None)")},
+            {"btnRpt": ctl("Classic/Button@2.2.0", Text='"Báo cáo"', X="1240", Y="80", Width="120", Height="40", Visible="!(varNoRptP && varNoRptD)",
+                           OnSelect="Navigate(scrEffortReport, ScreenTransition.None)")},
             {"btnDe": ctl("Classic/Button@2.2.0", Text='"Công bộ môn"', X="800", Y="80", Width="200", Height="40", Visible="!varNoDe",
                           OnSelect="Navigate(scrDisciplineEffort, ScreenTransition.None)")},
             {"galEntries": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
@@ -790,6 +838,49 @@ def screens() -> dict:
                     {"lblDeTeamRc": ctl("Label@2.5.1", X="Parent.TemplateWidth - 110", Y="5", Width="110", Height="35", Size="10",
                                         Text='With({rc: LookUp(colDeApprRes, id = ThisItem.id).rc}, If(IsBlank(rc) || rc = "OK", If(ThisItem.status = "ApprovedLocked", "đã duyệt", "nháp"), %s))'
                                              % (MSG % '"MSG_" & rc'))}]}}]},
+        "scrEffortReport": {"Properties": {"OnVisible": _f(RPT_ONVISIBLE)}, "Children": [
+            {"lblRptTitle": hdr("Báo cáo công")},
+            {"lblRptBusy": ctl("Label@2.5.1", Text='If(varBusy, "Working…", "")', X="20", Y="60", Width="400", Height="30")},
+            {"btnRptBack": ctl("Classic/Button@2.2.0", Text='"Back"', X="20", Y="100", Width="120", OnSelect="Navigate(scrMyTimesheets, ScreenTransition.None)")},
+            {"btnRptProject": ctl("Classic/Button@2.2.0", Text='"Theo dự án"', X="160", Y="100", Width="160",
+                                  DisplayMode="If(varBusy, DisplayMode.Disabled, DisplayMode.Edit)",
+                                  OnSelect='Set(varRptTab, "project");\n' + RPT_PROJECT.strip())},
+            {"btnRptDiscipline": ctl("Classic/Button@2.2.0", Text='"Theo bộ môn"', X="340", Y="100", Width="160",
+                                     DisplayMode="If(varBusy, DisplayMode.Disabled, DisplayMode.Edit)",
+                                     OnSelect='Set(varRptTab, "discipline");\n' + RPT_DISCIPLINE.strip())},
+            {"btnRptReload": ctl("Classic/Button@2.2.0", Text='"Tải lại"', X="520", Y="100", Width="120",
+                                 DisplayMode="If(varBusy, DisplayMode.Disabled, DisplayMode.Edit)", OnSelect=RPT_LOAD)},
+            {"lblRptInfo": ctl("Label@2.5.1", X="20", Y="150", Width="1300", Height="30", Size="11",
+                               Text='"Đơn vị: công (" & If(varRptTab = "project", varRptP.hourspermanday, varRptD.hourspermanday) & " giờ = 1 công) · Thực hiện = giờ chấm công đã duyệt · Chênh lệch = kế hoạch − thực hiện" & If(varRptTab = "discipline", " · Kế hoạch bộ môn = dòng đã phê duyệt", " · Kế hoạch = Công dự án")')},
+            {"lblRptEmpty": ctl("Label@2.5.1", X="20", Y="230", Width="800", Height="40", Text=MSG % '"RPT_EMPTY"',
+                                Visible='!varBusy && If(varRptTab = "project", varRptP.ok = "true" && CountRows(colRptP) = 0, varRptD.ok = "true" && CountRows(colRptD) = 0)')},
+            {"lblRptPHead": ctl("Label@2.5.1", X="20", Y="190", Width="1300", Height="30", FontWeight="FontWeight.Bold", Visible='varRptTab = "project"',
+                                Text='"Dự án · Kế hoạch (công dự án) · Thực hiện (công) · Giờ · Chênh lệch" & If(varRptP.showregistered = "true", " · Đăng ký công (M1, riêng)", "")')},
+            {"galRptP": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
+                "Items": _f('SortByColumns(colRptP, "code", SortOrder.Ascending)'), "X": "=20", "Y": "=225", "Width": "=1300", "Height": "=Parent.Height - 300",
+                "TemplateSize": "=40", "Visible": _f('varRptTab = "project"')},
+                "Children": [
+                    {"lblRptPRow": ctl("Label@2.5.1", X="0", Y="2", Width="Parent.TemplateWidth", Height="36",
+                                       Text='ThisItem.code & " — " & ThisItem.name & " · " & If(ThisItem.planState = "BLANK", "chưa đăng ký", %s) & " · " & %s & " · " & %s & " giờ · " & %s & If(varRptP.showregistered = "true", " · M1: " & %s, "")'
+                                            % (RPT_NUM % ("ThisItem.planned", "ThisItem.planned"), RPT_NUM % ("ThisItem.actual", "ThisItem.actual"),
+                                               RPT_NUM % ("ThisItem.hours", "ThisItem.hours"), RPT_NUM % ("ThisItem.variance", "ThisItem.variance"),
+                                               RPT_NUM % ("ThisItem.registered", "ThisItem.registered")))}]}},
+            {"lblRptPTotal": ctl("Label@2.5.1", X="20", Y="Parent.Height - 70", Width="1300", Height="40", FontWeight="FontWeight.Bold",
+                                 Visible='varRptTab = "project" && !IsBlank(varRptPT)',
+                                 Text='"Tổng: kế hoạch " & %s & " · thực hiện " & %s & " công (" & %s & " giờ) · chênh lệch " & %s & If(varRptP.showregistered = "true", " · M1 " & %s, "")'
+                                      % (RPT_NUM % ("varRptPT.planned", "varRptPT.planned"), RPT_NUM % ("varRptPT.actual", "varRptPT.actual"),
+                                         RPT_NUM % ("varRptPT.hours", "varRptPT.hours"), RPT_NUM % ("varRptPT.variance", "varRptPT.variance"),
+                                         RPT_NUM % ("varRptPT.registered", "varRptPT.registered")))},
+            {"lblRptDHead": ctl("Label@2.5.1", X="20", Y="190", Width="1300", Height="30", FontWeight="FontWeight.Bold", Visible='varRptTab = "discipline"',
+                                Text='"Dự án · Bộ môn · Kế hoạch (đã duyệt) · Thực hiện (công) · Giờ · Chênh lệch"')},
+            {"galRptD": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
+                "Items": _f('SortByColumns(colRptD, "code", SortOrder.Ascending, "disc", SortOrder.Ascending)'), "X": "=20", "Y": "=225", "Width": "=1300",
+                "Height": "=Parent.Height - 245", "TemplateSize": "=40", "Visible": _f('varRptTab = "discipline"')},
+                "Children": [
+                    {"lblRptDRow": ctl("Label@2.5.1", X="0", Y="2", Width="Parent.TemplateWidth", Height="36",
+                                       Text='ThisItem.code & " · " & ThisItem.discName & " (" & ThisItem.disc & ") · " & If(ThisItem.planState = "BLANK", "chưa có kế hoạch duyệt", %s) & " · " & %s & " · " & %s & " giờ · " & %s'
+                                            % (RPT_NUM % ("ThisItem.planned", "ThisItem.planned"), RPT_NUM % ("ThisItem.actual", "ThisItem.actual"),
+                                               RPT_NUM % ("ThisItem.hours", "ThisItem.hours"), RPT_NUM % ("ThisItem.variance", "ThisItem.variance")))}]}}]},
         "scrEntry": {"Children": [
             {"lblTitle": ctl("Label@2.5.1", Text='If(IsBlank(varEdit), "New entry", "Edit draft")', X="20", Y="10", Width="600", Height="50",
                              Size="20", FontWeight="FontWeight.Bold")}, {"lblBusy": busy},

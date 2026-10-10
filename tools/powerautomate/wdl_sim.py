@@ -271,6 +271,19 @@ class Run:
     def f_string(self, x): return _str(x)
     def f_int(self, x): return int(x)
     def f_json(self, s): return json.loads(s)
+    def f_xml(self, x):  # only what the report flows use: a JSON object document for xpath('sum(/a/b)')
+        if not isinstance(x, dict) or len(x) != 1:
+            raise WdlError("xml() needs an object with one root")
+        return ("__xml__", x)
+
+    def f_xpath(self, doc, expr):
+        m = re.fullmatch(r"sum\(/(\w+)/(\w+)\)", expr)
+        if not (isinstance(doc, tuple) and doc[0] == "__xml__" and m):
+            raise WdlError("unsupported xpath %r" % expr)
+        root = doc[1].get(m.group(1)) or {}
+        v = root.get(m.group(2)) if isinstance(root, dict) else None
+        vals = v if isinstance(v, list) else ([] if v is None else [v])
+        return float(sum(float(x) for x in vals))
     def f_createArray(self, *a):
         if not a:  # Power Automate: "expects a comma separated list of parameters" (InvalidTemplate)
             raise WdlError("createArray() expects at least one parameter")
