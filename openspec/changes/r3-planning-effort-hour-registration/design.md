@@ -306,7 +306,7 @@ Rules: legacy HourRegistration source remains man-days; EPIC 16 Project Effort i
 Implementation of a milestone may start only when **all** hold for that milestone: legacy evidence mapped (done for
 S12.5: 39/39); NR-EFF mapped (14/14); the milestone's BLOCKING decisions answered and recorded with date/owner
 (gate sets are defined once, in the "Milestone gate sets" table of `decisions.md`, derived from its Blocking column and
-checked by `tools/spec/check_r3_open_spec.py`: **M1** 0 open decisions (gate APPROVED 2026-10-09), **M2** 0 open decisions (all resolved 2026-10-10; release still needs the owner acceptance below), **M3** 11
+checked by `tools/spec/check_r3_open_spec.py`: **M1** 0 open decisions (gate APPROVED 2026-10-09), **M2** 0 open decisions (all resolved 2026-10-10; release still needs the owner acceptance below), **M3** 10 (`M3-DECISION-PACK.md`)
 and the M2 gate satisfied, **GL** OD-11); data model, security model, flow contracts and UX reviewed
 and accepted by the project owner; test strategy and acceptance criteria approved; migration impact known (OD-11 for
 GL); dependencies confirmed (Projects / ProjectPhases / Disciplines lists live on STAGING; guard framework; AuditLog);
@@ -351,4 +351,4 @@ EPIC 17 implementation; **GL** = go-live with migrated data; **M4** = later repo
 
 ## 17. Open questions
 
-Open questions are the 22 OPEN_DECISION items of `decisions.md` (12 unconditional BLOCKING, 0 conditional blockers, 10 NON_BLOCKING). Twenty-three decisions are resolved in `decisions.md` §C (OD-01, 05, 07, 08, 14, 16, 19, 22, 23, 24, 25, 33, 37, 40, 42, 44 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence); OD-41 is NOT_APPLICABLE.
+Open questions are the 21 OPEN_DECISION items of `decisions.md` (11 unconditional BLOCKING, 0 conditional blockers, 10 NON_BLOCKING). Twenty-seven decisions are resolved in `decisions.md` §C (OD-15, 32, 45, 49 by evidence in the M3 review; OD-01, 05, 07, 08, 14, 16, 19, 22, 23, 24, 25, 33, 37, 40, 42, 44 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence); OD-41 is NOT_APPLICABLE.

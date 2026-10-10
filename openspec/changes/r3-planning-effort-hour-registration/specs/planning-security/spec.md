@@ -43,7 +43,7 @@ them; technical administration SHALL NOT imply business authority.
 | `EFF.DisciplineEdit` register discipline effort (OD-30) | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | `EFF.DisciplineApprove` approve discipline effort = lock (OD-17) | DENY | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | `EFF.ActualView` view actual effort in EPIC 17 (A.III, discipline level; OD-46, M3) — the M2 project-level Approved actual total is served under `EFF.ProjectView` (OD-37) | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | OPEN_DECISION | DENY | DENY | DENY | NOT_APPLICABLE |
-| `EFF.ActualApprove` approve actual effort (OD-17, OD-19) | DENY | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
+| `EFF.ActualApprove` approve actual effort — NOT_APPLICABLE: the A.III lock is the existing TS.Approve (OD-49) | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE |
 | `EFF.Unlock` unlock / reopen (OD-18) | DENY | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | Planning configuration (AppSettings keys, e.g. unit, period windows) | DENY | DENY | DENY | DENY | DENY | DENY | DENY | DENY | ALLOW (configuration only) | DENY | DENY | NOT_APPLICABLE |
 

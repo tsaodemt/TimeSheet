@@ -197,10 +197,17 @@ def check_m2(d, dec, blocking, conditional, resolved, not_applicable, m2_gate):
     eff16 = [l for l in acc.splitlines() if l.startswith("| AC-EFF16-")]
     if "OD-33" not in resolved and any("HoursPerManDay" in l for l in eff16) and "OD-33" not in m2_gate:
         errs.append("M2 acceptance computes an actual-effort total but open OD-33 is not in the M2 gate")
-    # EPIC 17 unit: own open decision, no hidden dependency on OD-14.
-    if EPIC17_UNIT not in blocking or "M3" not in blocking.get(EPIC17_UNIT, ()):
-        errs.append("%s (EPIC 17 unit) must stay an open M3 blocker until decided" % EPIC17_UNIT)
+    # EPIC 17 unit: own decision, no hidden dependency on OD-14. Either an open M3 blocker, or resolved with its own evidence
+    # (rev01 A.II compares the two "số công" quantities directly) and stated in the discipline-effort spec.
     disc = read(d, "specs", "discipline-effort", "spec.md")
+    if EPIC17_UNIT in resolved:
+        row45 = next((l for l in dec.splitlines() if l.startswith("| %s " % EPIC17_UNIT)), "")
+        if not re.search(r"MAN_DAY", resolution(dec, EPIC17_UNIT)) or "compares" not in row45:
+            errs.append("%s resolved without the A.II comparison evidence" % EPIC17_UNIT)
+        if not re.search(r"stored in man-days \(%s resolved" % EPIC17_UNIT, disc):
+            errs.append("%s resolved but discipline-effort spec does not state man-days" % EPIC17_UNIT)
+    elif EPIC17_UNIT not in blocking or "M3" not in blocking.get(EPIC17_UNIT, ()):
+        errs.append("%s (EPIC 17 unit) must stay an open M3 blocker until decided" % EPIC17_UNIT)
     if EPIC17_UNIT not in disc or re.search(r"unit \(OD-14\)", disc):
         errs.append("discipline-effort unit must cite %s, not OD-14" % EPIC17_UNIT)
     tr = read(d, "traceability.md")
@@ -231,6 +238,17 @@ def check_m2(d, dec, blocking, conditional, resolved, not_applicable, m2_gate):
         for oid in sorted((resolved | not_applicable) & set(M2_DECISIONS)):
             if oid in questions:
                 errs.append("M2-DECISION-SUMMARY still asks closed decision %s" % oid)
+    # M3 (EPIC 17) Vietnamese meeting summary, once it exists: question table = exactly the derived M3 gate.
+    if os.path.exists(os.path.join(d, "M3-DECISION-SUMMARY.md")):
+        m3 = {o for o, gs in blocking.items() if "M3" in gs}
+        summ3 = read(d, "M3-DECISION-SUMMARY.md")
+        mm = re.search(r"(?ms)^## Bảng câu hỏi\n(.*?)(?=^## |\Z)", summ3)
+        asked3 = {re.match(r"\| (OD-\d\d)", l).group(1) for l in (mm.group(1) if mm else "").splitlines() if re.match(r"\| OD-\d\d \|", l)}
+        if asked3 != m3:
+            errs.append("M3-DECISION-SUMMARY question table %s != M3 gate %s" % (sorted(asked3), sorted(m3)))
+        for oid in sorted(resolved | not_applicable):
+            if mm and re.search(r"(?m)^\| %s \|" % oid, mm.group(1)):
+                errs.append("M3-DECISION-SUMMARY still asks closed decision %s" % oid)
     sections = re.split(r"(?m)^### Requirement: ", spec)[1:]
     for sec in sections:
         title = sec.splitlines()[0].strip()
