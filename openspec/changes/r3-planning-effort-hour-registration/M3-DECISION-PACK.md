@@ -1,82 +1,54 @@
 # M3 decision pack — EPIC 17 Discipline Effort Planning / Approval (rev01 A.II, A.III lock)
 
-Status 2026-10-10: **DECISION REVIEW — NO IMPLEMENTATION.** M1 (S12.5) and M2 (EPIC 16) are DONE on STAGING (main 1480de9) and
-are not reopened. **M3_IMPLEMENTATION_GATE = BLOCKED — M3 DECISION CHECKPOINT.** A "recommendation" is evidence-based advice, not an
-approval; an unanswered decision means **BLOCK / DO NOT GUESS**. Register: `decisions.md`. Vietnamese meeting summary:
-`M3-DECISION-SUMMARY.md`. Checker: `tools/spec/check_r3_open_spec.py` (M3 summary table = derived M3 gate).
+Status 2026-10-10: **DECISION CLOSURE COMPLETE — M3_IMPLEMENTATION_GATE = RELEASED.** The M3 checkpoint (commit 950f3cc) asked ten
+questions; the project owner resolved all of them on 2026-10-10. M1 and M2 are DONE and not reopened. Register: `decisions.md`.
+Vietnamese record: `M3-DECISION-SUMMARY.md`. Checker: `tools/spec/check_r3_open_spec.py`.
 
-Evidence classes: **LEGACY_FACT** · **CUSTOMER_REQUIREMENT** · **OWNER_DECISION** · **TARGET_SECURITY_REQUIREMENT** ·
-**PROPOSED_DESIGN** · **OPEN_DECISION**.
+## 1. Source
 
-## 1. Source (rev01, re-extracted with its numbering)
+rev01 A.II "Đăng ký công cho bộ môn": registrants "Nhân viên bộ môn (nhân viên và chủ trì)"; "Theo dự án"; "Chọn công việc thực hiện";
+"Số công của bộ môn không vượt quá số công mục I.3"; approver "Chủ trì => khóa công Đăng Ký". A.III: "Chủ trì => khóa công thực hiện".
 
-A.II "Đăng ký công cho bộ môn": 1. "Người thực hiện: Nhân viên bộ môn (nhân viên và chủ trì)"; 2. "Đăng ký công": (a) "Theo dự án",
-(b) "Chọn công việc thực hiện", (c) "Số công của bộ môn không vượt quá số công mục I.3"; 3. "Người phê duyệt: Chủ trì => khóa công
-Đăng Ký". A.III "Công thực hiện dự án": 1. "Chấm công thực hiện dự án: nhân viên bộ môn (nhân viên và chủ trì)"; 2. "Người phê duyệt:
-Chủ trì => khóa công thực hiện". **Not stated** (verified absence): unlock / reopen, approval order, self-approval, revision, period,
-value rules, visibility.
+## 2. M3 gate (derived)
 
-Legacy facts used: role "Leader" is labelled "Chủ trì bộ môn" in the legacy UI and maps to Team Leader (role map); the legacy
-timesheet input `cmb_cvduan` "Công việc dự án" = project phases, `cmb_cvth` = work type (E10 "Loại hình công việc");
-EPIC 07 approval locks Approved timesheet entries (live since R2).
+Before: OD-17, 18, 27, 28, 29, 30, 34, 46, 47, 48. After: **none**.
 
-## 2. M3 gate (derived from the register)
+## 3. Resolved by evidence (review 2026-10-10)
 
-Before this review: OD-15, OD-17, OD-18, OD-27, OD-28, OD-29, OD-30, OD-32, OD-34, OD-45, OD-46 (11).
-After: **OD-17, OD-18, OD-27, OD-28, OD-29, OD-30, OD-34, OD-46, OD-47, OD-48** (10).
+| ID | Resolution |
+|---|---|
+| OD-15 | ceiling = A.I.3 value of the same discipline recipient of the project, lifetime |
+| OD-32 | Σ ≤ ceiling |
+| OD-45 | man-day (rev01 compares the two "số công" directly; not inherited from OD-14) |
+| OD-49 | A.III lock = existing EPIC 07 timesheet approval; no second actual workflow |
 
-## 3. Resolved by evidence in this review (owner may override)
+## 4. Owner decisions 2026-10-10
 
-| ID | Topic | Resolution | Evidence |
-|---|---|---|---|
-| OD-15 | A. ceiling scope | **project × discipline, lifetime**: the ceiling of discipline D in project P is the A.I.3 value of recipient `D:<D>` of P | rev01 A.II.2 "Theo dự án" + "không vượt quá số công mục I.3"; A.I has no phase and no period (OD-22, OD-23) |
-| OD-32 | H. ceiling relation | **≤ (not exceed)**; equality not required | "không vượt quá" |
-| OD-45 | K. EPIC 17 unit | **man-day**: A.II compares "số công của bộ môn" directly with "số công mục I.3" (no conversion), and I.3 is in man-days (OD-14). Derived from the source, not propagated automatically | rev01 A.II.2(c); OD-14 |
-| OD-49 | I. actual lock (A.III) | **existing EPIC 07 timesheet approval**: no second approval / lock of actuals in EPIC 17 (`EFF.ActualApprove` NOT_APPLICABLE) | OD-19 (no duplicate actual-effort workflow), OD-33 (Approved only) |
+| ID | Decision | Effect |
+|---|---|---|
+| OD-17 | Chủ trì = Team Leader of the caller's authoritative discipline (owner target mapping) | no new role; several TLs per discipline; not Approver |
+| OD-18 | no reopen | Draft → ApprovedLocked only; `EFF.Unlock` N/A |
+| OD-27 | single approval stage; approval = lock | no submit / PM / PMO / Executive stage; no Lock event |
+| OD-28 | self-approval allowed in EPIC 17 only | EPIC 07 self-approval stays denied (regression tests) |
+| OD-29 | existing active WorkTypes (stable LegacyId) | no Task entity; inactive not selectable for new rows |
+| OD-30 | Employee × Project × WorkType; discipline from Employees | no stored / editable discipline total |
+| OD-34 | audit only | no revision entity; approved rows immutable |
+| OD-46 | view own / discipline / PM project / PMO / Executive; edit own Draft; approve TL same discipline | others denied; not inherited from OD-05 / OD-37 |
+| OD-47 | man-day, ≥ 0, ≤ 2 dp (reject), blank ≠ 0, no maximum | TECHNICAL_LIMIT only from the platform |
+| OD-48 | project lifetime | no period / window |
 
-## 4. Remaining decisions (genuine business / security choices)
+## 5. Derived rules recorded (not new business decisions; owner may override)
 
-### OD-17 — B. Who is the "Chủ trì" (A.II approver)?
-- **Question:** the Team Leader of the discipline, a per-project / per-discipline assignment, or a new role?
-- **Evidence:** legacy label "Chủ trì bộ môn" on the Leader role → Team Leader (LEGACY_FACT); the guard already enforces discipline scope; rev01 names "Chủ trì" without a project scope.
-- **Options:** a) Team Leader of the discipline; b) per-project Chủ trì list; c) new role.
-- **Recommendation:** (a). **Impact:** approvals in discipline scope with the existing group; (b) needs a new assignment list + project scope.
-- **Decider:** CUSTOMER_AND_SECURITY (CEO + HR; security owner).
+- **Ceiling basis:** every non-blank registration of D in P counts (Draft + ApprovedLocked) — "all applicable allocations" (OD-30); the
+  save-time check must include other employees' drafts or concurrent drafts could exceed the ceiling.
+- **Blank A.I.3:** "not registered" (OD-40) is not a number; saving a VALUE is refused (CEILING_NOT_REGISTERED); clearing is allowed.
+- **A.I.3 lowered later (M2 unchanged):** the discipline can be over its ceiling; further increases and approvals of D in P are refused
+  (OVER_CEILING) until A.I.3 is raised or drafts are reduced.
+- **Editor totals:** the employee editor shows the aggregate ceiling / used / remaining of the caller's own discipline (totals only), as the
+  owner's UI list requires; no other person's rows.
+- **Concurrency:** a technical lock item per Project × Discipline (`DisciplineEffortLocks`: Busy / BusyUntil / Stamp, no business value)
+  serialises ceiling checks; a concurrent saver gets CONFLICT with 0 writes.
 
-### OD-30 — G. Registration granularity
-- **Question:** does each staff member register their own effort (person × project × task) or does the discipline register an aggregate?
-- **Evidence:** "Người thực hiện: Nhân viên bộ môn (nhân viên và chủ trì)" — individuals act.
-- **Recommendation:** per person × project × task; the ceiling sums all persons of the discipline in the project. **Decider:** CUSTOMER.
+## 6. Not reopened
 
-### OD-29 — F. Meaning of "Chọn công việc thực hiện"
-- **Options:** a) work type (E10); b) project phase; c) free text.
-- **Evidence:** legacy timesheet: `cmb_cvth` = work type, phases are "Công việc dự án" (`cmb_cvduan`) — INFERRED from legacy naming.
-- **Recommendation:** (a) work type. **Decider:** CUSTOMER.
-
-### OD-48 — G. Time dimension of A.II
-- **Recommendation:** one project-lifetime value per person × project × task ("Theo dự án"; the ceiling is lifetime). **Decider:** CUSTOMER.
-
-### OD-47 — Value domain of A.II
-- **Recommendation:** same as EPIC 16 — at most 2 decimals (more refused, no rounding), ≥ 0, no business maximum, blank ≠ 0. Confirmation only. **Decider:** CUSTOMER.
-
-### OD-27 — D. Order and ceiling basis
-- **Questions:** (1) Can A.II be registered while the discipline's A.I.3 value is blank (not registered)? (2) Do Draft and Approved registrations both count against the ceiling? (3) If the PM later lowers A.I.3 below the registered total, is that refused or allowed?
-- **Recommendation:** (1) no — a blank ceiling means "not planned" (OD-40), registration refused until the PM registers it; (2) both count (the rule limits registration, not approval); (3) refused at A.I save (keeps the rule true; requires a small M2 change through a spec delta).
-- **Decider:** CUSTOMER (PMO).
-
-### OD-28 — E. Self-approval
-- **Question:** may the Chủ trì approve their own A.II rows? **Recommendation:** no (timesheet precedent UD-04: no self-approval); another Chủ trì of the discipline, or Executive, approves. **Decider:** CUSTOMER_AND_SECURITY.
-
-### OD-18 — C. Unlock / reopen after approval
-- **Options:** a) never; b) Chủ trì; c) higher role; d) request + approve. **Recommendation:** (a) none in R3 (rev01 states only the lock); corrections later through a new decision. **Decider:** CUSTOMER (CEO).
-
-### OD-34 — J. Revision model
-- **Recommendation:** no revision entity; history = audit rows + SharePoint versions (with OD-18 = none, an approved row never changes). **Decider:** CUSTOMER.
-
-### OD-46 — L. Visibility and permissions of A.II data
-- **Recommendation (separate permissions):** VIEW: staff own rows; Chủ trì own discipline; the project's PM own project; PMO and Executive all. EDIT: staff own Draft rows (OD-30). APPROVE: Chủ trì (OD-17), not own rows (OD-28). REOPEN: per OD-18. HR, Finance, Salary Viewer, App Administrator, IT Support, Confidential Owner, Migration Owner: DENY. Quản lý phòng: OD-31 (M4). Not inherited from OD-05 / OD-37.
-- **Decider:** CUSTOMER_AND_SECURITY.
-
-## 5. Not reopened
-
-M1 decisions; M2 decisions OD-14, 16, 19, 22, 23, 24, 33, 37, 40, 44 (OD-41 NOT_APPLICABLE); OD-25 (separation), OD-26 (no A.I approval).
+M1 decisions; M2 decisions (OD-14, 16, 19, 22, 23, 24, 33, 37, 40, 44; OD-41 N/A); OD-25, OD-26.

@@ -37,12 +37,13 @@ Prerequisites (verified on STAGING read-only 2026-10-10): `Projects` has no PM f
 - [x] 2.6 STAGING: provision lists + AppSettings key, deploy flows (run-only), publish app (v14); live E2E, 12-role matrix, security probes, audit; evidence; backlog — DONE 2026-10-10
 - Data impact: new lists only; no migration (no legacy data; OD-25 no seeding); existing Timesheet and M1 untouched
 
-## 3. M3 — EPIC 17 Discipline Effort (blocked by 0.3, M2 data model)
+## 3. M3 — EPIC 17 Discipline Effort (decisions complete 2026-10-10; released)
 
-- [ ] 3.1 `DisciplineEffortRegistrations` per OD-29/30; ceiling counter per OD-15/32
-- [ ] 3.2 `EFF-SaveDisciplineEffort`, `EFF-ApproveDisciplineEffort` (lock), queue read
-- [ ] 3.3 Actual effort approval/lock per OD-19/33; unlock only if OD-18
-- [ ] 3.4 Permission tests (forged owner / approver), concurrency tests, live proof
+- [ ] 3.1 Schema `DisciplineEffortRegistrations` (Employee × Project × WorkType, Draft / ApprovedLocked) + technical `DisciplineEffortLocks`; capability matrix (OD-46) with project-PM view grant
+- [ ] 3.2 Reference model + tests: read scopes, save own Draft (validation, ceiling incl. blank A.I.3, lock), approve (same discipline, self allowed, revalidation), LOCKED, actual per discipline; EPIC 07 self-approval regression
+- [ ] 3.3 Flows `EFF-ReadDisciplineEffort`, `EFF-SaveDisciplineEffort`, `EFF-ApproveDisciplineEffort` generated; simulator parity (lazy + eager)
+- [ ] 3.4 Canvas Discipline Effort screen (own editor, discipline totals, Team Leader review / approve, view-only roles); no reopen, no revision
+- [ ] 3.5 STAGING: provision, deploy (run-only), publish; live E2E, 12-role matrix + PM condition, security, audit; evidence; backlog
 
 ## 4. Closure
 

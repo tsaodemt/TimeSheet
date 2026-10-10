@@ -35,11 +35,12 @@ Each criterion is observable and traceable (requirement / legacy row / decision)
 
 | AC | Criterion | Trace |
 |---|---|---|
-| AC-EFF17-01 | A staff member can register only in the approved discipline/ownership scope (cross-discipline → SCOPE_NOT_ALLOWED) | NR-EFF-02, OD-30 |
-| AC-EFF17-02 | No accepted save makes the decided ceiling total exceed the allocation, including two concurrent saves | NR-EFF-03, OD-15 |
-| AC-EFF17-03 | Only the OD-17 Chủ trì can approve; approval locks the row; every role gets LOCKED on ordinary change afterwards | NR-EFF-04/06 |
-| AC-EFF17-04 | Self-approval behaves exactly as OD-28 | OD-28 |
-| AC-EFF17-05 | No unlock path exists unless OD-18 defines one; if defined later, its audit semantics are specified before implementation | OD-18 |
+| AC-EFF17-01 | An employee saves only own Employee × Project × WorkType rows (discipline from the Employees row, forged discipline ignored); another person's Draft → SCOPE_NOT_ALLOWED; inactive WorkType for a new row → VALIDATION_LOOKUP; > 2 decimals / negative → VALIDATION_VALUE; blank ≠ 0; no maximum | NR-EFF-02, OD-29, OD-30, OD-47 |
+| AC-EFF17-02 | Σ of D's non-blank rows in P (Draft + ApprovedLocked) ≤ A.I.3: below and exact accepted, above OVER_CEILING with 0 writes, blank A.I.3 → CEILING_NOT_REGISTERED, multi-row aggregate across employees, two concurrent saves never exceed | NR-EFF-03, OD-15, OD-27, OD-32 |
+| AC-EFF17-03 | Only a Team Leader of the row's discipline approves (cross-discipline SCOPE_NOT_ALLOWED; other roles ROLE_NOT_ALLOWED); approval revalidates ceiling / ETag, writes one Approval event, makes the row ApprovedLocked; every later change → LOCKED | NR-EFF-04, OD-17, OD-27 |
+| AC-EFF17-04 | A Team Leader approves own row of the same discipline (OD-28); EPIC 07 TS-Approve still refuses self-approval (regression) | OD-28 |
+| AC-EFF17-05 | No reopen / unapprove / unlock flow, button or bypass exists; no revision entity | OD-18, OD-34 |
+| AC-EFF17-06 | Reads return exactly the OD-46 scope per role (Employee own, Team Leader discipline, project PM, PMO, Executive; others denied) and Approved-only actual totals per discipline without Timesheet rows | OD-46, OD-33 |
 
 ## Shared R3
 
