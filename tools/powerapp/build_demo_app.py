@@ -165,7 +165,7 @@ Set(varNoReg, false); Set(varRegPid, Blank()); Set(varRegCanEdit, false); Set(va
 Set(varNoEff, false); Set(varEffPid, Blank()); Set(varEffCanEdit, false); Set(varEffCanAssign, false); Set(varEffLeave, false); Set(varEffSwitch, false);
 Set(varNoDe, false); Set(varDePid, Blank()); Set(varDeCanEdit, false); Set(varDeCanApprove, false); Set(varDeLeave, false); Set(varDeSwitch, false);
 Set(varDeConfirm, false);
-Set(varNoRpt, false); Set(varNoRptP, false); Set(varNoRptD, false); Set(varRptTab, "project")
+Set(varNoRptP, false); Set(varNoRptD, false); Set(varRptTab, "project")
 """ % _table(MESSAGES)
 
 # Power Apps Studio rejects Navigate in the start screen's OnVisible ("would automatically always navigate away"):
