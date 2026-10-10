@@ -352,4 +352,4 @@ EPIC 17 implementation; **GL** = go-live with migrated data; **M4** = later repo
 
 ## 17. Open questions
 
-Open questions are the 11 OPEN_DECISION items of `decisions.md` (1 unconditional BLOCKING, 0 conditional blockers, 10 NON_BLOCKING). Thirty-seven decisions are resolved in `decisions.md` §C (OD-17, 18, 27, 28, 29, 30, 34, 46, 47, 48 by owner decision (M3 closure); OD-15, 32, 45, 49 by evidence in the M3 review; OD-01, 05, 07, 08, 14, 16, 19, 22, 23, 24, 25, 33, 37, 40, 42, 44 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence); OD-41 is NOT_APPLICABLE.
+Open questions are the 14 OPEN_DECISION items of `decisions.md` (1 unconditional BLOCKING, 0 conditional blockers, 13 NON_BLOCKING). Thirty-seven decisions are resolved in `decisions.md` §C (OD-17, 18, 27, 28, 29, 30, 34, 46, 47, 48 by owner decision (M3 closure); OD-15, 32, 45, 49 by evidence in the M3 review; OD-01, 05, 07, 08, 14, 16, 19, 22, 23, 24, 25, 33, 37, 40, 42, 44 by owner decision; OD-02, 03, 04, 09, 21, 26, 38 by evidence); OD-41 is NOT_APPLICABLE.
