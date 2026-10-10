@@ -11,6 +11,7 @@ config: {"siteUrl", "approvedSiteUrl", "domain", "environmentLabel", "roleGroups
          "registrationRoleGroups": [[key, groupObjectId]] (optional, R3 M1 S12.5: roles granted REG.View / REG.Edit),
          "effortRoleGroups": [[key, groupObjectId]] (optional, R3 M2 EPIC 16: roles granted EFF.ProjectView / EFF.ProjectPmAssign),
          "disciplineRoleGroups": [[key, groupObjectId]] (optional, R3 M3 EPIC 17: roles granted EFF.Discipline* — EMP, TL, PMO, EXE),
+         "reportRoleGroups": [[key, groupObjectId]] (optional, R3 M4 reports: roles granted RPT.* and REG.View — TL, APR, EXE, PMO, HR, ITS),
          "registry": {...}, "overlay": {...}}  — never committed (tenant values).
 """
 from __future__ import annotations
@@ -28,6 +29,7 @@ import build_appstart_flow as baf  # noqa: E402
 import build_approval_flows as apf  # noqa: E402
 import build_r1_flows as r1  # noqa: E402
 import build_discipline_flows as dsf  # noqa: E402
+import build_report_flows as rpf  # noqa: E402
 import build_effort_flows as eff  # noqa: E402
 import build_registration_flows as rgf  # noqa: E402
 import build_read_flow as base  # noqa: E402
@@ -109,6 +111,12 @@ def flows(config: dict) -> dict:
         out["EFF-ReadDisciplineEffort"] = dsf.read_actions(**de)
         out["EFF-SaveDisciplineEffort"] = dsf.save_actions(**de)
         out["EFF-ApproveDisciplineEffort"] = dsf.approve_actions(**de)
+    if config.get("reportRoleGroups"):
+        # R3 M4 current-scope reports (OD-50): RPT-ProjectReport / RPT-DisciplineReport
+        rp = dict(site=config["siteUrl"], domain=config["domain"], environment=config["environmentLabel"], refs=PLAIN,
+                  role_groups=[tuple(x) for x in config["reportRoleGroups"]], conf_audit_list="ConfidentialAuditLog", **LISTS)
+        out["RPT-ProjectReport"] = rpf.project_report_actions(**rp)
+        out["RPT-DisciplineReport"] = rpf.discipline_report_actions(**rp)
     out = {k: add_site_guard(_plain(v), config["approvedSiteUrl"]) for k, v in out.items()}
     p = scope.check_artifacts(out)
     if p:
