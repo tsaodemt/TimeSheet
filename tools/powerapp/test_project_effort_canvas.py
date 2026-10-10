@@ -106,6 +106,15 @@ class ProjectEffortCanvas(unittest.TestCase):
         self.assertIn("đã duyệt", P("lblEffActual", "Text"))
         self.assertNotRegex(SRC, r"Sum\(", "no client-side total: the server computes the facts")
 
+    def test_PC13_chained_blocks_are_separated(self):
+        # a statement block that ends with ")" followed by a new Set( needs ";" (live App checker: 4 errors on btnEffSetPm)
+        for name in ("EFF_SAVE", "EFF_SETPM", "EFF_ONVISIBLE", "EFF_OPEN"):
+            f = getattr(app, name)
+            self.assertIsNone(re.search(r"\)\s*\n\s*(Set|Notify|ClearCollect)\(", f), name)
+        for k, v in C.items():
+            for prop, val in v.get("Properties", {}).items():
+                self.assertIsNone(re.search(r"\)\s*\n\s*(Set|Notify|ClearCollect)\(", val), (k, prop))
+
     def test_PC12_geometry_no_overlap_and_messages(self):
         y = lambda k, p="Y": int(P(k, p))  # noqa: E731
         self.assertLess(y("btnEffLeaveYes") + y("btnEffLeaveYes", "Height"), y("galEffRows"))

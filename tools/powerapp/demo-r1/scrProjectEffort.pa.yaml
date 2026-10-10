@@ -180,7 +180,6 @@ Screens:
             Set(varSaving, false);
             Notify(Switch(varEffPmRes.resultcode, "OK", Coalesce(LookUp(colMessages, code = "EFF_PM_OK", text), LookUp(colMessages, code = "MSG_ERROR", text)), "NO_CHANGE", Coalesce(LookUp(colMessages, code = "EFF_PM_SAME", text), LookUp(colMessages, code = "MSG_ERROR", text)), Coalesce(LookUp(colMessages, code = varEffPmRes.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text))) & " (" & varEffPmRes.correlationid & ")",
                 If(varEffPmRes.ok = "true", NotificationType.Success, NotificationType.Error));
-
             Set(varBusy, true);
             Set(varEffList, 'EFF-ReadProjectEffort'.Run("0"));
             Set(varBusy, false);
@@ -190,7 +189,7 @@ Screens:
                     name: Text(ThisRecord.Value.name), pmName: Text(ThisRecord.Value.pmName), canEdit: Boolean(ThisRecord.Value.canEdit)})),
                 Clear(colEffProjects);
                 If(varEffList.resultcode = "ROLE_NOT_ALLOWED", Set(varNoEff, true));
-                Notify(If(varEffList.resultcode = "ROLE_NOT_ALLOWED", Coalesce(LookUp(colMessages, code = "EFF_NO_ACCESS", text), LookUp(colMessages, code = "MSG_ERROR", text)), Coalesce(LookUp(colMessages, code = varEffList.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text))) & " (" & varEffList.correlationid & ")", NotificationType.Error))
+                Notify(If(varEffList.resultcode = "ROLE_NOT_ALLOWED", Coalesce(LookUp(colMessages, code = "EFF_NO_ACCESS", text), LookUp(colMessages, code = "MSG_ERROR", text)), Coalesce(LookUp(colMessages, code = varEffList.messagecode, text), LookUp(colMessages, code = "MSG_ERROR", text))) & " (" & varEffList.correlationid & ")", NotificationType.Error));
 
             Set(varBusy, true);
             Set(varEff, 'EFF-ReadProjectEffort'.Run(Text(varEffPid)));

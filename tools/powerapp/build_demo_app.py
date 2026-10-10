@@ -361,7 +361,7 @@ Set(varEffPmRes, %(F)s.Run(Text(varEffPid), Text(ddEffPm.Selected.id), varEff.pm
 Set(varSaving, false);
 Notify(Switch(varEffPmRes.resultcode, "OK", %(OK)s, "NO_CHANGE", %(SAME)s, %(MSG)s) & " (" & varEffPmRes.correlationid & ")",
     If(varEffPmRes.ok = "true", NotificationType.Success, NotificationType.Error));
-""" % {"F": FLOW_EFF_PM, "OK": MSG % '"EFF_PM_OK"', "SAME": MSG % '"EFF_PM_SAME"', "MSG": MSG % "varEffPmRes.messagecode"} + EFF_LIST + EFF_READ
+""" % {"F": FLOW_EFF_PM, "OK": MSG % '"EFF_PM_OK"', "SAME": MSG % '"EFF_PM_SAME"', "MSG": MSG % "varEffPmRes.messagecode"} + EFF_LIST.strip() + ";\n" + EFF_READ
 EFF_OPEN = "Set(varEffPid, ddEffProject.Selected.id); Clear(colEffEdit);\n" + EFF_READ.strip()
 EFF_ONVISIBLE = """
 Set(varEffLeave, false); Set(varEffSwitch, false);

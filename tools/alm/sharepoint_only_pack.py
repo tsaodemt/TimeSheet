@@ -9,6 +9,7 @@ PRODUCTION. Business settings stay in SharePoint AppSettings (read at run time b
 config: {"siteUrl", "approvedSiteUrl", "domain", "environmentLabel", "roleGroups": [[key, groupObjectId]],
          "approvalRoleGroups": [[key, groupObjectId]] (optional, S07.2 / S07.3: TL / APR / EXE),
          "registrationRoleGroups": [[key, groupObjectId]] (optional, R3 M1 S12.5: roles granted REG.View / REG.Edit),
+         "effortRoleGroups": [[key, groupObjectId]] (optional, R3 M2 EPIC 16: roles granted EFF.ProjectView / EFF.ProjectPmAssign),
          "registry": {...}, "overlay": {...}}  — never committed (tenant values).
 """
 from __future__ import annotations
@@ -25,6 +26,7 @@ import architecture_scope as scope  # noqa: E402
 import build_appstart_flow as baf  # noqa: E402
 import build_approval_flows as apf  # noqa: E402
 import build_r1_flows as r1  # noqa: E402
+import build_effort_flows as eff  # noqa: E402
 import build_registration_flows as rgf  # noqa: E402
 import build_read_flow as base  # noqa: E402
 
@@ -91,6 +93,13 @@ def flows(config: dict) -> dict:
                    role_groups=[tuple(x) for x in config["registrationRoleGroups"]], conf_audit_list="ConfidentialAuditLog", **LISTS)
         out["REG-ReadMatrix"] = rgf.read_matrix_actions(**reg)
         out["REG-SaveMatrix"] = rgf.save_matrix_actions(**reg)
+    if config.get("effortRoleGroups"):
+        # R3 M2 EPIC 16 Project Effort: EFF-SetProjectPm / EFF-ReadProjectEffort / EFF-SaveProjectEffort
+        e = dict(site=config["siteUrl"], domain=config["domain"], environment=config["environmentLabel"], refs=PLAIN,
+                 role_groups=[tuple(x) for x in config["effortRoleGroups"]], conf_audit_list="ConfidentialAuditLog", **LISTS)
+        out["EFF-SetProjectPm"] = eff.set_pm_actions(**e)
+        out["EFF-ReadProjectEffort"] = eff.read_effort_actions(**e)
+        out["EFF-SaveProjectEffort"] = eff.save_effort_actions(**e)
     out = {k: add_site_guard(_plain(v), config["approvedSiteUrl"]) for k, v in out.items()}
     p = scope.check_artifacts(out)
     if p:
