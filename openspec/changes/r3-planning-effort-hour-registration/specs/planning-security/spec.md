@@ -35,19 +35,20 @@ them; technical administration SHALL NOT imply business authority.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `REG.View` view Hour Registration (OD-05 resolved, legacy parity) | DENY | ALLOW | ALLOW | ALLOW | ALLOW | ALLOW | DENY | DENY | DENY | ALLOW | DENY | DENY |
 | `REG.Edit` edit / clear / save matrix (OD-04 resolved) | DENY | DENY | DENY | ALLOW | ALLOW | DENY | DENY | DENY | DENY | DENY | DENY | DENY |
-| `EFF.ProjectView` view project planned effort (OD-37) | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | OPEN_DECISION | DENY | DENY | DENY | NOT_APPLICABLE |
-| `EFF.ProjectEdit` edit project planned effort (OD-24) | DENY | DENY | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
+| `EFF.ProjectView` view project planned effort (OD-37 resolved; + project-PM scope grant) | DENY | DENY | DENY | ALLOW | ALLOW | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
+| `EFF.ProjectEdit` edit project planned effort (OD-24 resolved: project-PM scope grant only) | DENY | DENY | DENY | DENY | DENY | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
+| `EFF.ProjectPmAssign` assign / change a project's authoritative PM (OD-24 resolved) | DENY | DENY | DENY | DENY | ALLOW | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | `EFF.ProjectApprove` project planned-effort approval | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE |
-| `EFF.DisciplineView` view discipline allocation / registration (OD-37) | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
+| `EFF.DisciplineView` view discipline allocation / registration (OD-46) | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | `EFF.DisciplineEdit` register discipline effort (OD-30) | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | `EFF.DisciplineApprove` approve discipline effort = lock (OD-17) | DENY | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
-| `EFF.ActualView` view actual effort (OD-19, OD-37) | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | OPEN_DECISION | DENY | DENY | DENY | NOT_APPLICABLE |
+| `EFF.ActualView` view actual effort in EPIC 17 (A.III, discipline level; OD-46, M3) — the M2 project-level Approved actual total is served under `EFF.ProjectView` (OD-37) | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | OPEN_DECISION | DENY | DENY | DENY | NOT_APPLICABLE |
 | `EFF.ActualApprove` approve actual effort (OD-17, OD-19) | DENY | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | `EFF.Unlock` unlock / reopen (OD-18) | DENY | OPEN_DECISION | OPEN_DECISION | OPEN_DECISION | DENY | DENY | DENY | DENY | DENY | DENY | DENY | NOT_APPLICABLE |
 | Planning configuration (AppSettings keys, e.g. unit, period windows) | DENY | DENY | DENY | DENY | DENY | DENY | DENY | DENY | ALLOW (configuration only) | DENY | DENY | NOT_APPLICABLE |
 
 `REG.Edit`: OD-04 resolved (Executive, PMO). `REG.View`: OD-05 resolved by owner decision = legacy parity (legacy read Manager, Leader, IT, HRD + writers → Team Leader, Approver, IT Support, HR, Executive, PMO; full role table in `decisions.md`). App Administrator has no business VIEW/EDIT (technical role); Migration Owner has none.
-has no business capability. Legacy Director is retired (no mapping). A.I project allocation has no approval capability in current scope (resolved OD-26). Self-approval of discipline/actual effort: OD-28.
+has no business capability. Legacy Director is retired (no mapping). A.I project allocation has no approval capability in current scope (resolved OD-26). **Project-PM scope grant (OD-24, OD-37):** independent of role, the authoritative PM of a project (resolved server-side from the project's stored PM) gets `EFF.ProjectEdit` and `EFF.ProjectView` (incl. the aggregated Approved actual total) for that project only; role cells above are the role-based grants (PMO / Executive view all projects; nobody edits by role). Existing Timesheet capabilities are unchanged. Self-approval of discipline/actual effort: OD-28.
 
 #### Scenario: Matrix is machine-checked
 - **WHEN** the capability tests run
@@ -58,11 +59,11 @@ has no business capability. Legacy Director is retired (no mapping). A.I project
 - **THEN** the response is ROLE_NOT_ALLOWED unless an approved decision grants that capability
 
 ### Requirement: Scopes
-Scopes SHALL be enforced server-side: discipline scope from the caller's Employees row; project scope only after OD-24 /
-OD-17 define how a person is tied to a project (the current guard has self, discipline and company scopes only — a
-project scope is new work and SHALL be specified before M2/M3).
+Scopes SHALL be enforced server-side: discipline scope from the caller's Employees row; project scope for EPIC 16 = the
+project's authoritative PM stored on the project (OD-24 resolved; new guard scope, specified and tested in M2); EPIC 17
+Chủ trì scope per OD-17 (M3).
 
 #### Scenario: Cross-project write
-- **GIVEN** a project scope is defined and user P is not assigned to project B
+- **GIVEN** user P is not the authoritative PM of project B
 - **WHEN** P writes planning data of project B
 - **THEN** the response is SCOPE_NOT_ALLOWED

@@ -2,7 +2,7 @@
 
 ### Requirement: Discipline effort registration (NR-EFF-02)
 Discipline staff (employees and the Chủ trì) SHALL register discipline effort per project and task through a guarded
-flow, only for their own discipline. Task meaning (OD-29), ownership grain (OD-30), unit (OD-14) and period (OD-23)
+flow, only for their own discipline. Task meaning (OD-29), ownership grain (OD-30), unit (OD-45, OPEN_FOR_M3; not taken from OD-14) and period (OD-23)
 SHALL be implemented as decided; until then BLOCKED (M3).
 
 #### Scenario: Other discipline denied
@@ -38,9 +38,10 @@ immutable for every role). Self-approval SHALL follow OD-28; approval order SHAL
 - **THEN** the response is ROLE_NOT_ALLOWED and no Approval audit row with ALLOW exists
 
 ### Requirement: Chủ trì approval locks actual effort (NR-EFF-06)
-Actual effort approved by the Chủ trì SHALL be immutable for every role, with the actual-effort source per OD-19 and the
-Approved/Draft rule per OD-33. If OD-19 selects the timesheet, the interaction with the closed EPIC 07 approval roles
-SHALL be resolved by decision before implementation.
+Actual effort approved by the Chủ trì SHALL be immutable for every role, counting only Approved Timesheet rows (OD-33 resolved). The
+actual-effort source is the existing `TimesheetEntries` (OD-19 resolved 2026-10-10); the interaction of the A.III Chủ trì
+lock with the closed EPIC 07 approval roles SHALL be resolved by decision (OD-17) before M3 implementation and
+SHALL NOT restrict existing Timesheet behaviour.
 
 #### Scenario: Approved actual is immutable
 - **GIVEN** an approved actual effort record

@@ -9,12 +9,17 @@ R3 SHALL define and populate the persisted facts/keys that later reporting can c
 - **THEN** planned, actual and variance reconcile using the documented keys and conversion rule without requiring a deployed analytics surface
 
 ### Requirement: Source units are preserved; comparison unit is normalised explicitly
-Legacy `HourRegistrations.ManDays` SHALL remain stored in man-days (LHR-39). New EPIC 16/17 effort SHALL be stored in the unit decided by OD-14. Reporting SHALL NOT rewrite either source unit. When a comparison needs a common unit and OD-14 is not man-days, the reporting contract SHALL normalise explicitly using the approved conversion (`HoursPerManDay` where applicable) and SHALL expose/document the comparison unit. Blank/zero counting semantics for each source SHALL follow that source's approved rule (OD-01 = A for Hour Registration; OD-40 for Project Effort).
+Legacy `HourRegistrations.ManDays` SHALL remain stored in man-days (LHR-39). EPIC 16 Project Effort SHALL be stored in man-days with at most 2 decimals (OD-14 resolved; bounds OD-44). Actual effort SHALL be read from the existing `TimesheetEntries` hours (OD-19 resolved) and SHALL be converted to man-days in the reporting/query contract as Σ hours of Approved Timesheet rows ÷ `HoursPerManDay` (OD-33 resolved = Approved only; Draft excluded); the hours SHALL NOT be rewritten. Reporting SHALL NOT rewrite any source unit and SHALL expose/document the comparison unit. Sharing the man-day unit SHALL NOT link Hour Registration and Project Effort values; any comparison between them is an explicit later reporting calculation. Blank/zero counting semantics for each source SHALL follow that source's approved rule (OD-01 = A for Hour Registration; OD-40 = blank not registered / zero explicit for Project Effort). The EPIC 17 unit is OPEN_FOR_M3 (OD-45) and SHALL NOT be assumed from OD-14.
 
-#### Scenario: Legacy budget with hour-based rev01 effort
-- **GIVEN** OD-14 selects hours
-- **WHEN** a later report compares legacy Hour Registration with rev01 actual/planned effort
-- **THEN** Hour Registration remains stored as man-days and the comparison calculation converts it explicitly rather than mutating the source data
+#### Scenario: Actual hours normalised in the query
+- **GIVEN** a project has 20 Approved and 8 Draft Timesheet hours and `HoursPerManDay` = 8
+- **WHEN** the contract compares planned Project Effort with actual effort
+- **THEN** actual effort is 2.50 man-days, computed in the query, and the Timesheet hours remain stored unchanged
+
+#### Scenario: Blank planned effort is not a zero plan
+- **GIVEN** a recipient with no registered Project Effort (blank) and one registered as 0
+- **WHEN** the contract lists planned effort
+- **THEN** the first is exposed as not registered and the second as an explicit 0; arithmetic sums may add blank as 0 without rewriting it
 
 ### Requirement: Registered budget sums remain reconcilable
 Registered man-days per project SHALL equal the sum of applicable `HourRegistrations` values after applying the approved stale-row rule OD-08; blank cells contribute zero to arithmetic sums without being rewritten as explicit zero (OD-01 resolved = A).
