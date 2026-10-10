@@ -127,6 +127,8 @@ def _str(v):
         return "True" if v else "False"
     if isinstance(v, (dict, list)):
         return json.dumps(v, separators=(",", ":"), ensure_ascii=False)
+    if isinstance(v, float) and v.is_integer():  # Power Automate renders an integral double without ".0"
+        return str(int(v))
     return str(v)
 
 
@@ -434,6 +436,15 @@ class Run:
                     self.results.pop(k, None)
                 self.run(a["actions"])
             self.loop_items.pop(name, None)
+            self.results[name] = {"status": "Succeeded", "outputs": None, "body": None}
+        elif t == "Until":  # do-until: run the body, then test the expression; capped by limit.count (default 60)
+            limit = int(((a.get("limit") or {}).get("count")) or 60)
+            for _ in range(limit):
+                for k in _nested_names(a["actions"]):
+                    self.results.pop(k, None)
+                self.run(a["actions"])
+                if self.value(a["expression"]):
+                    break
             self.results[name] = {"status": "Succeeded", "outputs": None, "body": None}
         elif t in ("Select", "Query") and (a.get("metadata") or {}).get("failOnError"):
             # a non-array source or an item expression error fails the action, as in Power Automate (only where a flow handles it)

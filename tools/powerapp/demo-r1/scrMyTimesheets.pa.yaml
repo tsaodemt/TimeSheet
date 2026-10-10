@@ -119,6 +119,16 @@ Screens:
           Width: =200
           Visible: =!varNoReg
           OnSelect: =Navigate(scrHourRegistration, ScreenTransition.None)
+    - btnEff:
+        Control: Classic/Button@2.2.0
+        Properties:
+          Text: ="Công dự án"
+          X: =1020
+          Y: =80
+          Width: =200
+          Height: =40
+          Visible: =!varNoEff
+          OnSelect: =Navigate(scrProjectEffort, ScreenTransition.None)
     - galEntries:
         Control: Gallery@2.15.0
         Variant: Vertical
