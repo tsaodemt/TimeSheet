@@ -10,6 +10,7 @@ config: {"siteUrl", "approvedSiteUrl", "domain", "environmentLabel", "roleGroups
          "approvalRoleGroups": [[key, groupObjectId]] (optional, S07.2 / S07.3: TL / APR / EXE),
          "registrationRoleGroups": [[key, groupObjectId]] (optional, R3 M1 S12.5: roles granted REG.View / REG.Edit),
          "effortRoleGroups": [[key, groupObjectId]] (optional, R3 M2 EPIC 16: roles granted EFF.ProjectView / EFF.ProjectPmAssign),
+         "disciplineRoleGroups": [[key, groupObjectId]] (optional, R3 M3 EPIC 17: roles granted EFF.Discipline* — EMP, TL, PMO, EXE),
          "registry": {...}, "overlay": {...}}  — never committed (tenant values).
 """
 from __future__ import annotations
@@ -26,6 +27,7 @@ import architecture_scope as scope  # noqa: E402
 import build_appstart_flow as baf  # noqa: E402
 import build_approval_flows as apf  # noqa: E402
 import build_r1_flows as r1  # noqa: E402
+import build_discipline_flows as dsf  # noqa: E402
 import build_effort_flows as eff  # noqa: E402
 import build_registration_flows as rgf  # noqa: E402
 import build_read_flow as base  # noqa: E402
@@ -100,6 +102,13 @@ def flows(config: dict) -> dict:
         out["EFF-SetProjectPm"] = eff.set_pm_actions(**e)
         out["EFF-ReadProjectEffort"] = eff.read_effort_actions(**e)
         out["EFF-SaveProjectEffort"] = eff.save_effort_actions(**e)
+    if config.get("disciplineRoleGroups"):
+        # R3 M3 EPIC 17 Discipline Effort: EFF-ReadDisciplineEffort / EFF-SaveDisciplineEffort / EFF-ApproveDisciplineEffort
+        de = dict(site=config["siteUrl"], domain=config["domain"], environment=config["environmentLabel"], refs=PLAIN,
+                  role_groups=[tuple(x) for x in config["disciplineRoleGroups"]], conf_audit_list="ConfidentialAuditLog", **LISTS)
+        out["EFF-ReadDisciplineEffort"] = dsf.read_actions(**de)
+        out["EFF-SaveDisciplineEffort"] = dsf.save_actions(**de)
+        out["EFF-ApproveDisciplineEffort"] = dsf.approve_actions(**de)
     out = {k: add_site_guard(_plain(v), config["approvedSiteUrl"]) for k, v in out.items()}
     p = scope.check_artifacts(out)
     if p:

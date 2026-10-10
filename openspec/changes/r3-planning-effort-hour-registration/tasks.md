@@ -37,13 +37,13 @@ Prerequisites (verified on STAGING read-only 2026-10-10): `Projects` has no PM f
 - [x] 2.6 STAGING: provision lists + AppSettings key, deploy flows (run-only), publish app (v14); live E2E, 12-role matrix, security probes, audit; evidence; backlog — DONE 2026-10-10
 - Data impact: new lists only; no migration (no legacy data; OD-25 no seeding); existing Timesheet and M1 untouched
 
-## 3. M3 — EPIC 17 Discipline Effort (decisions complete 2026-10-10; released)
+## 3. M3 — EPIC 17 Discipline Effort — DONE 2026-10-10 on STAGING (private evidence `_investigation/r3/m3-epic17/LIVE-M3.md`)
 
-- [ ] 3.1 Schema `DisciplineEffortRegistrations` (Employee × Project × WorkType, Draft / ApprovedLocked) + technical `DisciplineEffortLocks`; capability matrix (OD-46) with project-PM view grant
-- [ ] 3.2 Reference model + tests: read scopes, save own Draft (validation, ceiling incl. blank A.I.3, lock), approve (same discipline, self allowed, revalidation), LOCKED, actual per discipline; EPIC 07 self-approval regression
-- [ ] 3.3 Flows `EFF-ReadDisciplineEffort`, `EFF-SaveDisciplineEffort`, `EFF-ApproveDisciplineEffort` generated; simulator parity (lazy + eager)
-- [ ] 3.4 Canvas Discipline Effort screen (own editor, discipline totals, Team Leader review / approve, view-only roles); no reopen, no revision
-- [ ] 3.5 STAGING: provision, deploy (run-only), publish; live E2E, 12-role matrix + PM condition, security, audit; evidence; backlog
+- [x] 3.1 Schema `DisciplineEffortRegistrations` (Employee × Project × WorkType, Draft / ApprovedLocked) + technical `DisciplineEffortLocks`; capability matrix (OD-46) with project-PM view grant
+- [x] 3.2 Reference model + tests (`tools/effort/discipline_effort.py`, DE01–DE21 lazy + eager): read scopes, save own Draft (validation, ceiling incl. blank A.I.3, lock), approve (same discipline, self allowed, revalidation), LOCKED, actual per discipline; EPIC 07 self-approval regression
+- [x] 3.3 Flows `EFF-ReadDisciplineEffort`, `EFF-SaveDisciplineEffort`, `EFF-ApproveDisciplineEffort` generated; simulator parity (lazy + eager)
+- [x] 3.4 Canvas Discipline Effort screen (DC01–DC13; live fix: no AccessibleLabel on Classic/Button) (own editor, discipline totals, Team Leader review / approve, view-only roles); no reopen, no revision
+- [x] 3.5 STAGING: provision, deploy (run-only), publish (v15); live E2E, 12-role matrix + PM condition, security, audit; evidence; backlog — DONE 2026-10-10 (platform fixes found at deploy: no self-referencing SetVariable, expressions ≤ 8192 characters, unique action names; each guarded by DE20)
 
 ## 4. Closure
 

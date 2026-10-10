@@ -26,9 +26,11 @@ FLOW_UNAPPROVE = "'TS-Unapprove'"  # S07.3 explicit per-row unapproval
 FLOW_REG_READ, FLOW_REG_SAVE = "'REG-ReadMatrix'", "'REG-SaveMatrix'"  # R3 M1 S12.5 Hour Registration (guarded; no direct list access)
 # R3 M2 EPIC 16 Project Effort (guarded; no direct list access)
 FLOW_EFF_READ, FLOW_EFF_SAVE, FLOW_EFF_PM = "'EFF-ReadProjectEffort'", "'EFF-SaveProjectEffort'", "'EFF-SetProjectPm'"
+# R3 M3 EPIC 17 Discipline Effort (guarded; no direct list access)
+FLOW_DE_READ, FLOW_DE_SAVE, FLOW_DE_APPROVE = "'EFF-ReadDisciplineEffort'", "'EFF-SaveDisciplineEffort'", "'EFF-ApproveDisciplineEffort'"
 REFERENCE_SOURCES = ("Projects", "ProjectPhases", "Phases", "WorkTypes", "Shifts", "HourTypes")
 PROTECTED_LISTS = ("TimesheetEntries", "AuditLog", "Employees", "AppSettings", "HourRegistrations", "ProjectPmAssignments",
-                   "ProjectEffortAllocations")
+                   "ProjectEffortAllocations", "DisciplineEffortRegistrations", "DisciplineEffortLocks")
 PAGE_SIZE = 100
 
 # PROVISIONAL DEMO WORDING (R1-Q4 open): neutral, no internals; the correlation id is appended by the app.
@@ -94,6 +96,21 @@ MESSAGES = {
     "EFF_PM_OK": "Đã cập nhật PM của dự án.",
     "EFF_PM_SAME": "PM của dự án không thay đổi.",
     "EFF_CONFIG_INVALID": "Cấu hình Công dự án chưa hợp lệ. Vui lòng liên hệ quản trị.",
+    # R3 M3 EPIC 17 Discipline Effort (Công bộ môn)
+    "DE_OK": "Đã lưu công bộ môn.",
+    "DE_REFUSED": "Chưa lưu: có giá trị không hợp lệ, vượt trần công bộ môn hoặc vừa được người khác thay đổi. Dữ liệu đã được tải lại; các giá trị bạn sửa vẫn được giữ.",
+    "DE_INVALID": "Giá trị phải là số lớn hơn hoặc bằng 0, tối đa 2 chữ số thập phân.",
+    "DE_LEAVE": "Có thay đổi chưa lưu. Bỏ các thay đổi này?",
+    "DE_NO_ACCESS": "Bạn không có quyền xem Công bộ môn.",
+    "DE_APPROVE_CONFIRM": "Phê duyệt các dòng đã chọn? Sau khi phê duyệt, dòng bị khóa và không mở lại được.",
+    "DE_APPROVED": "Đã phê duyệt và khóa các dòng đã chọn.",
+    "DE_APPROVE_PARTIAL": "Đã phê duyệt một phần; các dòng còn lại bị từ chối (xem kết quả).",
+    "DE_APPROVE_REFUSED": "Không dòng nào được phê duyệt (xem kết quả).",
+    "MSG_OVER_CEILING": "Vượt trần công bộ môn của dự án (Công dự án).",
+    "MSG_CEILING_NOT_REGISTERED": "Bộ môn chưa có trần công trong Công dự án: chưa thể nhập giá trị.",
+    "MSG_VALIDATION_VALUE": "Giá trị phải là số lớn hơn hoặc bằng 0, tối đa 2 chữ số thập phân.",
+    "MSG_TECHNICAL_LIMIT": "Giá trị vượt giới hạn kỹ thuật.",
+    "MSG_NO_CHANGE": "Không có thay đổi.",
 }
 
 
@@ -140,7 +157,9 @@ ClearCollect(colMessages, %s);
 Set(varBusy, false); Set(varSaving, false); Set(varReloadRequired, false); Set(varNoTeam, false); Set(varApproving, false);
 Set(varConfirm, false); Set(varTeamMode, ""); Set(varNoUnapprove, false); Set(varUnConfirm, false); Set(varPendingCount, Blank());
 Set(varNoReg, false); Set(varRegPid, Blank()); Set(varRegCanEdit, false); Set(varRegLeave, false); Set(varRegSwitch, false);
-Set(varNoEff, false); Set(varEffPid, Blank()); Set(varEffCanEdit, false); Set(varEffCanAssign, false); Set(varEffLeave, false); Set(varEffSwitch, false)
+Set(varNoEff, false); Set(varEffPid, Blank()); Set(varEffCanEdit, false); Set(varEffCanAssign, false); Set(varEffLeave, false); Set(varEffSwitch, false);
+Set(varNoDe, false); Set(varDePid, Blank()); Set(varDeCanEdit, false); Set(varDeCanApprove, false); Set(varDeLeave, false); Set(varDeSwitch, false);
+Set(varDeConfirm, false)
 """ % _table(MESSAGES)
 
 # Power Apps Studio rejects Navigate in the start screen's OnVisible ("would automatically always navigate away"):
@@ -371,6 +390,73 @@ If(!IsBlank(varEffPid), """ + EFF_READ.strip() + """)
 EFF_NUM = 'If(IsBlank(%s), "", Text(Value(%s), "#,##0.00"))'
 
 
+# R3 M3 EPIC 17 Discipline Effort ("Công bộ môn"). One project at a time (Projects reference source, as Hour Registration).
+# EFF-ReadDisciplineEffort returns what the caller may see (OD-46: own rows; Team Leader: own discipline; PMO / Executive:
+# company; the designated EPIC 16 PM: own projects), the aggregate per-discipline ceiling / used / remaining / Approved actual,
+# the active WorkTypes, and canEdit / canApprove. The caller edits only own Draft rows (colDeMine, one per active WorkType plus
+# own rows of inactive WorkTypes, read-only); edits are held in colDeEdit {k = WorkType id, t}. Approval (Team Leader, own
+# discipline, own rows included — OD-28) locks the selected Draft rows; there is no reopen (OD-18).
+DE_READ = """
+Set(varBusy, true);
+Set(varDe, %(F)s.Run(Text(varDePid)));
+Set(varBusy, false);
+If(varDe.ok = "true",
+    Set(varDeScope, varDe.scope);
+    Set(varDeCanEdit, Boolean(ParseJSON(varDe.caller).canEdit)); Set(varDeCanApprove, Boolean(ParseJSON(varDe.caller).canApprove));
+    Set(varDeMyDisc, Text(ParseJSON(varDe.caller).disciplineCode));
+    ClearCollect(colDeRows, ForAll(Table(ParseJSON(varDe.rows)), {id: Value(ThisRecord.Value.id), emp: Text(ThisRecord.Value.employeeName),
+        disc: Text(ThisRecord.Value.disciplineCode), wt: Value(ThisRecord.Value.workTypeId), wtLabel: Text(ThisRecord.Value.workTypeCode) & " – " & Text(ThisRecord.Value.workTypeName),
+        state: Text(ThisRecord.Value.state), value: Text(ThisRecord.Value.value), status: Text(ThisRecord.Value.status), etag: Text(ThisRecord.Value.etag),
+        mine: Boolean(ThisRecord.Value.mine)}));
+    ClearCollect(colDeWts, ForAll(Table(ParseJSON(varDe.worktypes)), {id: Value(ThisRecord.Value.id), label: Text(ThisRecord.Value.code) & " – " & Text(ThisRecord.Value.name)}));
+    ClearCollect(colDeMine, ForAll(colDeWts As w, {wt: w.id, label: w.label, active: true, value: Coalesce(LookUp(colDeRows, mine && wt = w.id).value, ""),
+        status: Coalesce(LookUp(colDeRows, mine && wt = w.id).status, "Draft"), etag: Coalesce(LookUp(colDeRows, mine && wt = w.id).etag, "")}));
+    Collect(colDeMine, ForAll(Filter(colDeRows, mine && !(wt in colDeWts.id)) As r, {wt: r.wt, label: r.wtLabel, active: false, value: r.value,
+        status: r.status, etag: r.etag}));
+    ClearCollect(colDeSum, ForAll(Table(ParseJSON(varDe.summary)), {code: Text(ThisRecord.Value.disciplineCode), name: Text(ThisRecord.Value.disciplineName),
+        cstate: Text(ThisRecord.Value.ceilingState), ceiling: Text(ThisRecord.Value.ceiling), used: Text(ThisRecord.Value.used),
+        remaining: Text(ThisRecord.Value.remaining), hours: Text(ThisRecord.Value.actualHours), mds: Text(ThisRecord.Value.actualManDays)}));
+    ClearCollect(colDeSelTmp, Filter(colDeSel, id in Filter(colDeRows, status = "Draft").id)); ClearCollect(colDeSel, colDeSelTmp),
+    Set(varDeCanEdit, false); Set(varDeCanApprove, false); Set(varDeScope, "none"); Clear(colDeRows); Clear(colDeWts); Clear(colDeMine); Clear(colDeSum);
+    Clear(colDeSel);
+    If(varDe.resultcode = "ROLE_NOT_ALLOWED", Set(varNoDe, true));
+    Notify(If(varDe.resultcode = "ROLE_NOT_ALLOWED", %(NA)s, %(MSG)s) & " (" & varDe.correlationid & ")", NotificationType.Error))
+""" % {"F": FLOW_DE_READ, "NA": MSG % '"DE_NO_ACCESS"', "MSG": MSG % "varDe.messagecode"}
+DE_DIRTY = 'Filter(colDeEdit As e, e.t <> Coalesce(LookUp(colDeMine, wt = e.k).value, ""))'
+DE_INVALID = 'Filter(colDeEdit As e, !IsBlank(Trim(e.t)) && !IsMatch(Trim(e.t), "[0-9]+([.,][0-9]{1,2})?"))'
+DE_SAVE = """
+Set(varSaving, true);
+Set(varDeSave, %(F)s.Run(Text(varDePid), JSON(ForAll(%(DIRTY)s As c, {workTypeId: c.k,
+    state: If(IsBlank(Trim(c.t)), "blank", "value"), value: Substitute(Trim(c.t), ",", "."),
+    etag: Coalesce(LookUp(colDeMine, wt = c.k).etag, "")}), JSONFormat.Compact), GUID()));
+Set(varSaving, false);
+ClearCollect(colDeRes, ForAll(Table(ParseJSON(varDeSave.results)), {k: Value(ThisRecord.Value.workTypeId), rc: Text(ThisRecord.Value.resultcode)}));
+// committed / unchanged cells leave the edit set; refused ones stay dirty against the reloaded values; nothing was written for them
+ClearCollect(colDeEditTmp, Filter(colDeEdit As e, !(e.k in Filter(colDeRes, rc = "OK" || rc = "NO_CHANGE").k)));
+ClearCollect(colDeEdit, colDeEditTmp);
+Notify(Switch(varDeSave.resultcode, "OK", %(OK)s, "REFUSED", %(REF)s, %(MSG)s) & " (" & varDeSave.correlationid & ")",
+    If(varDeSave.resultcode = "OK", NotificationType.Success, NotificationType.Error));
+""" % {"F": FLOW_DE_SAVE, "DIRTY": DE_DIRTY, "OK": MSG % '"DE_OK"', "REF": MSG % '"DE_REFUSED"', "MSG": MSG % "varDeSave.messagecode"} + DE_READ
+DE_APPROVE = """
+Set(varDeConfirm, false);
+Set(varSaving, true);
+Set(varDeAppr, %(F)s.Run(JSON(ForAll(colDeSel As x, {itemId: x.id, etag: x.etag}), JSONFormat.Compact), GUID()));
+Set(varSaving, false);
+ClearCollect(colDeApprRes, ForAll(Table(ParseJSON(varDeAppr.results)), {id: Value(ThisRecord.Value.itemId), rc: Text(ThisRecord.Value.resultcode)}));
+Clear(colDeSel);
+Notify(Switch(varDeAppr.resultcode, "OK", %(OK)s, "PARTIAL", %(PAR)s, "REFUSED", %(REF)s, %(MSG)s) & " (" & varDeAppr.correlationid & ")",
+    Switch(varDeAppr.resultcode, "OK", NotificationType.Success, "PARTIAL", NotificationType.Warning, NotificationType.Error));
+""" % {"F": FLOW_DE_APPROVE, "OK": MSG % '"DE_APPROVED"', "PAR": MSG % '"DE_APPROVE_PARTIAL"', "REF": MSG % '"DE_APPROVE_REFUSED"',
+       "MSG": MSG % "varDeAppr.messagecode"} + DE_READ
+DE_OPEN = "Set(varDePid, ddDeProject.Selected.ID); Clear(colDeEdit); Clear(colDeSel); Clear(colDeRes); Clear(colDeApprRes);\n" + DE_READ.strip()
+DE_ONVISIBLE = """
+Set(varDeLeave, false); Set(varDeSwitch, false); Set(varDeConfirm, false); Clear(colDeRes); Clear(colDeApprRes);
+If(!IsBlank(varDePid), """ + DE_READ.strip() + """)
+"""
+DE_NUM = 'If(IsBlank(%s), "", Text(Value(%s), "#,##0.00"))'
+DE_SELECTABLE = 'varDeCanApprove && ThisItem.status = "Draft" && ThisItem.state = "VALUE" && ThisItem.disc = varDeMyDisc'
+
+
 def _mode(label, value):
     return ("Set(varTeamMode, %s); Set(varConfirm, false); Set(varUnConfirm, false); Clear(colSel); Clear(colApprRes); "
             "Set(varTeamAfter, Blank());\n" % value) + TEAM_READ
@@ -422,6 +508,8 @@ def screens() -> dict:
                            OnSelect="Navigate(scrHourRegistration, ScreenTransition.None)")},
             {"btnEff": ctl("Classic/Button@2.2.0", Text='"Công dự án"', X="1020", Y="80", Width="200", Height="40", Visible="!varNoEff",
                            OnSelect="Navigate(scrProjectEffort, ScreenTransition.None)")},
+            {"btnDe": ctl("Classic/Button@2.2.0", Text='"Công bộ môn"', X="800", Y="80", Width="200", Height="40", Visible="!varNoDe",
+                          OnSelect="Navigate(scrDisciplineEffort, ScreenTransition.None)")},
             {"galEntries": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
                 "Items": _f("SortByColumns(colRows, \"workDate\", SortOrder.Descending, \"id\", SortOrder.Descending)"),
                 "X": "=20", "Y": "=180", "Width": "=Parent.Width - 40", "Height": "=Parent.Height - 260", "TemplateSize": "=70",
@@ -612,6 +700,96 @@ def screens() -> dict:
                                       % (EFF_NUM % ("varEff.actualmandays", "varEff.actualmandays"), EFF_NUM % ("varEff.actualhours", "varEff.actualhours")))},
             {"lblEffVar": ctl("Label@2.5.1", X="700", Y="365", Width="600", Height="40", FontWeight="FontWeight.Bold",
                               Visible="!IsBlank(varEffPid)", Text='"Chênh lệch (thực hiện − kế hoạch): " & %s & " công"' % (EFF_NUM % ("varEff.variance", "varEff.variance")))}]},
+        "scrDisciplineEffort": {"Properties": {"OnVisible": _f(DE_ONVISIBLE)}, "Children": [
+            {"lblDeTitle": hdr("Công bộ môn")},
+            {"lblDeBusy": ctl("Label@2.5.1", Text='If(varBusy || varSaving, "Working…", "")', X="20", Y="60", Width="400", Height="30")},
+            {"btnDeBack": ctl("Classic/Button@2.2.0", Text='"Back"', X="20", Y="100", Width="120",
+                              OnSelect="If(CountRows(%s) > 0, Set(varDeLeave, true), Navigate(scrMyTimesheets, ScreenTransition.None))" % DE_DIRTY)},
+            {"ddDeProject": ctl("Classic/DropDown@2.3.1", X="160", Y="100", Width="260", Items='SortByColumns(Projects, "ProjectCode", SortOrder.Ascending)',
+                                Default='If(IsBlank(varDePid), "", LookUp(Projects, ID = varDePid).ProjectCode)', AllowEmptySelection="true",
+                                OnChange="If(CountRows(%s) > 0, Set(varDeSwitch, true), %s)" % (DE_DIRTY, DE_OPEN),
+                                **{"Items.Value": "ProjectCode"})},
+            {"lblDeProject": ctl("Label@2.5.1", Text='If(IsBlank(varDePid), "", ddDeProject.Selected.Title)', X="440", Y="100", Width="420", Height="40")},
+            {"btnDeReload": ctl("Classic/Button@2.2.0", Text='"Tải lại"', X="880", Y="100", Width="120",
+                                DisplayMode="If(IsBlank(varDePid) || varBusy || varSaving, DisplayMode.Disabled, DisplayMode.Edit)",
+                                OnSelect="If(CountRows(%s) > 0, Set(varDeSwitch, true), %s)" % (DE_DIRTY, DE_READ.strip()))},
+            {"btnDeSave": ctl("Classic/Button@2.2.0", Text='If(varSaving, "Saving…", "Lưu (" & CountRows(%s) & ")")' % DE_DIRTY,
+                              X="1020", Y="100", Width="160", Visible="varDeCanEdit",
+                              DisplayMode="If(varSaving || varBusy || IsBlank(varDePid) || CountRows(%s) = 0 || CountRows(%s) > 0, DisplayMode.Disabled, DisplayMode.Edit)"
+                                          % (DE_DIRTY, DE_INVALID),
+                              OnSelect=DE_SAVE)},
+            {"lblDeInfo": ctl("Label@2.5.1", X="20", Y="150", Width="1200", Height="30",
+                              Text='If(IsBlank(varDePid), "", "Bộ môn của bạn: " & varDeMyDisc & If(varDeCanEdit, "", "  ·  Chỉ xem") & "  ·  Đơn vị: công (ngày công)" & If(CountRows(%s) > 0, "  ·  " & %s, ""))'
+                                   % (DE_INVALID, MSG % '"DE_INVALID"'))},
+            {"lblDeLeave": ctl("Label@2.5.1", Text=MSG % '"DE_LEAVE"', X="20", Y="190", Width="560", Height="30", FontWeight="FontWeight.Bold",
+                               Visible="varDeLeave || varDeSwitch")},
+            {"btnDeLeaveYes": ctl("Classic/Button@2.2.0", Text='"Yes"', X="600", Y="190", Width="90", Height="40", Visible="varDeLeave || varDeSwitch",
+                                  OnSelect="Clear(colDeEdit); If(varDeLeave, Set(varDeLeave, false); Navigate(scrMyTimesheets, ScreenTransition.None), "
+                                           "Set(varDeSwitch, false); " + DE_OPEN + ")")},
+            {"btnDeLeaveNo": ctl("Classic/Button@2.2.0", Text='"No"', X="700", Y="190", Width="90", Height="40", Visible="varDeLeave || varDeSwitch",
+                                 OnSelect="Set(varDeLeave, false); Set(varDeSwitch, false); Reset(ddDeProject)")},
+            {"lblDeMine": ctl("Label@2.5.1", Text='"Công đăng ký của tôi"', X="20", Y="235", Width="560", Height="30", FontWeight="FontWeight.Bold",
+                              Visible="!IsBlank(varDePid)")},
+            {"galDeMine": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
+                "Items": _f("colDeMine"), "X": "=20", "Y": "=270", "Width": "=640", "Height": "=Parent.Height - 290", "TemplateSize": "=50",
+                "Visible": _f("!IsBlank(varDePid)")},
+                "Children": [
+                    {"icoDeLock": ctl("Classic/Icon@2.5.0", Icon="Icon.Lock", X="0", Y="13", Width="24", Height="24", Visible='ThisItem.status = "ApprovedLocked"',
+                                      Tooltip='"Đã phê duyệt"', AccessibleLabel='"Đã phê duyệt"')},
+                    {"lblDeWt": ctl("Label@2.5.1", X="30", Y="5", Width="270", Height="40", Text="ThisItem.label")},
+                    {"txtDeVal": ctl("Classic/TextInput@2.3.2", X="310", Y="5", Width="130", Height="40", Align="Align.Right", HintText='"—"',
+                                     Default='If(IsBlank(LookUp(colDeEdit, k = ThisItem.wt)), ThisItem.value, LookUp(colDeEdit, k = ThisItem.wt).t)',
+                                     DisplayMode='If(varDeCanEdit && !varSaving && ThisItem.active && ThisItem.status <> "ApprovedLocked", DisplayMode.Edit, DisplayMode.View)',
+                                     Fill='If(Self.Text <> ThisItem.value, RGBA(255, 244, 206, 1), RGBA(255, 255, 255, 1))',
+                                     BorderColor='If(!IsBlank(Trim(Self.Text)) && !IsMatch(Trim(Self.Text), "[0-9]+([.,][0-9]{1,2})?"), RGBA(196, 49, 75, 1), RGBA(166, 166, 166, 1))',
+                                     AccessibleLabel="ThisItem.label",
+                                     OnChange="ClearCollect(colDeEditTmp, Filter(colDeEdit, k <> ThisItem.wt)); Collect(colDeEditTmp, {k: ThisItem.wt, t: Self.Text}); ClearCollect(colDeEdit, colDeEditTmp)")},
+                    {"lblDeRc": ctl("Label@2.5.1", X="450", Y="5", Width="190", Height="40", Size="10",
+                                    Text='With({rc: LookUp(colDeRes, k = ThisItem.wt).rc}, If(IsBlank(rc) || rc = "OK" || rc = "NO_CHANGE", If(ThisItem.status = "ApprovedLocked", "đã duyệt", ""), %s))'
+                                         % (MSG % '"MSG_" & rc'))}]}},
+            {"lblDeSumTitle": ctl("Label@2.5.1", Text='"Tổng theo bộ môn"', X="700", Y="235", Width="560", Height="30", FontWeight="FontWeight.Bold",
+                                  Visible="!IsBlank(varDePid)")},
+            {"galDeSum": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
+                "Items": _f("colDeSum"), "X": "=700", "Y": "=270", "Width": "=Parent.Width - 720", "Height": "=150", "TemplateSize": "=70",
+                "Visible": _f("!IsBlank(varDePid)")},
+                "Children": [
+                    {"lblDeSumName": ctl("Label@2.5.1", X="0", Y="0", Width="Parent.TemplateWidth", Height="30", FontWeight="FontWeight.Bold",
+                                         Text='ThisItem.name & " (" & ThisItem.code & ")"')},
+                    {"lblDeSumVals": ctl("Label@2.5.1", X="0", Y="30", Width="Parent.TemplateWidth", Height="35",
+                                         Text='If(ThisItem.cstate = "BLANK", "Trần: chưa có", "Trần: " & %s & " · Còn lại: " & %s) & " · Đã đăng ký: " & %s & " · Thực hiện (đã duyệt): " & %s & " công (" & %s & " giờ)"'
+                                              % (DE_NUM % ("ThisItem.ceiling", "ThisItem.ceiling"), DE_NUM % ("ThisItem.remaining", "ThisItem.remaining"),
+                                                 DE_NUM % ("ThisItem.used", "ThisItem.used"), DE_NUM % ("ThisItem.mds", "ThisItem.mds"),
+                                                 DE_NUM % ("ThisItem.hours", "ThisItem.hours")))}]}},
+            {"lblDeTeam": ctl("Label@2.5.1", Text='"Công đăng ký đã xem được"', X="700", Y="430", Width="400", Height="30", FontWeight="FontWeight.Bold",
+                              Visible='!IsBlank(varDePid) && varDeScope <> "self"')},
+            {"btnDeApprove": ctl("Classic/Button@2.2.0", Text='"Phê duyệt (" & CountRows(colDeSel) & ")"', X="1120", Y="425", Width="160", Height="40",
+                                 Visible="varDeCanApprove && !IsBlank(varDePid)",
+                                 DisplayMode="If(varSaving || varBusy || CountRows(colDeSel) = 0 || CountRows(colDeSel) > 50 || CountRows(%s) > 0, DisplayMode.Disabled, DisplayMode.Edit)" % DE_DIRTY,
+                                 OnSelect="Set(varDeConfirm, true)")},
+            {"lblDeConfirm": ctl("Label@2.5.1", Text=MSG % '"DE_APPROVE_CONFIRM"', X="700", Y="470", Width="440", Height="40", FontWeight="FontWeight.Bold",
+                                 Visible="varDeConfirm")},
+            {"btnDeConfirmYes": ctl("Classic/Button@2.2.0", Text='"Yes"', X="1150", Y="470", Width="80", Height="40", Visible="varDeConfirm",
+                                    DisplayMode="If(varSaving, DisplayMode.Disabled, DisplayMode.Edit)", OnSelect=DE_APPROVE)},
+            {"btnDeConfirmNo": ctl("Classic/Button@2.2.0", Text='"No"', X="1240", Y="470", Width="80", Height="40", Visible="varDeConfirm",
+                                   OnSelect="Set(varDeConfirm, false)")},
+            {"galDeTeam": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
+                "Items": _f('SortByColumns(colDeRows, "disc", SortOrder.Ascending, "emp", SortOrder.Ascending, "wt", SortOrder.Ascending)'),
+                "X": "=700", "Y": "=515", "Width": "=Parent.Width - 720", "Height": "=Parent.Height - 535", "TemplateSize": "=45",
+                "Visible": _f('!IsBlank(varDePid) && varDeScope <> "self"')},
+                "Children": [
+                    {"btnDeSel": ctl("Classic/Button@2.2.0", Text='If(ThisItem.id in colDeSel.id, "[x]", "[ ]")', X="0", Y="5", Width="40", Height="35",
+                                     Visible=DE_SELECTABLE,
+                                     OnSelect="If(ThisItem.id in colDeSel.id, ClearCollect(colDeSelTmp, Filter(colDeSel, id <> ThisItem.id)); ClearCollect(colDeSel, colDeSelTmp), "
+                                              "Collect(colDeSel, {id: ThisItem.id, etag: ThisItem.etag}))")},
+                    {"icoDeTeamLock": ctl("Classic/Icon@2.5.0", Icon="Icon.Lock", X="8", Y="10", Width="24", Height="24", Visible='ThisItem.status = "ApprovedLocked"',
+                                          Tooltip='"Đã phê duyệt"', AccessibleLabel='"Đã phê duyệt"')},
+                    {"lblDeTeamRow": ctl("Label@2.5.1", X="45", Y="5", Width="Parent.TemplateWidth - 245", Height="35",
+                                         Text='ThisItem.disc & " · " & ThisItem.emp & " · " & ThisItem.wtLabel')},
+                    {"lblDeTeamVal": ctl("Label@2.5.1", X="Parent.TemplateWidth - 195", Y="5", Width="80", Height="35", Align="Align.Right",
+                                         Text='If(ThisItem.state = "BLANK", "—", %s)' % (DE_NUM % ("ThisItem.value", "ThisItem.value")))},
+                    {"lblDeTeamRc": ctl("Label@2.5.1", X="Parent.TemplateWidth - 110", Y="5", Width="110", Height="35", Size="10",
+                                        Text='With({rc: LookUp(colDeApprRes, id = ThisItem.id).rc}, If(IsBlank(rc) || rc = "OK", If(ThisItem.status = "ApprovedLocked", "đã duyệt", "nháp"), %s))'
+                                             % (MSG % '"MSG_" & rc'))}]}}]},
         "scrEntry": {"Children": [
             {"lblTitle": ctl("Label@2.5.1", Text='If(IsBlank(varEdit), "New entry", "Edit draft")', X="20", Y="10", Width="600", Height="50",
                              Size="20", FontWeight="FontWeight.Bold")}, {"lblBusy": busy},

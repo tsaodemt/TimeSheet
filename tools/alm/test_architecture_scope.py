@@ -110,6 +110,15 @@ class Pack(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(out, "app", "scrEntry.pa.yaml")))
         self.assertEqual(m["architecture"]["dataverse"], "REJECTED")
 
+    def test_PK05_discipline_effort_flows_guarded_single_site(self):
+        g = [[k, "00000000-0000-4000-8000-0000000000%02x" % i] for i, k in enumerate(("EMP", "TL", "PMO", "EXE"))]
+        f = pack.flows(dict(copy.deepcopy(CONFIG), disciplineRoleGroups=g))
+        names = ("EFF-ReadDisciplineEffort", "EFF-SaveDisciplineEffort", "EFF-ApproveDisciplineEffort")
+        for n in names:
+            self.assertEqual(f[n]["Site_guard"]["expression"]["equals"][1], SITE, n)
+            self.assertEqual([x for x, a in f[n].items() if "SiteUrl" in (a.get("runAfter") or {})], ["Site_guard"], n)
+        self.assertEqual({k: v for k, v in f.items() if k not in names}, pack.flows(CONFIG), "other flows unchanged")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
