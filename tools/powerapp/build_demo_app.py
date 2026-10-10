@@ -851,11 +851,11 @@ def screens() -> dict:
             {"btnRptReload": ctl("Classic/Button@2.2.0", Text='"Tải lại"', X="520", Y="100", Width="120",
                                  DisplayMode="If(varBusy, DisplayMode.Disabled, DisplayMode.Edit)", OnSelect=RPT_LOAD)},
             {"lblRptInfo": ctl("Label@2.5.1", X="20", Y="150", Width="1300", Height="30", Size="11",
-                               Text='"Đơn vị: công (" & If(varRptTab = "project", varRptP.hourspermanday, varRptD.hourspermanday) & " giờ = 1 công) · Thực hiện = giờ chấm công đã duyệt · Chênh lệch = kế hoạch − thực hiện" & If(varRptTab = "discipline", " · Kế hoạch bộ môn = dòng đã phê duyệt", " · Kế hoạch = Công dự án")')},
+                               Text='"Đơn vị: công (" & If(varRptTab = "project", varRptP.hourspermanday, varRptD.hourspermanday) & " giờ = 1 công) · Thực hiện = giờ chấm công đã duyệt · Còn lại = kế hoạch − thực hiện · Kỳ: toàn bộ vòng đời dự án" & If(varRptTab = "discipline", " · Kế hoạch bộ môn = dòng đã phê duyệt", " · Kế hoạch = Công dự án")')},
             {"lblRptEmpty": ctl("Label@2.5.1", X="20", Y="230", Width="800", Height="40", Text=MSG % '"RPT_EMPTY"',
                                 Visible='!varBusy && If(varRptTab = "project", varRptP.ok = "true" && CountRows(colRptP) = 0, varRptD.ok = "true" && CountRows(colRptD) = 0)')},
             {"lblRptPHead": ctl("Label@2.5.1", X="20", Y="190", Width="1300", Height="30", FontWeight="FontWeight.Bold", Visible='varRptTab = "project"',
-                                Text='"Dự án · Kế hoạch (công dự án) · Thực hiện (công) · Giờ · Chênh lệch" & If(varRptP.showregistered = "true", " · Đăng ký công (M1, riêng)", "")')},
+                                Text='"Dự án · Kế hoạch (công dự án) · Thực hiện (công) · Giờ · Còn lại (Kế hoạch − Thực hiện)" & If(varRptP.showregistered = "true", " · Đăng ký công (M1, riêng)", "")')},
             {"galRptP": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
                 "Items": _f('SortByColumns(colRptP, "code", SortOrder.Ascending)'), "X": "=20", "Y": "=225", "Width": "=1300", "Height": "=Parent.Height - 300",
                 "TemplateSize": "=40", "Visible": _f('varRptTab = "project"')},
@@ -867,12 +867,12 @@ def screens() -> dict:
                                                RPT_NUM % ("ThisItem.registered", "ThisItem.registered")))}]}},
             {"lblRptPTotal": ctl("Label@2.5.1", X="20", Y="Parent.Height - 70", Width="1300", Height="40", FontWeight="FontWeight.Bold",
                                  Visible='varRptTab = "project" && !IsBlank(varRptPT)',
-                                 Text='"Tổng: kế hoạch " & %s & " · thực hiện " & %s & " công (" & %s & " giờ) · chênh lệch " & %s & If(varRptP.showregistered = "true", " · M1 " & %s, "")'
+                                 Text='"Tổng: kế hoạch " & %s & " · thực hiện " & %s & " công (" & %s & " giờ) · còn lại (kế hoạch − thực hiện) " & %s & If(varRptP.showregistered = "true", " · M1 " & %s, "")'
                                       % (RPT_NUM % ("varRptPT.planned", "varRptPT.planned"), RPT_NUM % ("varRptPT.actual", "varRptPT.actual"),
                                          RPT_NUM % ("varRptPT.hours", "varRptPT.hours"), RPT_NUM % ("varRptPT.variance", "varRptPT.variance"),
                                          RPT_NUM % ("varRptPT.registered", "varRptPT.registered")))},
             {"lblRptDHead": ctl("Label@2.5.1", X="20", Y="190", Width="1300", Height="30", FontWeight="FontWeight.Bold", Visible='varRptTab = "discipline"',
-                                Text='"Dự án · Bộ môn · Kế hoạch (đã duyệt) · Thực hiện (công) · Giờ · Chênh lệch"')},
+                                Text='"Dự án · Bộ môn · Kế hoạch (đã duyệt) · Thực hiện (công) · Giờ · Còn lại (Kế hoạch − Thực hiện)"')},
             {"galRptD": {"Control": "Gallery@2.15.0", "Variant": "Vertical", "Properties": {
                 "Items": _f('SortByColumns(colRptD, "code", SortOrder.Ascending, "disc", SortOrder.Ascending)'), "X": "=20", "Y": "=225", "Width": "=1300",
                 "Height": "=Parent.Height - 245", "TemplateSize": "=40", "Visible": _f('varRptTab = "discipline"')},

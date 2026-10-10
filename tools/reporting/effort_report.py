@@ -7,7 +7,8 @@ specs/effort-reporting-contract, planning-security; AC-RPT-01..06).
   `HourRegistrations.ManDays` incl. stale lines (OD-08), separate, REG.View holders only, never added to the plan (OD-52);
 - discipline plan = Σ ApprovedLocked EPIC 17 registrations (Draft excluded, OD-51);
 - actual = Σ Approved TimesheetEntries hours ÷ HoursPerManDay (OD-19, OD-33); 0 when there is no row and the row is still shown
-  (OD-13); variance = planned − actual (design §11) when a plan exists; project lifetime only (no period filter is defined);
+  (OD-13); variance = planned − actual (design §11, shown as "Còn lại (Kế hoạch − Thực hiện)") when a plan exists;
+  project-lifetime only (M4 R3 planning reporting; legacy / EPIC 11 period reporting = parity item PARITY-RPT-PERIOD-LIFETIME);
 - scope (M4 report matrix): company (PMO / EXE / APR) ∪ discipline (TL, discipline report) ∪ projects where the caller is the EPIC 16
   authoritative PM; others ROLE_NOT_ALLOWED. One Authorization row + one ReadProxy row per call.
 - per project, Approved actual rows are read in one page of 5,000; more fails closed (ERROR).
