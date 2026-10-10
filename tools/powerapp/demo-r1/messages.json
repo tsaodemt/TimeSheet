@@ -57,6 +57,20 @@
   "EFF_NO_PM": "Dự án chưa có PM: chưa thể nhập công dự án.",
   "EFF_PM_OK": "Đã cập nhật PM của dự án.",
   "EFF_PM_SAME": "PM của dự án không thay đổi.",
-  "EFF_CONFIG_INVALID": "Cấu hình Công dự án chưa hợp lệ. Vui lòng liên hệ quản trị."
+  "EFF_CONFIG_INVALID": "Cấu hình Công dự án chưa hợp lệ. Vui lòng liên hệ quản trị.",
+  "DE_OK": "Đã lưu công bộ môn.",
+  "DE_REFUSED": "Chưa lưu: có giá trị không hợp lệ, vượt trần công bộ môn hoặc vừa được người khác thay đổi. Dữ liệu đã được tải lại; các giá trị bạn sửa vẫn được giữ.",
+  "DE_INVALID": "Giá trị phải là số lớn hơn hoặc bằng 0, tối đa 2 chữ số thập phân.",
+  "DE_LEAVE": "Có thay đổi chưa lưu. Bỏ các thay đổi này?",
+  "DE_NO_ACCESS": "Bạn không có quyền xem Công bộ môn.",
+  "DE_APPROVE_CONFIRM": "Phê duyệt các dòng đã chọn? Sau khi phê duyệt, dòng bị khóa và không mở lại được.",
+  "DE_APPROVED": "Đã phê duyệt và khóa các dòng đã chọn.",
+  "DE_APPROVE_PARTIAL": "Đã phê duyệt một phần; các dòng còn lại bị từ chối (xem kết quả).",
+  "DE_APPROVE_REFUSED": "Không dòng nào được phê duyệt (xem kết quả).",
+  "MSG_OVER_CEILING": "Vượt trần công bộ môn của dự án (Công dự án).",
+  "MSG_CEILING_NOT_REGISTERED": "Bộ môn chưa có trần công trong Công dự án: chưa thể nhập giá trị.",
+  "MSG_VALIDATION_VALUE": "Giá trị phải là số lớn hơn hoặc bằng 0, tối đa 2 chữ số thập phân.",
+  "MSG_TECHNICAL_LIMIT": "Giá trị vượt giới hạn kỹ thuật.",
+  "MSG_NO_CHANGE": "Không có thay đổi."
  }
 }

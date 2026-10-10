@@ -70,10 +70,10 @@ def _too_long(v):
     return "greater(length(replace(%s, '.', %s)), %d)" % (v, EMPTY, pe.MAX_SIGNIFICANT)
 
 
-def _guard_pm(capability, decoys, source_flow, decide, after_pid, **kw):
+def _guard_pm(capability, decoys, source_flow, decide, after_pid, scope_config=None, **kw):
     """Guard (role decision) -> Guard_base; PM data read; final Guard_result (same shape) via `decide`; authorization row.
     decide(g) adds the actions computing outputs('Final_authz') and outputs('Final_scope') and returns the last name."""
-    g = gt.guard_actions(er.scope_config(), kw["role_groups"], site=kw["site"], domain=kw["domain"], emp_list=kw["emp_list"],
+    g = gt.guard_actions(scope_config or er.scope_config(), kw["role_groups"], site=kw["site"], domain=kw["domain"], emp_list=kw["emp_list"],
                          audit_list=kw["audit_list"], action_expr="'%s'" % capability, kind_expr="'self'", ref_expr=EMPTY,
                          untrusted_inputs=decoys, legacy_audit=False, fields=gt.EMPLOYEES_FIELDS)
     g["Guard_base"] = g.pop("Guard_result")

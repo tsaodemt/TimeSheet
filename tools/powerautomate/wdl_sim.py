@@ -159,7 +159,7 @@ def _fmt(t, fmt):
     out = fmt
     for a, b in (("yyyy", "%Y"), ("MM", "%m"), ("dd", "%d"), ("HH", "%H"), ("mm", "%M"), ("ss", "%S")):  # yyyy-MM too
         out = out.replace(a, b)
-    if re.search(r"[A-Za-z]", re.sub(r"%[YmdHMS]|T", "", out)):
+    if re.search(r"[A-Za-z]", re.sub(r"%[YmdHMS]|[TZ]", "", out)):
         raise WdlError("unsupported format %r" % fmt)
     return t.strftime(out)
 
@@ -276,6 +276,7 @@ class Run:
             raise WdlError("createArray() expects at least one parameter")
         return list(a)
     def f_max(self, *a): return max(a)
+    def f_coalesce(self, *a): return next((x for x in a if x is not None), None)
     def f_min(self, *a): return min(a)
     def f_endsWith(self, s, t): return _str(s).lower().endswith(_str(t).lower())
     def f_replace(self, s, a, b): return _str(s).replace(a, b)
@@ -316,6 +317,9 @@ class Run:
     def f_div(self, a, b): return a // b if isinstance(a, int) and isinstance(b, int) else a / b
     def f_sub(self, a, b): return a - b
     def f_mul(self, a, b): return a * b
+    def f_mod(self, a, b):  # Power Automate mod(): remainder with the sign of the dividend (integers here)
+        r = abs(a) % abs(b)
+        return -r if a < 0 else r
     def f_variables(self, n): return self.vars[n]
     def f_items(self, n): return self.loop_items[n]
     def f_workflow(self): return {"run": {"name": self.run_name}}

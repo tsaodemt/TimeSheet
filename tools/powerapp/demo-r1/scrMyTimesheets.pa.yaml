@@ -129,6 +129,16 @@ Screens:
           Height: =40
           Visible: =!varNoEff
           OnSelect: =Navigate(scrProjectEffort, ScreenTransition.None)
+    - btnDe:
+        Control: Classic/Button@2.2.0
+        Properties:
+          Text: ="Công bộ môn"
+          X: =800
+          Y: =80
+          Width: =200
+          Height: =40
+          Visible: =!varNoDe
+          OnSelect: =Navigate(scrDisciplineEffort, ScreenTransition.None)
     - galEntries:
         Control: Gallery@2.15.0
         Variant: Vertical
